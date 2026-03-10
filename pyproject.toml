@@ -12,6 +12,14 @@ dependencies = [
     "langchain-anthropic>=0.3.12",
     "keyshield[argon2,fastapi]>=2.0.0",
     "aiosqlite>=0.22.1",
+    "langchain-experimental>=0.4.1",
+    "langfuse>=3.14.5",
+    "loguru>=0.7.3",
+    "presidio-anonymizer>=2.2.361",
+    "spacy>=3.8.11",
+    "pip>=26.0.1",
+    "presidio-analyzer>=2.2.361",
+    "faker>=40.8.0",
 ]
 
 [build-system]
