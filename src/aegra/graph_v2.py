@@ -441,6 +441,11 @@ graph = create_agent(
         "There are maybe placeholder hashes in the input that represent real values "
         "(e.g. <PERSON:a1b2c3d4>); treat them as opaque tokens and do not attempt to "
         "reverse them yourself. Use the provided tools when needed."
+        "If user asks you to provide info about the placeholders (e.g. 'what's the email address domain?'), "
+        "respond with the token value (e.g. 'the email is <EMAIL_ADDRESS:abcd1234>') "
+        "and the system will take care of deanonymization on the user side. If user asks precision on a placeholder ("
+        "e.g. 'what's the first character of the email address?'), respond that you cannot see the original value and that it's represented by a token "
+        "(e.g. 'I cannot see the original email address, but I can tell you that the token is <EMAIL_ADDRESS:abcd1234>')."
     ),
     tools=[send_email, get_weather],
     middleware=[pii_middleware],
