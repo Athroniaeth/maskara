@@ -1,282 +1,468 @@
-import functools
-from collections import defaultdict
-from typing import Annotated, TypedDict, Sequence
+from __future__ import annotations
 
-from dotenv import load_dotenv
-from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, AnyMessage
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
-from langchain_experimental.data_anonymizer import PresidioReversibleAnonymizer
-from langfuse.langchain import CallbackHandler
-from langgraph.graph import END, StateGraph
-from langgraph.graph.message import add_messages
-from loguru import logger
-from presidio_anonymizer.entities import OperatorConfig
-from pydantic import BaseModel, Field
+import hashlib
+import re
+from typing import Any, Awaitable, Callable
 
-load_dotenv()
-
-
-# ─────────────────────────────────────────────
-# State
-# ─────────────────────────────────────────────
-
-
-class AnonymizedState(BaseModel):
-    """Graph state that persists the anonymizer mapping across turns.
-
-    Attributes:
-        messages: Conversation history with LangChain add_messages reducer.
-        anon_mapping: Serialized deanonymizer mapping keyed by entity type.
-            Persisted per thread by LangGraph's checkpointer so placeholders
-            remain resolvable across hot-reloads and multi-turn conversations.
-    """
-
-    messages: Annotated[Sequence[AnyMessage], add_messages] = Field(
-        default_factory=list
-    )
-    anon_mapping: dict = Field(default_factory=dict)
-# ─────────────────────────────────────────────
-# Anonymizer
-# ─────────────────────────────────────────────
-
-ANALYZED_FIELDS = [
-    "PERSON",
-    "PHONE_NUMBER",
-    "EMAIL_ADDRESS",
-    "ORGANIZATION",
-    "LOCATION",
-]
-
-anonymizer = PresidioReversibleAnonymizer(
-    analyzed_fields=ANALYZED_FIELDS,
-    languages_config={
-        "nlp_engine_name": "spacy",
-        "models": [{"lang_code": "fr", "model_name": "fr_core_news_lg"}],
-    },
-    operators={
-        field: OperatorConfig("replace", {"new_value": None})
-        for field in ANALYZED_FIELDS
-    },
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    AgentState,
+    ModelRequest,
+    ModelResponse,
 )
+from langchain.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain.tools.tool_node import ToolCallRequest
+from langgraph.runtime import Runtime
+from langgraph.types import Command
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 
 
-# ─────────────────────────────────────────────
-# Tool decorator
-# ─────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _build_analyzer(language: str, spacy_model: str) -> AnalyzerEngine:
+    """Build a Presidio AnalyzerEngine with the given spaCy model."""
+    provider = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": language, "model_name": spacy_model}],
+        }
+    )
+    return AnalyzerEngine(nlp_engine=provider.create_engine())
 
 
-def with_deanonymized_args(fn):
-    """Decorator that deanonymizes tool inputs and re-anonymizes the output.
+def _short_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()[:8]
 
-    Ensures that tools always operate on real data while the LLM only
-    ever sees anonymized placeholders (e.g. <PERSON_1>, <EMAIL_ADDRESS_1>).
 
-    Args:
-        fn: The tool function to wrap.
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
 
-    Returns:
-        A wrapped function with transparent deanonymization.
+class PIIAnonymizationMiddleware(AgentMiddleware):
+    """Middleware that anonymizes PII for the LLM and deanonymizes for the user.
+
+    Maintains a bidirectional mapping so that:
+      - Every message sent to the model has PII replaced by deterministic
+        placeholder tokens  (e.g.  ``<PERSON:a1b2c3d4>``).
+      - Every message returned to the user has those tokens replaced back
+        with the original values.
+      - Tool call arguments are anonymized before execution; tool results
+        are anonymized before being fed back to the model.
+
+    The mapping is **deterministic per value**: the same input always
+    produces the same token, so the LLM can reason about identity
+    ("same person mentioned twice") without ever seeing real data.
+
+    Parameters
+    ----------
+    analyzed_fields : list[str]
+        Presidio entity types to detect.
+        Common values: PERSON, EMAIL_ADDRESS, PHONE_NUMBER, LOCATION, …
+    language : str
+        Language code for analysis (default ``"fr"``).
+    spacy_model : str
+        spaCy model name matching *language* (default ``"fr_core_news_lg"``).
+    extra_patterns : list[tuple[str, str, str]] | None
+        Additional ``(entity_type, regex_pattern, description)`` tuples
+        for custom detectors (e.g. SSN, IBAN).
     """
 
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        real_args = [anonymizer.deanonymize(str(a)) for a in args]
-        real_kwargs = {k: anonymizer.deanonymize(str(v)) for k, v in kwargs.items()}
-        result = fn(*real_args, **real_kwargs)
-        return anonymizer.anonymize(str(result))
+    def __init__(
+        self,
+        analyzed_fields: list[str] | None = None,
+        language: str = "fr",
+        spacy_model: str = "fr_core_news_lg",
+        extra_patterns: list[tuple[str, str, str]] | None = None,
+    ) -> None:
+        super().__init__()
+        self.language = language
+        self.analyzed_fields = analyzed_fields or [
+            "PERSON",
+            "PHONE_NUMBER",
+            "EMAIL_ADDRESS",
+            "ORGANIZATION",
+            "LOCATION",
+        ]
 
-    return wrapper
+        # Presidio analyzer
+        self._analyzer = _build_analyzer(language, spacy_model)
+
+        # Register extra regex-based recognisers
+        if extra_patterns:
+            from presidio_analyzer import Pattern, PatternRecognizer
+
+            for entity_type, regex, description in extra_patterns:
+                recognizer = PatternRecognizer(
+                    supported_entity=entity_type,
+                    patterns=[Pattern(name=entity_type, regex=regex, score=0.9)],
+                )
+                self._analyzer.registry.add_recognizer(recognizer)
+                if entity_type not in self.analyzed_fields:
+                    self.analyzed_fields.append(entity_type)
+
+        # Bidirectional mapping: token ↔ original
+        self._to_token: dict[str, str] = {}   # original  → token
+        self._to_original: dict[str, str] = {}  # token → original
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def mapping(self) -> dict[str, str]:
+        """Return a *copy* of the current token → original mapping."""
+        return dict(self._to_original)
+
+    def deanonymize(self, text: str) -> str:
+        """Replace all tokens in *text* with their original values."""
+        for token, original in self._to_original.items():
+            text = text.replace(token, original)
+        return text
+
+    def anonymize(self, text: str) -> str:
+        """Detect PII in *text* and replace with deterministic tokens."""
+        results = self._analyzer.analyze(
+            text=text,
+            language=self.language,
+            entities=self.analyzed_fields,
+        )
+
+        # Sort by start position descending so replacements don't shift indices
+        results = sorted(results, key=lambda r: r.start, reverse=True)
+
+        for result in results:
+            original = text[result.start : result.end]
+            token = self._get_or_create_token(original, result.entity_type)
+            text = text[: result.start] + token + text[result.end :]
+
+        return text
+
+    # ------------------------------------------------------------------
+    # Middleware hooks
+    # ------------------------------------------------------------------
+
+    def wrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], ModelResponse],
+    ) -> ModelResponse:
+        """Anonymize inbound messages, call the model, deanonymize nothing
+        (the model's response stays anonymized in state so it can reference
+        its own tokens).  Deanonymization happens in ``after_agent``."""
+
+        # 1. Anonymize every message the model will see
+        anonymized_messages = [self._anonymize_message(m) for m in request.messages]
+
+        # 2. Anonymize system message if present
+        anonymized_system = request.system_message
+        if request.system_message and request.system_message.content:
+            anonymized_system = SystemMessage(
+                content=self.anonymize(
+                    request.system_message.content
+                    if isinstance(request.system_message.content, str)
+                    else str(request.system_message.content)
+                )
+            )
+
+        # 3. Call the model with anonymized input
+        response = handler(
+            request.override(
+                messages=anonymized_messages,
+                system_message=anonymized_system,
+            )
+        )
+
+        return response
+
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        """Async version of wrap_model_call."""
+        anonymized_messages = [self._anonymize_message(m) for m in request.messages]
+
+        anonymized_system = request.system_message
+        if request.system_message and request.system_message.content:
+            anonymized_system = SystemMessage(
+                content=self.anonymize(
+                    request.system_message.content
+                    if isinstance(request.system_message.content, str)
+                    else str(request.system_message.content)
+                )
+            )
+
+        response = await handler(
+            request.override(
+                messages=anonymized_messages,
+                system_message=anonymized_system,
+            )
+        )
+
+        return response
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        """Deanonymize tool arguments before execution (so the tool works
+        with real data), then anonymize the result before it goes back to
+        the model."""
+
+        # 1. Deanonymize tool call arguments
+        deanonymized_args = {
+            k: self.deanonymize(v) if isinstance(v, str) else v
+            for k, v in request.tool_call["args"].items()
+        }
+        deanonymized_tool_call = {**request.tool_call, "args": deanonymized_args}
+
+        # Build a new request with deanonymized args
+        new_request = ToolCallRequest(
+            tool_call=deanonymized_tool_call,
+            tools=request.tools,
+            state=request.state,
+            runtime=request.runtime,
+        )
+
+        # 2. Execute the tool with real values
+        result = handler(new_request)
+
+        # 3. Anonymize the result before it goes back to the model
+        if isinstance(result, ToolMessage):
+            anonymized_content = self.anonymize(
+                result.content if isinstance(result.content, str) else str(result.content)
+            )
+            return ToolMessage(
+                content=anonymized_content,
+                tool_call_id=result.tool_call_id,
+                name=result.name,
+            )
+
+        return result
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        """Async version of wrap_tool_call."""
+        deanonymized_args = {
+            k: self.deanonymize(v) if isinstance(v, str) else v
+            for k, v in request.tool_call["args"].items()
+        }
+        deanonymized_tool_call = {**request.tool_call, "args": deanonymized_args}
+
+        new_request = ToolCallRequest(
+            tool_call=deanonymized_tool_call,
+            tools=request.tools,
+            state=request.state,
+            runtime=request.runtime,
+        )
+
+        result = await handler(new_request)
+
+        if isinstance(result, ToolMessage):
+            anonymized_content = self.anonymize(
+                result.content if isinstance(result.content, str) else str(result.content)
+            )
+            return ToolMessage(
+                content=anonymized_content,
+                tool_call_id=result.tool_call_id,
+                name=result.name,
+            )
+
+        return result
+
+    def after_agent(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Deanonymize the final assistant message so the user sees real values."""
+        if not state.get("messages"):
+            return None
+
+        last = state["messages"][-1]
+        if not isinstance(last, AIMessage):
+            return None
+
+        original_content = (
+            self.deanonymize(last.content)
+            if isinstance(last.content, str)
+            else last.content
+        )
+
+        if original_content == last.content:
+            return None
+
+        return {
+            "messages": [
+                AIMessage(
+                    content=original_content,
+                    tool_calls=last.tool_calls if hasattr(last, "tool_calls") else [],
+                    id=last.id,
+                )
+            ]
+        }
+
+    async def aafter_agent(
+        self, state: AgentState, runtime: Runtime
+    ) -> dict[str, Any] | None:
+        """Async version of after_agent."""
+        return self.after_agent(state, runtime)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _get_or_create_token(self, original: str, entity_type: str) -> str:
+        """Return deterministic token for *original*, creating it if needed."""
+        if original in self._to_token:
+            return self._to_token[original]
+
+        h = _short_hash(original)
+        token = f"<{entity_type}:{h}>"
+
+        self._to_token[original] = token
+        self._to_original[token] = original
+        return token
+
+    def _anonymize_message(self, message: Any) -> Any:
+        """Return a copy of *message* with PII anonymized."""
+        if isinstance(message, (HumanMessage, AIMessage, SystemMessage, ToolMessage)):
+            if isinstance(message.content, str):
+                new_content = self.anonymize(message.content)
+            elif isinstance(message.content, list):
+                new_content = [
+                    {**block, "text": self.anonymize(block["text"])}
+                    if isinstance(block, dict) and "text" in block
+                    else block
+                    for block in message.content
+                ]
+            else:
+                return message
+
+            kwargs: dict[str, Any] = {"content": new_content}
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                kwargs["tool_calls"] = [
+                    {
+                        **tc,
+                        "args": {
+                            k: self.anonymize(v) if isinstance(v, str) else v
+                            for k, v in tc["args"].items()
+                        },
+                    }
+                    for tc in message.tool_calls
+                ]
+            if hasattr(message, "tool_call_id") and message.tool_call_id:
+                kwargs["tool_call_id"] = message.tool_call_id
+            if hasattr(message, "name") and message.name:
+                kwargs["name"] = message.name
+            if hasattr(message, "id") and message.id:
+                kwargs["id"] = message.id
+
+            return type(message)(**kwargs)
+
+        return message
 
 
-# ─────────────────────────────────────────────
+
+
+
+
+
+
+
+
+"""
+Example usage of PIIAnonymizationMiddleware.
+"""
+
+from langchain.agents import create_agent
+from langchain.messages import HumanMessage
+from langchain_core.tools import tool
+from loguru import logger
+
+
+
+# ---------------------------------------------------------------------------
 # Tools
-# ─────────────────────────────────────────────
-
-
-@tool
-@with_deanonymized_args
-def get_weather(city: str) -> str:
-    """Get the current weather for a given city.
-
-    Args:
-        city: The name of the city (may be an anonymized placeholder).
-
-    Returns:
-        A string describing the current weather.
-    """
-    return f"The weather in {city} is always sunny!"
-
+# ---------------------------------------------------------------------------
 
 @tool
-@with_deanonymized_args
 def send_email(to: str, subject: str, body: str) -> str:
-    """Send an email to a given address.
-
-    Args:
-        to: Recipient email address (may be an anonymized placeholder).
-        subject: Subject line of the email.
-        body: Body content of the email.
-
-    Returns:
-        A confirmation string.
-    """
-    logger.debug(f"\n[EMAIL SENT] To: {to} | Subject: {subject}\n{body}\n")
+    """Send an email to a given address."""
+    logger.info(f"\n[EMAIL SENT] To: {to} | Subject: {subject}\n{body}\n")
     return f"Email successfully sent to {to}."
 
 
-# ─────────────────────────────────────────────
-# Graph nodes
-# ─────────────────────────────────────────────
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a given city."""
+    return f"The weather in {city} is 22°C and sunny."
 
 
-def _extract_text(content: str | list) -> str:
-    """Extract plain text from a message content field.
+# ---------------------------------------------------------------------------
+# Middleware setup
+# ---------------------------------------------------------------------------
 
-    LangChain message content can be either a plain string or a list of
-    content blocks (multimodal format). This function normalises both forms
-    to a single string so Presidio can process it.
-
-    Args:
-        content: Either a plain string or a list of content blocks such as
-            ``[{"type": "text", "text": "..."}]``.
-
-    Returns:
-        The concatenated text extracted from the content.
-    """
-    if isinstance(content, str):
-        return content
-    return " ".join(
-        block.get("text", "") for block in content if isinstance(block, dict)
-    )
-
-
-def anonymize_input(state: AnonymizedState) -> AnonymizedState:
-    """Anonymize the last human message before it reaches the LLM.
-
-    Restores the thread's placeholder mapping from state so that entities
-    anonymized in previous turns keep their original placeholders (e.g.
-    ``<LOCATION_1>`` stays ``<LOCATION_1>`` across turns). Replaces PII
-    entities with stable placeholders so the model never processes raw
-    sensitive data.
-
-    Args:
-        state: Current graph state containing the message history and the
-            persisted anonymizer mapping for this thread.
-
-    Returns:
-        Updated state with the last human message anonymized and the
-        mapping saved for subsequent turns.
-    """
-    anonymizer._deanonymizer_mapping.mapping = defaultdict(
-        dict, state.anon_mapping
-    )
-    messages = list(state.messages)
-    last = messages[-1]
-    if isinstance(last, HumanMessage):
-        text = _extract_text(last.content)
-        anonymized = anonymizer.anonymize(text, language="fr")
-        logger.debug(f"[ANONYMIZED INPUT]  {anonymized}")
-        messages[-1] = HumanMessage(content=anonymized, id=last.id)
-    return {"messages": messages, "anon_mapping": anonymizer.deanonymizer_mapping}
-
-
-def deanonymize_output(state: AnonymizedState) -> AnonymizedState:
-    """Restore real values in the AI response and the user's message.
-
-    Deanonymizes the last AI message so the final response is human-readable,
-    and also restores the last human message to its original form so that the
-    thread history stored by LangGraph's checkpointer never exposes placeholders
-    to the end user (e.g. when reloading a conversation in the UI).
-
-    Args:
-        state: Current graph state containing the message history and the
-            persisted anonymizer mapping for this thread.
-
-    Returns:
-        Updated state with both the AI response and the last human message
-        deanonymized, and the mapping saved for subsequent turns.
-    """
-    messages = list(state.messages )
-    result: list[BaseMessage] = []
-
-    last = messages[-1]
-    if isinstance(last, AIMessage):
-        deanonymized = anonymizer.deanonymize(_extract_text(last.content))
-        logger.debug(f"[DEANONYMIZED OUTPUT] {deanonymized}")
-        result.append(AIMessage(content=deanonymized, id=last.id))
-
-    for msg in reversed(messages[:-1]):
-        if isinstance(msg, HumanMessage):
-            original = anonymizer.deanonymize(_extract_text(msg.content))
-            result.append(HumanMessage(content=original, id=msg.id))
-            break
-
-    return {"messages": result, "anon_mapping": anonymizer.deanonymizer_mapping}
-
-
-# ─────────────────────────────────────────────
-# LLM & agent
-# ─────────────────────────────────────────────
-
-SYSTEM_PROMPT = """You are a helpful assistant with access to weather and email tools.
-
-IMPORTANT: User inputs may contain anonymized placeholders like <PERSON_1>, <EMAIL_ADDRESS_1>, <LOCATION_1>, etc.
-Pass these placeholders as-is to the tools — they will automatically resolve to the real values internally.
-Never try to guess or replace the placeholders yourself.
-
-The user is not aware that words in their message may be replaced by placeholders. For example, 
-they ask you which city is next to Lyon, but you will see LOCATION_1, so you will not be able 
-to provide them with the answer. Explain to them that their message is anonymized with regard 
-to personal data such as city names, so you cannot provide them with the answer."""
-
-llm = init_chat_model(model="gpt-5-nano")
-
-agent = create_agent(
-    model=llm,
-    tools=[get_weather, send_email],
-    system_prompt=SYSTEM_PROMPT,
+pii_middleware = PIIAnonymizationMiddleware(
+    analyzed_fields=["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "LOCATION"],
+    language="fr",
+    spacy_model="fr_core_news_lg",
+    # Optional: add custom regex patterns (e.g. French SSN "NIR")
+    extra_patterns=[
+        ("FR_SSN", r"\d{1}\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}", "French NIR"),
+    ],
 )
 
-langfuse_handler = CallbackHandler()
-config = RunnableConfig(callbacks=[langfuse_handler])
 
-# ─────────────────────────────────────────────
-# Graph assembly
-# ─────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
 
-builder = StateGraph(AnonymizedState)  # pyrefly: ignore[bad-specialization]
-builder.add_node(
-    "anonymize_input", anonymize_input
-)  # pyrefly: ignore[no-matching-overload]
-builder.add_node("agent", agent)  # pyrefly: ignore[no-matching-overload]
-builder.add_node(
-    "deanonymize_output", deanonymize_output
-)  # pyrefly: ignore[no-matching-overload]
+graph = create_agent(
+    model="gpt-4.1",
+    tools=[send_email, get_weather],
+    middleware=[pii_middleware],
+)
 
-builder.set_entry_point("anonymize_input")
-builder.add_edge("anonymize_input", "agent")
-builder.add_edge("agent", END)
-# builder.add_edge("agent", "deanonymize_output")
-# builder.add_edge("deanonymize_output", END)
 
-graph = builder.compile(name="aegra_v2").with_config(config)
-
-# ─────────────────────────────────────────────
-# Main
-# ─────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    questions = [
-        "What's the weather like in Paris?",
-        "Send an email to jean.dupont@acme.com to tell him it's sunny in London.",
-        "What's the weather in Tokyo? Send the result to marie.martin@startup.io",
-    ]
+    user_input = (
+        "Envoie un email à Jean Dupont (jean.dupont@example.com) "
+        "pour lui dire qu'il fait beau à Bordeaux. "
+        "Son numéro est 06 12 34 56 78."
+    )
 
-    for question in questions:
-        logger.debug(f"\n{'=' * 60}")
-        logger.debug(f"[USER]  {question}")
-        response = graph.invoke({"messages": [("human", question)]}, config=config)
-        logger.debug(f"[AGENT] {response['messages'][-1].content}")
+    # --- What the user typed (raw) ---
+    print("=" * 60)
+    print("USER INPUT (raw):")
+    print(user_input)
+    print("=" * 60)
+
+    # --- Anonymize preview (what the LLM will see) ---
+    print("\nLLM SEES (anonymized):")
+    print(pii_middleware.anonymize(user_input))
+    print()
+
+    # --- Mapping ---
+    print("MAPPING (token → original):")
+    for token, original in pii_middleware.mapping.items():
+        print(f"  {token}  →  {original}")
+    print()
+
+    # --- Invoke the agent ---
+    result = graph.invoke({"messages": [HumanMessage(user_input)]})
+
+    # --- What the user sees (deanonymized by after_agent) ---
+    print("=" * 60)
+    print("USER SEES (deanonymized):")
+    print(result["messages"][-1].content)
+    print("=" * 60)
