@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from typing import Any, Awaitable, Callable
 
+from dotenv import load_dotenv
 from langchain.agents.middleware import (
     AgentMiddleware,
     AgentState,
@@ -12,15 +12,20 @@ from langchain.agents.middleware import (
 )
 from langchain.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain.tools.tool_node import ToolCallRequest
+from langchain_core.messages import ToolCall
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
-
+from langchain.agents import create_agent
+from langchain_core.tools import tool
+from loguru import logger
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+load_dotenv()
+
 
 def _build_analyzer(language: str, spacy_model: str) -> AnalyzerEngine:
     """Build a Presidio AnalyzerEngine with the given spaCy model."""
@@ -40,6 +45,7 @@ def _short_hash(value: str) -> str:
 # ---------------------------------------------------------------------------
 # Middleware
 # ---------------------------------------------------------------------------
+
 
 class PIIAnonymizationMiddleware(AgentMiddleware):
     """Middleware that anonymizes PII for the LLM and deanonymizes for the user.
@@ -98,13 +104,14 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
                 recognizer = PatternRecognizer(
                     supported_entity=entity_type,
                     patterns=[Pattern(name=entity_type, regex=regex, score=0.9)],
+                    supported_language=self.language,
                 )
                 self._analyzer.registry.add_recognizer(recognizer)
                 if entity_type not in self.analyzed_fields:
                     self.analyzed_fields.append(entity_type)
 
         # Bidirectional mapping: token ↔ original
-        self._to_token: dict[str, str] = {}   # original  → token
+        self._to_token: dict[str, str] = {}  # original  → token
         self._to_original: dict[str, str] = {}  # token → original
 
     # ------------------------------------------------------------------
@@ -218,12 +225,15 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             k: self.deanonymize(v) if isinstance(v, str) else v
             for k, v in request.tool_call["args"].items()
         }
-        deanonymized_tool_call = {**request.tool_call, "args": deanonymized_args}
+        deanonymized_tool_call: ToolCall = {
+            **request.tool_call,
+            "args": deanonymized_args,
+        }
 
         # Build a new request with deanonymized args
         new_request = ToolCallRequest(
             tool_call=deanonymized_tool_call,
-            tools=request.tools,
+            tool=request.tool,
             state=request.state,
             runtime=request.runtime,
         )
@@ -234,7 +244,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         # 3. Anonymize the result before it goes back to the model
         if isinstance(result, ToolMessage):
             anonymized_content = self.anonymize(
-                result.content if isinstance(result.content, str) else str(result.content)
+                result.content
+                if isinstance(result.content, str)
+                else str(result.content)
             )
             return ToolMessage(
                 content=anonymized_content,
@@ -254,11 +266,14 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             k: self.deanonymize(v) if isinstance(v, str) else v
             for k, v in request.tool_call["args"].items()
         }
-        deanonymized_tool_call = {**request.tool_call, "args": deanonymized_args}
+        deanonymized_tool_call: ToolCall = {
+            **request.tool_call,
+            "args": deanonymized_args,
+        }
 
         new_request = ToolCallRequest(
             tool_call=deanonymized_tool_call,
-            tools=request.tools,
+            tool=request.tool,
             state=request.state,
             runtime=request.runtime,
         )
@@ -267,7 +282,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         if isinstance(result, ToolMessage):
             anonymized_content = self.anonymize(
-                result.content if isinstance(result.content, str) else str(result.content)
+                result.content
+                if isinstance(result.content, str)
+                else str(result.content)
             )
             return ToolMessage(
                 content=anonymized_content,
@@ -277,9 +294,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         return result
 
-    def after_agent(
-        self, state: AgentState, runtime: Runtime
-    ) -> dict[str, Any] | None:
+    def after_agent(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Deanonymize the final assistant message so the user sees real values."""
         if not state.get("messages"):
             return None
@@ -368,28 +383,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         return message
 
 
-
-
-
-
-
-
-
-
-"""
-Example usage of PIIAnonymizationMiddleware.
-"""
-
-from langchain.agents import create_agent
-from langchain.messages import HumanMessage
-from langchain_core.tools import tool
-from loguru import logger
-
-
-
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
@@ -414,7 +411,21 @@ pii_middleware = PIIAnonymizationMiddleware(
     spacy_model="fr_core_news_lg",
     # Optional: add custom regex patterns (e.g. French SSN "NIR")
     extra_patterns=[
-        ("FR_SSN", r"\d{1}\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}", "French NIR"),
+        (
+            "FR_SSN",
+            r"\d{1}\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}",
+            "French NIR",
+        ),
+        (
+            "EMAIL_ADDRESS",
+            r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+            "Email address",
+        ),
+        (
+            "PHONE_NUMBER",
+            r"(?:(?:\+|00)33[\s.\-]?|0)[1-9](?:[\s.\-]?\d{2}){4}",
+            "French phone number",
+        ),
     ],
 )
 
@@ -424,7 +435,13 @@ pii_middleware = PIIAnonymizationMiddleware(
 # ---------------------------------------------------------------------------
 
 graph = create_agent(
-    model="gpt-4.1",
+    model="gpt-5-nano",
+    system_prompt=(
+        "You are a helpful assistant that can perform tasks and answer questions. "
+        "There are maybe placeholder hashes in the input that represent real values "
+        "(e.g. <PERSON:a1b2c3d4>); treat them as opaque tokens and do not attempt to "
+        "reverse them yourself. Use the provided tools when needed."
+    ),
     tools=[send_email, get_weather],
     middleware=[pii_middleware],
 )
@@ -435,10 +452,12 @@ graph = create_agent(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    load_dotenv()
     user_input = (
         "Envoie un email à Jean Dupont (jean.dupont@example.com) "
         "pour lui dire qu'il fait beau à Bordeaux. "
         "Son numéro est 06 12 34 56 78."
+        "Pourras tu a la fin me dire par quel lettre commence l'email, le nom prénom, et le dernier numéro de téléphone ? (je vérifie que l'anonymisation fonctionne)"
     )
 
     # --- What the user typed (raw) ---
