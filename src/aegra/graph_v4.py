@@ -52,6 +52,9 @@ def get_weather(country_or_city: str) -> str:
 class Anonymizer:
     def deanonymize_messages(self, messages: list[AnyMessage]) -> list[AnyMessage]:
         for message in messages:
+            assert isinstance(message.content, str), (
+                "This simple anonymizer only works for string content."
+            )
             if "{name}" in message.content:
                 message.content = message.content.replace("{name}", "Pierre")
             if "{city}" in message.content:
@@ -61,6 +64,9 @@ class Anonymizer:
     def anonymize_messages(self, messages: list[AnyMessage]) -> list[AnyMessage]:
         new_messages = []
         for message in messages:
+            assert isinstance(message.content, str), (
+                "This simple anonymizer only works for string content."
+            )
             message.content = message.content.replace("Pierre", "{name}")
             message.content = message.content.replace("Lyon", "{city}")
             new_messages.append(message)
@@ -87,6 +93,9 @@ class CustomMiddleware(AgentMiddleware):
         response = await handler(request)
 
         ai_msg = response.result[0]
+        assert isinstance(ai_msg, AIMessage), (
+            "This middleware only supports AIMessage responses."
+        )
 
         print(f"Model request before deanonymization: {request.messages}\n")
         print(f"Model response before deanonymization: {ai_msg.content}")
