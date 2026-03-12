@@ -1,13 +1,13 @@
 """Agent graph wired with PII anonymization middleware for end-to-end testing."""
 
-from __future__ import annotations
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from loguru import logger
-
-from aegra.middleware import PIIAnonymizationMiddleware
+from langfuse import get_client
+from langfuse.langchain import CallbackHandler
+from aegra.middleware import PIIAnonymizationMiddleware, PIIState
 
 load_dotenv()
 
@@ -43,28 +43,27 @@ def get_weather(country_or_city: str) -> str:
 
 pii = PIIAnonymizationMiddleware(threshold=0.5)
 
-_SYSTEM_PROMPT = """\
-You are a helpful assistant. Some inputs may contain anonymized tokens \
-(e.g. <PERSON:a1b2c3>, <LOCATION:x9y8z7>, <EMAIL_ADDRESS:d4e5f6>) that replace \
-real values for privacy reasons.
+system_prompt = """\
+You are a helpful assistant. Some inputs may contain anonymized placeholders that replace real values for privacy reasons.
 
 Rules:
-1. Treat every token as if it were the real value — never comment on its format, \
-never say it is a token, never ask the user to reveal it.
-2. Tokens can be passed directly to tools — use them as-is as input arguments \
-(e.g. get_weather(<LOCATION:a1b2c3>)). This preserves the user's privacy while \
+1. Treat every placeholder as if it were the real value, never comment on its format, never say it is a token, never ask the user to reveal it.
+2. Placeholders can be passed directly to tools — use them as-is as input arguments. This preserves the user's privacy while \
 still allowing tools to operate.
-3. If a tool returns no result because a token is unresolvable, give a short, \
-natural explanation in one sentence — no technical jargon.
-4. Never expose internal reasoning about anonymization to the user.
-5. If the user asks for a specific detail about a token (e.g. "what is the first \
-letter?"), reply briefly: "I cannot answer that question as the data has been \
-anonymized to protect your personal information."
+3. If the user asks for a specific detail about a token (e.g. "what is the first letter?"), reply briefly: "I cannot answer that question as the data has been anonymized to protect your personal information." \
+Another example is if the user asks "Dans quel pays ce trouve la ville de {city} ?", you can answer "Je suis désolé, mais je ne peux pas répondre à cette question car les données ont été anonymisées pour protéger vos informations personnelles."
 """
 
+# Initialize Langfuse client
+langfuse = get_client()
+
+# Initialize Langfuse CallbackHandler for Langchain (tracing)
+langfuse_handler = CallbackHandler()
+
 graph = create_agent(
-    model="openai:gpt-4o",
-    system_prompt=_SYSTEM_PROMPT,
+    model="openai:gpt-5",
+    system_prompt=system_prompt,
+    state_schema=PIIState,
     tools=[send_email, get_weather],
     middleware=[pii],
 )

@@ -4,7 +4,7 @@
     "./src"
   ],
   "graphs": {
-    "agent": "./src/aegra/graph_v3.py:graph"
+    "agent": "./src/aegra/graph_v4.py:graph"
   },
   "http": {
     "app": "./src/aegra/app.py:app"
