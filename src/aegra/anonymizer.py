@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import (
     Optional,
     List,
@@ -16,8 +17,8 @@ from gliner2 import GLiNER2
 # extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
 
 
-class Detection(TypedDict):
-    """Gliner2 detection class"""
+class GlinerEntity(TypedDict):
+    """Raw entity dict as returned by the GLiNER library."""
 
     text: Required[str]
     confidence: NotRequired[float]
@@ -25,14 +26,23 @@ class Detection(TypedDict):
     end: NotRequired[int]
 
 
-class CustomDetection(TypedDict):
-    """Gliner2 detection class"""
+@dataclass
+class NamedEntity:
+    """Enriched named entity produced by the anonymizer pipeline.
 
-    text: Required[str]
-    entity_type: Required[str]
-    confidence: NotRequired[float]
-    start: NotRequired[int]
-    end: NotRequired[int]
+    Attributes:
+        text: The surface form of the entity as it appears in the text.
+        entity_type: Category label (e.g. "person", "company").
+        confidence: Detection confidence score in [0, 1].
+        start: Character offset of the first character (inclusive).
+        end: Character offset past the last character (exclusive).
+    """
+
+    text: str
+    entity_type: str
+    confidence: float
+    start: Optional[int] = None
+    end: Optional[int] = None
 
 
 class ThreadID(str): ...
@@ -41,27 +51,56 @@ class ThreadID(str): ...
 class Placeholder(str): ...
 
 
-def get_placeholder(label: str, index: int) -> Placeholder:
+def build_placeholder(label: str, index: int) -> Placeholder:
+    """Build a placeholder token for a given entity label and index.
+
+    Args:
+        label: Entity type label (e.g. "person").
+        index: 1-based occurrence index within that label.
+
+    Returns:
+        A Placeholder string such as ``<PERSON_1>``.
+    """
     return Placeholder(f"<{label}_{index}>".upper())
 
 
-def ensure_thread_id(thread_id: Optional[str]) -> ThreadID:
-    value = thread_id or uuid4().hex
-    assert value is not None, "Must have value for thread id"
-    return ThreadID(value)
+def resolve_thread_id(thread_id: Optional[str]) -> ThreadID:
+    """Return a ThreadID, generating one from UUID if none is provided.
+
+    Args:
+        thread_id: An existing thread identifier, or None.
+
+    Returns:
+        A ThreadID guaranteed to be non-empty.
+    """
+    return ThreadID(thread_id or uuid4().hex)
 
 
 class Anonymizer:
+    """Anonymizes free-form text by replacing named entities with placeholders.
+
+    Attributes:
+        extractor: GLiNER2 model used for entity detection.
+        entity_types: Entity categories to detect.
+    """
+
     extractor: GLiNER2
-    entity_type: List[str]
+    entity_types: List[str]
 
     def __init__(self, extractor: GLiNER2, entity_types: Optional[List[str]] = None):
         self.extractor = extractor
         self.entity_types = entity_types or ["company", "person", "product", "location"]
 
-    def detect_entities(self, text: str) -> List[CustomDetection]:
-        """Anonymize the given text"""
-        detections: List[CustomDetection] = []
+    def detect_entities(self, text: str) -> List[NamedEntity]:
+        """Detect and return named entities found in the text.
+
+        Args:
+            text: Input text to analyse.
+
+        Returns:
+            List of NamedEntity objects with type, confidence, and span info.
+        """
+        detections: List[NamedEntity] = []
         result = self.extractor.extract_entities(
             text,
             self.entity_types,
@@ -69,53 +108,60 @@ class Anonymizer:
             include_confidence=True,
         )
 
-        list_entity: List[Detection]
+        list_entity: List[GlinerEntity]
         for entity_type, list_entity in result["entities"].items():
             for entity in list_entity:
-                value = CustomDetection(
-                    text=entity["text"],
-                    entity_type=entity_type,
-                    confidence=entity["confidence"],
-                    start=entity["start"],
-                    end=entity["end"],
+                detections.append(
+                    NamedEntity(
+                        text=entity["text"],
+                        entity_type=entity_type,
+                        confidence=entity["confidence"],
+                        start=entity["start"],
+                        end=entity["end"],
+                    )
                 )
-                detections.append(value)
 
         return detections
 
-    def get_placeholders(
-        self, detections: List[CustomDetection]
-    ) -> Dict[Placeholder, List[CustomDetection]]:
-        """Get placeholder based on detections"""
-        placeholders: Dict[Placeholder, List[CustomDetection]] = defaultdict(list)
+    def assign_placeholders(
+        self, detections: List[NamedEntity]
+    ) -> Dict[Placeholder, List[NamedEntity]]:
+        """Assign a placeholder key to each unique entity text.
 
-        # Detect which detection have same placeholder
+        Entities with the same surface form share the same placeholder.
+        Different surface forms within the same label get distinct indices.
+
+        Args:
+            detections: List of detected named entities.
+
+        Returns:
+            Mapping from Placeholder to all detections that share that placeholder.
+        """
+        placeholders: Dict[Placeholder, List[NamedEntity]] = defaultdict(list)
+
         for detection in detections:
-            label = detection["entity_type"]
+            label = detection.entity_type
 
             for index in range(1, 1000):
-                placeholder = get_placeholder(label, index)
-                # If placeholder don't exist, is the first time
+                placeholder = build_placeholder(label, index)
                 if placeholder not in placeholders:
                     placeholders[placeholder].append(detection)
                     break
                 else:
-                    # Check if same detection object
                     first_detection = placeholders[placeholder][0]
-
                     # Todo : use fuzzy matching ?
-                    if first_detection["text"] == detection["text"]:
+                    if first_detection.text == detection.text:
                         placeholders[placeholder].append(detection)
                         break
 
         return placeholders
 
-    def detect_placeholders(
+    def expand_placeholders(
         self,
         text: str,
-        placeholders: Dict[Placeholder, List[CustomDetection]],
-    ) -> Dict[Placeholder, List[CustomDetection]]:
-        """Detect additional occurrences of already detected entities.
+        placeholders: Dict[Placeholder, List[NamedEntity]],
+    ) -> Dict[Placeholder, List[NamedEntity]]:
+        """Expand placeholder coverage by scanning for additional occurrences.
 
         GLiNER often detects only the first occurrence of an entity.
         This method scans the full text to find additional matches
@@ -128,24 +174,23 @@ class Anonymizer:
         Returns:
             Updated placeholders with additional detections.
         """
-
-        new_placeholders: Dict[Placeholder, List[CustomDetection]] = placeholders.copy()
+        new_placeholders: Dict[Placeholder, List[NamedEntity]] = placeholders.copy()
 
         for placeholder, detections in placeholders.items():
             if not detections:
                 continue
 
             reference = detections[0]
-            entity_text = reference["text"]
-            entity_type = reference["entity_type"]
+            entity_text = reference.text
+            entity_type = reference.entity_type
 
             pattern = re.escape(entity_text)
 
             # Existing spans to avoid duplicates
             existing_spans = {
-                (d["start"], d["end"])
+                (d.start, d.end)
                 for d in detections
-                if "start" in d and "end" in d
+                if d.start is not None and d.end is not None
             }
 
             for match in re.finditer(pattern, text):
@@ -154,38 +199,41 @@ class Anonymizer:
                 if (start, end) in existing_spans:
                     continue
 
-                new_detection: CustomDetection = CustomDetection(
-                    text=entity_text,
-                    entity_type=entity_type,
-                    confidence=1.0,
-                    start=start,
-                    end=end,
+                new_placeholders[placeholder].append(
+                    NamedEntity(
+                        text=entity_text,
+                        entity_type=entity_type,
+                        confidence=1.0,
+                        start=start,
+                        end=end,
+                    )
                 )
-
-                new_placeholders[placeholder].append(new_detection)
 
         return new_placeholders
 
-    def apply_placeholders(
+    def replace_with_placeholders(
         self,
         text: str,
-        placeholders: Dict[Placeholder, List[CustomDetection]],
+        placeholders: Dict[Placeholder, List[NamedEntity]],
     ) -> str:
-        """Replace detected entities in text with placeholders."""
+        """Replace detected entity spans in text with their placeholder tokens.
 
+        Args:
+            text: Original input text.
+            placeholders: Mapping from placeholder to detections with span info.
+
+        Returns:
+            Text with all entity spans substituted by placeholder tokens.
+        """
         replacements = []
 
         for placeholder, detections in placeholders.items():
             for detection in detections:
-                start = detection.get("start")
-                end = detection.get("end")
-
-                if start is None or end is None:
+                if detection.start is None or detection.end is None:
                     continue
+                replacements.append((detection.start, detection.end, placeholder))
 
-                replacements.append((start, end, placeholder))
-
-        # Important: sort in reverse order to preserve indices
+        # Note: sort in reverse order to preserve character indices during replacement
         replacements.sort(key=lambda x: x[0], reverse=True)
 
         for start, end, placeholder in replacements:
@@ -195,13 +243,22 @@ class Anonymizer:
 
     def anonymize(
         self, text: str, thread_id: Optional[str] = None
-    ) -> tuple[str, Dict[Placeholder, List[CustomDetection]]]:
-        """Anonymize the given text"""
-        thread_id = ensure_thread_id(thread_id)
+    ) -> tuple[str, Dict[Placeholder, List[NamedEntity]]]:
+        """Anonymize the given text by replacing named entities with placeholders.
+
+        Args:
+            text: Input text to anonymize.
+            thread_id: Optional identifier for tracking conversation threads.
+
+        Returns:
+            A tuple of (anonymized_text, placeholders) where placeholders maps
+            each Placeholder token to the list of NamedEntity objects it replaced.
+        """
+        thread_id = resolve_thread_id(thread_id)
         detections = self.detect_entities(text)
-        placeholders = self.get_placeholders(detections)
-        placeholders = self.detect_placeholders(text, placeholders)
-        text = self.apply_placeholders(text, placeholders)
+        placeholders = self.assign_placeholders(detections)
+        placeholders = self.expand_placeholders(text, placeholders)
+        text = self.replace_with_placeholders(text, placeholders)
         return text, placeholders
 
     def deanonymize(self, text: str) -> str:
@@ -214,10 +271,10 @@ def main():
     text, detections = anonymizer.anonymize(
         "Apple Inc. CEO Tim Cook announced iPhone 15 in Cupertino. Cupertino is nice town. Paris is capital !"
     )
-    for entity_type, list_placeholder in detections.items():
-        print(entity_type)
-        for placeholder in list_placeholder:
-            print(f"\t{placeholder}")
+    for placeholder, entities in detections.items():
+        print(placeholder)
+        for entity in entities:
+            print(f"\t{entity.text}")
 
     print(text)
 
