@@ -1,12 +1,12 @@
-site_name: Aegra
-site_description: Privacy-first LLM agent framework with automatic PII anonymization
-site_author: Aegra Team
+site_name: Maskara
+site_description: Couche d'anonymisation PII pour agents LLM, basée sur GLiNER2
+site_author: Maskara
 docs_dir: docs
 
 nav:
   - Accueil: index.md
-  - Architecture & Flux: architecture.md
   - Démarrage rapide: getting-started.md
+  - Architecture: architecture.md
   - Référence:
     - Anonymizer: anonymizer.md
     - Middleware: middleware.md

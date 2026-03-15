@@ -94,7 +94,7 @@ async def sweep_expired_threads(base_url: str, default_ttl_minutes: int) -> None
         offset += limit
 
     if deleted:
-        logger.info("Sweep complete — %d thread(s) deleted.", deleted)
+        logger.info("Sweep complete %d thread(s) deleted.", deleted)
 
 
 async def run_sweeper(
@@ -113,7 +113,7 @@ async def run_sweeper(
         default_ttl_minutes: Max thread age in minutes before deletion.
     """
     logger.info(
-        "TTL sweeper started — ttl=%d min, interval=%d min, server=%s",
+        "TTL sweeper started ttl=%d min, interval=%d min, server=%s",
         default_ttl_minutes,
         sweep_interval_minutes,
         base_url,

@@ -17,7 +17,7 @@ from maskara.ttl_sweeper import load_ttl_config, run_sweeper
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    format="%(asctime)s  %(levelname)-8s  %(name)s %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ async def lifespan(application: FastAPI):
         logger.info("TTL sweeper background task started.")
     else:
         logger.info(
-            "No TTL config found — sweeper disabled. "
+            "No TTL config found sweeper disabled. "
             "Add checkpointer.ttl to aegra.json to enable it."
         )
 
@@ -120,7 +120,7 @@ async def get_svc_api_keys(request: Request) -> ApiKeyService:
 security = create_depends_api_key(get_svc_api_keys)
 
 # ---------------------------------------------------------------------------
-# Standalone FastAPI app — Aegra merges this with its own app at startup.
+# Standalone FastAPI app Aegra merges this with its own app at startup.
 # DO NOT import or re-export aegra_api.main.app here.
 # ---------------------------------------------------------------------------
 app = FastAPI(lifespan=lifespan)

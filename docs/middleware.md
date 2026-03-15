@@ -1,12 +1,14 @@
 ---
-title: Middleware — Référence API
+title: Middleware Reference API
 ---
 
 # Middleware
 
 `src/maskara/middleware.py`
 
-Le middleware d'anonymisation PII s'intègre dans LangGraph via le mécanisme de hooks d'`AgentMiddleware`. Il intercepte toutes les communications entre l'utilisateur, le LLM et les outils pour garantir qu'aucune donnée personnelle ne transite en clair vers le modèle.
+Le middleware d'anonymisation PII s'integre dans LangGraph via le systeme de hooks `AgentMiddleware`. Il intercepte les communications entre l'utilisateur, le LLM et les outils pour garantir qu'aucune donnee personnelle ne transite vers le modele.
+
+Contrairement a l'`Anonymizer` (qui utilise des jetons `<TYPE_N>`), le middleware utilise des **jetons bases sur un hash SHA-256** (`<TYPE:xxxxxxxx>`). Le mapping est persiste dans le state LangGraph et survit aux redemarrages du serveur.
 
 ---
 
@@ -20,13 +22,12 @@ class PIIState(AgentState):
 
 Extension de `AgentState` qui persiste le mapping bidirectionnel PII ↔ jetons dans le checkpoint LangGraph.
 
-| Champ | Description |
-|-------|-------------|
+| Champ | Exemple |
+|-------|---------|
 | `pii_to_token` | `{"Lyon": "<LOCATION:e5f6a7b8>", "Tim Cook": "<PERSON:a1b2c3d4>"}` |
 | `pii_to_original` | `{"<LOCATION:e5f6a7b8>": "Lyon", "<PERSON:a1b2c3d4>": "Tim Cook"}` |
 
-!!! info
-    Ce state est checkpointé par LangGraph, ce qui garantit la cohérence des jetons même après redémarrage du serveur, tant que le `thread_id` est préservé.
+Ce state est checkpointe par LangGraph, ce qui garantit la coherence des jetons meme apres redemarrage du serveur.
 
 ---
 
@@ -37,9 +38,9 @@ Extension de `AgentState` qui persiste le mapping bidirectionnel PII ↔ jetons 
 ```
 
 - `ENTITY_TYPE` : `PERSON`, `LOCATION`, `ORGANIZATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`
-- `xxxxxxxx` : 8 premiers caractères hexadécimaux du SHA-256 de la valeur originale
+- `xxxxxxxx` : 8 premiers caracteres hexadecimaux du SHA-256 de la valeur originale
 
-**Déterminisme :** `"Lyon"` produit toujours `<LOCATION:e5f6a7b8>`, indépendamment du thread ou de la session.
+Le hash est **deterministe** : `"Lyon"` produit toujours le meme jeton, quel que soit le thread ou la session. Cela simplifie la gestion de la coherence pas besoin de thread store.
 
 ---
 
@@ -56,12 +57,20 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
     )
 ```
 
-| Paramètre | Défaut | Description |
+| Parametre | Defaut | Description |
 |-----------|--------|-------------|
-| `analyzed_fields` | `["PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER"]` | Types d'entités à anonymiser |
-| `gliner_model` | `"fastino/gliner2-large-v1"` | Modèle HuggingFace GLiNER2 |
-| `threshold` | `0.4` | Score de confiance minimum (plus bas = plus de rappel, plus de faux positifs) |
-| `language` | `"fr"` | Code langue passé au modèle NER |
+| `analyzed_fields` | `["PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER"]` | Types d'entites a anonymiser |
+| `gliner_model` | `"fastino/gliner2-large-v1"` | Modele HuggingFace GLiNER2 |
+| `threshold` | `0.4` | Score de confiance minimum |
+| `language` | `"fr"` | Code langue passe au modele NER |
+
+### Ajustement du seuil
+
+| Valeur | Comportement |
+|--------|-------------|
+| `0.3` | Permissif detecte beaucoup, risque de faux positifs |
+| `0.4` | Defaut bon equilibre precision/rappel |
+| `0.6` | Conservateur seulement les entites tres claires |
 
 ---
 
@@ -83,94 +92,58 @@ graph = create_agent(
 
 ## Hooks
 
+Le middleware intervient a trois moments du cycle de vie d'un appel agent :
+
 ### `before_model(state, runtime)`
 
-```python
-def before_model(self, state: PIIState, runtime: Runtime) -> dict[str, Any] | None
-```
+Execute **avant chaque appel LLM**. Traite les messages dans cet ordre :
 
-Exécuté **avant chaque appel LLM**. Traite les messages dans l'ordre suivant :
+1. **`AIMessage`s** : re-applique les mappings connus (step-1 only, sans GLiNER2) pour restaurer l'anonymisation apres `after_agent`
+2. **Dernier `HumanMessage`** : anonymisation complete via GLiNER2
+3. **`ToolMessage`s apres le dernier `AIMessage`** : anonymisation complete (les resultats d'outils sont stockes bruts par `wrap_tool_call`)
 
-1. **Dernier `HumanMessage`** : anonymisation complète via GLiNER2
-2. **`ToolMessage`s après le dernier `AIMessage`** : anonymisation complète (les résultats d'outils sont stockés bruts par `wrap_tool_call`)
-3. **`AIMessage`s** : ré-application des mappings connus uniquement (sans GLiNER2) pour restaurer l'anonymisation après `after_agent`
+**Retourne :** patch d'etat avec les messages mis a jour et les nouvelles entrees de mapping, ou `None`.
 
-**Retourne :** Patch d'état avec les messages mis à jour et les nouvelles entrées de mapping, ou `None` si rien n'a changé.
-
-Version async : `abefore_model(state, runtime)`
+**Pourquoi les `AIMessage`s sont re-anonymises sans GLiNER2 ?** Parce que `after_agent` desanonymise la reponse finale pour l'utilisateur. Quand le LLM revoit cette reponse dans l'historique au tour suivant, il faut la re-anonymiser. Mais on ne lance pas GLiNER2 dessus on re-applique simplement les mappings connus via `str.replace`, ce qui est plus rapide et ne risque pas de detecter de faux positifs dans du texte genere.
 
 ---
 
 ### `wrap_tool_call(request, handler)`
 
-```python
-def wrap_tool_call(
-    self,
-    request: ToolCallRequest,
-    handler: Callable[[ToolCallRequest], ToolMessage | Command],
-) -> ToolMessage | Command
-```
+Execute **autour de chaque appel d'outil** :
 
-Exécuté **autour de chaque appel d'outil** :
+1. Desanonymise les arguments de l'outil (les chaines `str` uniquement)
+2. Execute l'outil avec les vraies valeurs
+3. Retourne le resultat **brut** (non anonymise)
 
-1. Désanonymise les arguments de l'outil (`str` uniquement)
-2. Exécute l'outil avec les vraies valeurs
-3. Retourne le résultat **brut** (non anonymisé)
-
-!!! note
-    Le résultat brut est intentionnel. `before_model` l'anonymisera au tour suivant avant que le LLM ne le lise.
-
-**Retourne :** `ToolMessage` brut ou `Command` inchangé.
-
-Version async : `awrap_tool_call(request, handler)`
+Le resultat brut est intentionnel : `before_model` l'anonymisera au tour suivant avant que le LLM ne le lise. Cela evite un double passage GLiNER2 inutile.
 
 ---
 
 ### `after_agent(state, runtime)`
 
-```python
-def after_agent(self, state: PIIState, runtime: Runtime) -> dict[str, Any] | None
-```
-
-Exécuté **après la réponse finale de l'agent**. Désanonymise le dernier `AIMessage` afin que l'utilisateur reçoive les vraies valeurs.
-
-**Retourne :** Patch d'état avec le message désanonymisé, ou `None` si rien n'a changé.
-
-Version async : `aafter_agent(state, runtime)`
+Execute **apres la reponse finale de l'agent**. Desanonymise le dernier `AIMessage` pour que l'utilisateur recoive les vraies valeurs.
 
 ---
 
-## Méthodes publiques
+## Pipeline d'anonymisation du middleware
 
-### `anonymize(text)`
+Le middleware a une logique d'anonymisation legerement differente de l'`Anonymizer` :
 
-```python
-def anonymize(self, text: str) -> str
+```
+1. Remplace les valeurs deja connues (cache _to_token)
+2. Masque les jetons existants avec des null-bytes
+   → empeche GLiNER de re-detecter le contenu d'un jeton
+3. Lance GLiNER2 sur le texte masque
+4. Cree ou reutilise un jeton hash pour chaque nouvelle entite
+5. Restaure les jetons masques
 ```
 
-Détecte les PII dans `text` et remplace chaque span par un jeton déterministe.
-
-**Algorithme :**
-
-1. Remplace les valeurs déjà connues (via le cache `_to_token`)
-2. Masque les jetons existants avec des placeholders null-byte pour éviter la re-détection
-3. Lance GLiNER2 sur le texte masqué
-4. Crée ou réutilise un jeton pour chaque nouvelle entité
-5. Restaure les jetons masqués
+L'etape 2 (masquage null-byte) est specifique au middleware. Elle empeche la creation de jetons imbriques par exemple si le texte contient deja `<PERSON:a1b2c3d4>`, GLiNER pourrait detecter "PERSON" comme entite. Le masquage evite ca.
 
 ---
 
-### `deanonymize(text)`
-
-```python
-def deanonymize(self, text: str) -> str
-```
-
-Remplace tous les jetons `<TYPE:hash>` dans `text` par leurs valeurs originales.
-
----
-
-## Entités supportées
+## Entites supportees
 
 | Label GLiNER2 | Type jeton | Exemple |
 |---------------|------------|---------|
@@ -193,13 +166,10 @@ from langchain_core.tools import tool
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Envoie un email."""
-    return f"Email envoyé à {to}."
+    return f"Email envoye a {to}."
 
 
-middleware = PIIAnonymizationMiddleware(
-    threshold=0.4,
-    language="fr",
-)
+middleware = PIIAnonymizationMiddleware(threshold=0.4, language="fr")
 
 graph = create_agent(
     model="openai:gpt-4o",
@@ -208,21 +178,17 @@ graph = create_agent(
     middleware=[middleware],
 )
 
-# L'utilisateur envoie un message avec des données personnelles
 result = graph.invoke(
     {
         "messages": [{
             "role": "user",
-            "content": "Envoie un email à pierre@example.com pour lui souhaiter bon anniversaire.",
+            "content": "Envoie un email a pierre@example.com pour lui souhaiter bon anniversaire.",
         }]
     },
     config={"configurable": {"thread_id": "session-abc"}},
 )
 
-# La réponse finale est désanonymisée automatiquement
+# La reponse finale est desanonymisee automatiquement
 print(result["messages"][-1].content)
-# → "J'ai envoyé un email à pierre@example.com pour lui souhaiter bon anniversaire."
+# "J'ai envoye un email a pierre@example.com pour lui souhaiter bon anniversaire."
 ```
-
-!!! warning "Limitation actuelle"
-    Le middleware ne supporte que les messages dont le `content` est une `str` ou une `list` de blocs texte. Les messages multimodaux (images, audio) ne sont pas anonymisés.

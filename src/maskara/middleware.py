@@ -155,7 +155,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         logger.info("Loading GLiNER2 model: {}", gliner_model)
         self._model: GLiNER2 = GLiNER2.from_pretrained(gliner_model)
 
-        # In-memory cache — synced from state at the start of each hook call.
+        # In-memory cache synced from state at the start of each hook call.
         self._to_token: dict[str, str] = {}
         self._to_original: dict[str, str] = {}
 
@@ -261,7 +261,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         - **Last HumanMessage**: full GLiNER2 anonymization.
         - **ToolMessages after the last AIMessage**: full GLiNER2 anonymization
           (tool results stored raw by ``wrap_tool_call``).
-        - **AIMessages**: step-1 only — re-apply known mappings to restore any
+        - **AIMessages**: step-1 only re-apply known mappings to restore any
           content deanonymized by ``after_agent`` without running GLiNER2.
 
         Args:
