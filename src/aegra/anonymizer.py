@@ -124,7 +124,8 @@ class Anonymizer:
         return detections
 
     def assign_placeholders(
-        self, detections: List[NamedEntity]
+        self,
+        detections: List[NamedEntity],
     ) -> Dict[Placeholder, List[NamedEntity]]:
         """Assign a placeholder key to each unique entity text.
 
@@ -242,7 +243,9 @@ class Anonymizer:
         return text
 
     def anonymize(
-        self, text: str, thread_id: Optional[str] = None
+        self,
+        text: str,
+        thread_id: Optional[str] = None,
     ) -> tuple[str, Dict[Placeholder, List[NamedEntity]]]:
         """Anonymize the given text by replacing named entities with placeholders.
 
@@ -261,22 +264,46 @@ class Anonymizer:
         text = self.replace_with_placeholders(text, placeholders)
         return text, placeholders
 
-    def deanonymize(self, text: str) -> str:
+    def deanonymize(
+        self,
+        text: str,
+        placeholders: Dict[Placeholder, List[NamedEntity]],
+    ) -> str:
+        """Restore original entity text by replacing placeholders.
+
+        Args:
+            text: Anonymized text containing placeholder tokens.
+            placeholders: Mapping returned by ``anonymize``.
+
+        Returns:
+            Text with each placeholder token replaced by the original entity text.
+        """
+        for placeholder, entities in placeholders.items():
+            if not entities:
+                continue
+            text = text.replace(placeholder, entities[0].text)
         return text
 
 
 def main():
     extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
     anonymizer = Anonymizer(extractor)
-    text, detections = anonymizer.anonymize(
-        "Apple Inc. CEO Tim Cook announced iPhone 15 in Cupertino. Cupertino is nice town. Paris is capital !"
+    anonymized_text, placeholders = anonymizer.anonymize(
+        "Apple Inc. CEO Tim Cook announced iPhone "
+        "15 in Cupertino. Cupertino is nice town. "
+        "Paris is capital !"
     )
-    for placeholder, entities in detections.items():
-        print(placeholder)
+    for entity_type, entities in placeholders.items():
+        print(entity_type)
         for entity in entities:
-            print(f"\t{entity.text}")
+            print(f"\t{entity}")
 
-    print(text)
+    print("---")
+    print(anonymized_text)
+
+    print("---")
+    desanonymized_text = anonymizer.deanonymize(anonymized_text, placeholders)
+    print(desanonymized_text)
 
 
 if __name__ == "__main__":
