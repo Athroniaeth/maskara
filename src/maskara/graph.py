@@ -19,7 +19,7 @@ from loguru import logger
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 
-from aegra.anonymizer import Anonymizer
+from maskara.anonymizer import Anonymizer
 
 load_dotenv()
 

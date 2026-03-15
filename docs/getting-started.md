@@ -52,14 +52,16 @@ Le serveur LangGraph démarre et expose l'API de l'agent. Vous pouvez interagir 
 ### Avec le middleware complet (recommandé)
 
 ```python
-from aegra.middleware import PIIAnonymizationMiddleware, PIIState
+from maskara.middleware import PIIAnonymizationMiddleware, PIIState
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+
 
 @tool
 def get_weather(city: str) -> str:
     """Retourne la météo pour une ville."""
     return f"Il fait 22°C et ensoleillé à {city}."
+
 
 graph = create_agent(
     model="openai:gpt-4o",
@@ -81,7 +83,7 @@ print(result["messages"][-1].content)
 
 ```python
 from gliner2 import GLiNER2
-from aegra.anonymizer import Anonymizer
+from maskara.anonymizer import Anonymizer
 
 extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
 anonymizer = Anonymizer(extractor)

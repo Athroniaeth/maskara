@@ -4,7 +4,7 @@ title: Middleware — Référence API
 
 # Middleware
 
-`src/aegra/middleware.py`
+`src/maskara/middleware.py`
 
 Le middleware d'anonymisation PII s'intègre dans LangGraph via le mécanisme de hooks d'`AgentMiddleware`. Il intercepte toutes les communications entre l'utilisateur, le LLM et les outils pour garantir qu'aucune donnée personnelle ne transite en clair vers le modèle.
 
@@ -68,7 +68,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 ## Utilisation
 
 ```python
-from aegra.middleware import PIIAnonymizationMiddleware, PIIState
+from maskara.middleware import PIIAnonymizationMiddleware, PIIState
 from langchain.agents import create_agent
 
 graph = create_agent(
@@ -185,14 +185,16 @@ Remplace tous les jetons `<TYPE:hash>` dans `text` par leurs valeurs originales.
 ## Exemple bout-en-bout
 
 ```python
-from aegra.middleware import PIIAnonymizationMiddleware, PIIState
+from maskara.middleware import PIIAnonymizationMiddleware, PIIState
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Envoie un email."""
     return f"Email envoyé à {to}."
+
 
 middleware = PIIAnonymizationMiddleware(
     threshold=0.4,

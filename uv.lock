@@ -8,63 +8,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "aegra"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aegra-cli" },
-    { name = "aiosqlite" },
-    { name = "faker" },
-    { name = "gliner2" },
-    { name = "keyshield", extra = ["argon2", "fastapi"] },
-    { name = "langchain" },
-    { name = "langchain-anthropic" },
-    { name = "langchain-experimental" },
-    { name = "langchain-openai" },
-    { name = "langfuse" },
-    { name = "langgraph" },
-    { name = "loguru" },
-    { name = "pip" },
-    { name = "presidio-analyzer" },
-    { name = "presidio-anonymizer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "commitizen" },
-    { name = "pyrefly" },
-    { name = "ruff" },
-    { name = "zensical" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aegra-cli", specifier = ">=0.7.4" },
-    { name = "aiosqlite", specifier = ">=0.22.1" },
-    { name = "faker", specifier = ">=40.8.0" },
-    { name = "gliner2", specifier = ">=1.2" },
-    { name = "keyshield", extras = ["argon2", "fastapi"], specifier = ">=2.0.0" },
-    { name = "langchain", specifier = ">=0.3.14" },
-    { name = "langchain-anthropic", specifier = ">=0.3.12" },
-    { name = "langchain-experimental", specifier = ">=0.4.1" },
-    { name = "langchain-openai", specifier = ">=0.3.0" },
-    { name = "langfuse", specifier = ">=3.14.5" },
-    { name = "langgraph", specifier = ">=1.0.8" },
-    { name = "loguru", specifier = ">=0.7.3" },
-    { name = "pip", specifier = ">=26.0.1" },
-    { name = "presidio-analyzer", specifier = ">=2.2.361" },
-    { name = "presidio-anonymizer", specifier = ">=2.2.361" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "commitizen", specifier = ">=4.13.9" },
-    { name = "pyrefly", specifier = ">=0.55.0" },
-    { name = "ruff", specifier = ">=0.15.5" },
-    { name = "zensical", specifier = ">=0.0.27" },
-]
-
-[[package]]
 name = "aegra-api"
 version = "0.8.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1689,6 +1632,63 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/79/de6c16cc902f4fc372236926b0ce2ab7845268dcc30fb2fbb7f71b418631/marshmallow-3.26.2.tar.gz", hash = "sha256:bbe2adb5a03e6e3571b573f42527c6fe926e17467833660bebd11593ab8dfd57", size = 222095, upload-time = "2025-12-22T06:53:53.309Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/be/2f/5108cb3ee4ba6501748c4908b908e55f42a5b66245b4cfe0c99326e1ef6e/marshmallow-3.26.2-py3-none-any.whl", hash = "sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73", size = 50964, upload-time = "2025-12-22T06:53:51.801Z" },
+]
+
+[[package]]
+name = "maskara"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "aegra-cli" },
+    { name = "aiosqlite" },
+    { name = "faker" },
+    { name = "gliner2" },
+    { name = "keyshield", extra = ["argon2", "fastapi"] },
+    { name = "langchain" },
+    { name = "langchain-anthropic" },
+    { name = "langchain-experimental" },
+    { name = "langchain-openai" },
+    { name = "langfuse" },
+    { name = "langgraph" },
+    { name = "loguru" },
+    { name = "pip" },
+    { name = "presidio-analyzer" },
+    { name = "presidio-anonymizer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "commitizen" },
+    { name = "pyrefly" },
+    { name = "ruff" },
+    { name = "zensical" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aegra-cli", specifier = ">=0.7.4" },
+    { name = "aiosqlite", specifier = ">=0.22.1" },
+    { name = "faker", specifier = ">=40.8.0" },
+    { name = "gliner2", specifier = ">=1.2" },
+    { name = "keyshield", extras = ["argon2", "fastapi"], specifier = ">=2.0.0" },
+    { name = "langchain", specifier = ">=0.3.14" },
+    { name = "langchain-anthropic", specifier = ">=0.3.12" },
+    { name = "langchain-experimental", specifier = ">=0.4.1" },
+    { name = "langchain-openai", specifier = ">=0.3.0" },
+    { name = "langfuse", specifier = ">=3.14.5" },
+    { name = "langgraph", specifier = ">=1.0.8" },
+    { name = "loguru", specifier = ">=0.7.3" },
+    { name = "pip", specifier = ">=26.0.1" },
+    { name = "presidio-analyzer", specifier = ">=2.2.361" },
+    { name = "presidio-anonymizer", specifier = ">=2.2.361" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "commitizen", specifier = ">=4.13.9" },
+    { name = "pyrefly", specifier = ">=0.55.0" },
+    { name = "ruff", specifier = ">=0.15.5" },
+    { name = "zensical", specifier = ">=0.0.27" },
 ]
 
 [[package]]

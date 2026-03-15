@@ -393,7 +393,7 @@ Avec alias {"Pari": "Paris"} :
 
 ```python
 from gliner2 import GLiNER2
-from aegra.anonymizer import Anonymizer
+from maskara.anonymizer import Anonymizer
 
 extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
 anonymizer = Anonymizer(extractor, min_confidence=0.5)

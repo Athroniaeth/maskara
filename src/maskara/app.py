@@ -10,7 +10,7 @@ from keyshield.api import create_depends_api_key
 from keyshield.hasher.argon2 import Argon2ApiKeyHasher
 from keyshield.repositories.in_memory import InMemoryApiKeyRepository
 
-from aegra.ttl_sweeper import load_ttl_config, run_sweeper
+from maskara.ttl_sweeper import load_ttl_config, run_sweeper
 
 # ---------------------------------------------------------------------------
 # Logging

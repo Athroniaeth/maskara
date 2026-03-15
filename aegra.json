@@ -1,13 +1,13 @@
 {
-  "name": "aegra",
+  "name": "maskara",
   "dependencies": [
     "./src"
   ],
   "graphs": {
-    "agent": "./src/aegra/graph.py:graph"
+    "agent": "./src/maskara/graph.py:graph"
   },
   "http": {
-    "app": "./src/aegra/app.py:app"
+    "app": "./src/maskara/app.py:app"
   },
   "checkpointer": {
     "ttl": {

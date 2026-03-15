@@ -146,7 +146,8 @@ Lance la boucle du sweeper en tant que tâche asyncio indéfinie.
 
 ```python
 import asyncio
-from aegra.ttl_sweeper import load_ttl_config, run_sweeper
+from maskara.ttl_sweeper import load_ttl_config, run_sweeper
+
 
 async def main():
     ttl_config = load_ttl_config()

@@ -1,37 +1,37 @@
 # Docker Compose - PostgreSQL + API
-# aegra dev  -> docker compose up postgres -d  (database only)
-# aegra up   -> docker compose up --build      (full stack)
+# maskara dev  -> docker compose up postgres -d  (database only)
+# maskara up   -> docker compose up --build      (full stack)
 
 services:
   postgres:
     image: pgvector/pgvector:pg18
-    container_name: aegra-postgres
+    container_name: maskara-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-aegra}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegra_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-aegra}
+      POSTGRES_USER: ${POSTGRES_USER:-maskara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maskara_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-maskara}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegra}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maskara}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  aegra:
+  maskara:
     build: .
-    container_name: aegra-api
+    container_name: maskara-api
     ports:
       - "${PORT:-8000}:8000"
     env_file:
       - .env
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-aegra}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-aegra_secret}
+      - POSTGRES_USER=${POSTGRES_USER:-maskara}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-maskara_secret}
       - POSTGRES_HOST=postgres
-      - POSTGRES_DB=${POSTGRES_DB:-aegra}
+      - POSTGRES_DB=${POSTGRES_DB:-maskara}
       - AEGRA_CONFIG=aegra.json
       - AUTH_TYPE=${AUTH_TYPE:-noop}
       - PORT=${PORT:-8000}
@@ -44,7 +44,7 @@ services:
       start_period: 10s
     volumes:
       - ./src:/app/src:ro
-      - ./aegra.json:/app/aegra.json:ro
+      - ./maskara.json:/app/maskara.json:ro
 
 volumes:
   postgres_data:

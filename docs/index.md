@@ -44,7 +44,7 @@ Utilisateur → [Middleware before_model] → LLM → [Middleware wrap_tool_call
 git clone <repo>
 cd aegra
 uv sync
-uv run python -m aegra.app
+uv run python -m maskara.app
 ```
 
 Consultez le [Guide de démarrage](getting-started.md) pour les détails d'installation et de configuration.
