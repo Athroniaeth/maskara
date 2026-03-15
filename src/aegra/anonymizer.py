@@ -12,6 +12,7 @@ from typing import (
 from uuid import uuid4
 
 from gliner2 import GLiNER2
+from langchain_core.messages import AnyMessage
 
 
 # extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
@@ -86,10 +87,12 @@ class Anonymizer:
 
     extractor: GLiNER2
     entity_types: List[str]
+    _thread_store: Dict[ThreadID, Dict[Placeholder, List[NamedEntity]]]
 
     def __init__(self, extractor: GLiNER2, entity_types: Optional[List[str]] = None):
         self.extractor = extractor
         self.entity_types = entity_types or ["company", "person", "product", "location"]
+        self._thread_store: Dict[ThreadID, Dict[Placeholder, List[NamedEntity]]] = {}
 
     def detect_entities(self, text: str) -> List[NamedEntity]:
         """Detect and return named entities found in the text.
@@ -126,19 +129,26 @@ class Anonymizer:
     def assign_placeholders(
         self,
         detections: List[NamedEntity],
+        existing_placeholders: Optional[Dict[Placeholder, List[NamedEntity]]] = None,
     ) -> Dict[Placeholder, List[NamedEntity]]:
         """Assign a placeholder key to each unique entity text.
 
         Entities with the same surface form share the same placeholder.
         Different surface forms within the same label get distinct indices.
+        If existing_placeholders is provided, known texts reuse their existing
+        placeholder and new indices start after the already-assigned ones.
 
         Args:
             detections: List of detected named entities.
+            existing_placeholders: Previously assigned placeholders to reuse.
 
         Returns:
             Mapping from Placeholder to all detections that share that placeholder.
         """
         placeholders: Dict[Placeholder, List[NamedEntity]] = defaultdict(list)
+        if existing_placeholders:
+            for ph, entities in existing_placeholders.items():
+                placeholders[ph].extend(entities)
 
         for detection in detections:
             label = detection.entity_type
@@ -257,10 +267,12 @@ class Anonymizer:
             A tuple of (anonymized_text, placeholders) where placeholders maps
             each Placeholder token to the list of NamedEntity objects it replaced.
         """
-        thread_id = resolve_thread_id(thread_id)
+        tid = resolve_thread_id(thread_id)
+        stored = self._thread_store.get(tid, {})
         detections = self.detect_entities(text)
-        placeholders = self.assign_placeholders(detections)
+        placeholders = self.assign_placeholders(detections, existing_placeholders=stored)
         placeholders = self.expand_placeholders(text, placeholders)
+        self._thread_store[tid] = placeholders
         text = self.replace_with_placeholders(text, placeholders)
         return text, placeholders
 
@@ -271,6 +283,11 @@ class Anonymizer:
     ) -> str:
         """Restore original entity text by replacing placeholders.
 
+        Each placeholder occurrence in the anonymized text is matched to its
+        corresponding NamedEntity (sorted by original ``start`` offset), so that
+        entities with different surface forms (e.g. after fuzzy matching) are each
+        restored to their own original text rather than all defaulting to the first.
+
         Args:
             text: Anonymized text containing placeholder tokens.
             placeholders: Mapping returned by ``anonymize``.
@@ -278,11 +295,80 @@ class Anonymizer:
         Returns:
             Text with each placeholder token replaced by the original entity text.
         """
+        replacements: List[tuple[int, int, str]] = []
+
         for placeholder, entities in placeholders.items():
             if not entities:
                 continue
-            text = text.replace(placeholder, entities[0].text)
+
+            sorted_entities = sorted(
+                (e for e in entities if e.start is not None),
+                key=lambda e: e.start,  # type: ignore[arg-type]
+            )
+            occurrences = list(re.finditer(re.escape(placeholder), text))
+
+            for match, entity in zip(occurrences, sorted_entities):
+                replacements.append((match.start(), match.end(), entity.text))
+
+        # Note: sort in reverse order to preserve character indices during replacement
+        replacements.sort(key=lambda x: x[0], reverse=True)
+
+        for start, end, original_text in replacements:
+            text = text[:start] + original_text + text[end:]
+
         return text
+
+    def anonymize_messages(
+        self,
+        messages: list[AnyMessage],
+        thread_id: Optional[str] = None,
+    ) -> tuple[list[AnyMessage], Dict[Placeholder, List[NamedEntity]]]:
+        """Anonymize a list of messages, preserving thread context.
+
+        Args:
+            messages: List of LangChain messages to anonymize.
+            thread_id: Thread identifier used to persist placeholder mappings.
+
+        Returns:
+            A tuple of (anonymized_messages, combined_placeholders).
+        """
+        new_messages = []
+        combined_placeholders: Dict[Placeholder, List[NamedEntity]] = {}
+        for message in messages:
+            assert isinstance(message.content, str), (
+                "This simple anonymizer only works for string content."
+            )
+            message.content, placeholders = self.anonymize(message.content, thread_id=thread_id)
+            combined_placeholders.update(placeholders)
+            new_messages.append(message)
+        return new_messages, combined_placeholders
+
+    def deanonymize_messages(
+        self,
+        messages: list[AnyMessage],
+        thread_id: Optional[str] = None,
+        placeholders: Optional[Dict[Placeholder, List[NamedEntity]]] = None,
+    ) -> list[AnyMessage]:
+        """Deanonymize a list of messages using thread store or explicit placeholders.
+
+        Args:
+            messages: List of LangChain messages to deanonymize.
+            thread_id: Thread identifier to look up stored placeholder mappings.
+            placeholders: Explicit placeholder mapping (overrides thread_id lookup).
+
+        Returns:
+            Messages with placeholders replaced by original entity text.
+        """
+        if placeholders is None and thread_id is not None:
+            tid = resolve_thread_id(thread_id)
+            placeholders = self._thread_store.get(tid, {})
+        effective_placeholders = placeholders or {}
+        for message in messages:
+            assert isinstance(message.content, str), (
+                "This simple anonymizer only works for string content."
+            )
+            message.content = self.deanonymize(message.content, effective_placeholders)
+        return messages
 
 
 def main():

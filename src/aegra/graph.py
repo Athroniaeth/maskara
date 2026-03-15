@@ -3,6 +3,7 @@
 from typing import Callable, Awaitable
 
 from dotenv import load_dotenv
+from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
     AgentMiddleware,
@@ -17,6 +18,8 @@ from langgraph.typing import ContextT
 from loguru import logger
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
+
+from aegra.anonymizer import Anonymizer
 
 load_dotenv()
 
@@ -50,7 +53,7 @@ def get_weather(country_or_city: str) -> str:
     return f"The weather in {country_or_city} is 22°C and sunny."
 
 
-class Anonymizer:
+class MockAnonymizer:
     def deanonymize_messages(self, messages: list[AnyMessage]) -> list[AnyMessage]:
         for message in messages:
             assert isinstance(message.content, str), (
@@ -75,9 +78,9 @@ class Anonymizer:
 
 
 class CustomMiddleware(AgentMiddleware):
-    def __init__(self):
+    def __init__(self, extractor: GLiNER2):
         super().__init__()
-        self.anonymizer = Anonymizer()
+        self.anonymizer = Anonymizer(extractor)
 
     async def awrap_model_call(
         self,
@@ -92,7 +95,9 @@ class CustomMiddleware(AgentMiddleware):
         print(f"Thread ID: {thread_id}")
 
         print(f"Model request: {request.messages}")
-        request.messages = self.anonymizer.anonymize_messages(request.messages)
+        request.messages, _placeholders = self.anonymizer.anonymize_messages(
+            request.messages, thread_id=thread_id
+        )
         print(f"Model request after anonymization: {request.messages}\n")
 
         response = await handler(request)
@@ -105,8 +110,8 @@ class CustomMiddleware(AgentMiddleware):
         print(f"Model request before deanonymization: {request.messages}\n")
         print(f"Model response before deanonymization: {ai_msg.content}")
 
-        ai_msg = self.anonymizer.deanonymize_messages([ai_msg])[0]
-        request.messages = self.anonymizer.deanonymize_messages(request.messages)
+        ai_msg = self.anonymizer.deanonymize_messages([ai_msg], thread_id=thread_id)[0]
+        request.messages = self.anonymizer.deanonymize_messages(request.messages, thread_id=thread_id)
 
         print(f"Model request after deanonymization: {request.messages}")
         print(f"Model response after deanonymization: {ai_msg.content}")
@@ -132,8 +137,8 @@ langfuse = get_client()
 
 # Initialize Langfuse CallbackHandler for Langchain (tracing)
 langfuse_handler = CallbackHandler()
-
-middleware = CustomMiddleware()
+extractor = GLiNER2.from_pretrained("fastino/gliner2-base-v1")
+middleware = CustomMiddleware(extractor=extractor)
 
 graph = create_agent(
     model="openai:gpt-5-nano",
