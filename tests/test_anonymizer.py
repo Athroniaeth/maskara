@@ -1,475 +1,209 @@
-"""Unit tests for maskara.anonymizer — GLiNER2 is fully mocked."""
+"""Tests for the anonymization pipeline.
 
-from unittest.mock import MagicMock
+Uses a fake detector to avoid loading a real GLiNER model in CI.
+"""
 
-from langchain_core.messages import AIMessage, HumanMessage
-
-from maskara.old_anonymizer import Anonymizer
-
-
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
+from typing import Sequence
 
 
-def _gliner_response(**by_type: list[dict]) -> dict:
-    """Build a fake GLiNER2 extract_entities return value.
+from maskara.anonymizer.anonymizer import Anonymizer
+from maskara.anonymizer.models import Entity
+from maskara.anonymizer.occurrence import RegexOccurrenceFinder
+from maskara.anonymizer.placeholder import CounterPlaceholderFactory
 
-    Usage::
 
-        _gliner_response(
-            person=[{"text": "Pierre", "confidence": 0.95, "start": 0, "end": 6}],
-            location=[{"text": "Lyon", "confidence": 0.88, "start": 18, "end": 22}],
-        )
+# ---------------------------------------------------------------------------
+# Fakes / stubs
+# ---------------------------------------------------------------------------
+
+
+class FakeDetector:
+    """Deterministic detector that returns pre-configured entities.
+
+    Args:
+        entities: The entities to return for every call to ``detect``.
     """
-    return {"entities": by_type}
+
+    def __init__(self, entities: list[Entity]) -> None:
+        self._entities = entities
+
+    def detect(self, text: str, labels: Sequence[str]) -> list[Entity]:
+        """Return pre-configured entities regardless of input."""
+        return self._entities
 
 
-def _make_anonymizer(side_effect: list | None = None, **kwargs) -> Anonymizer:
-    """Create an Anonymizer with a mocked GLiNER2 extractor."""
-    extractor = MagicMock()
-    if side_effect is not None:
-        extractor.extract_entities.side_effect = side_effect
-    return Anonymizer(extractor, **kwargs)
+# ---------------------------------------------------------------------------
+# OccurrenceFinder
+# ---------------------------------------------------------------------------
 
 
-EMPTY = _gliner_response()
+class TestRegexOccurrenceFinder:
+    """Unit tests for ``RegexOccurrenceFinder``."""
+
+    def test_finds_exact_word_boundary_match(self) -> None:
+        finder = RegexOccurrenceFinder()
+        result = finder.find_all("Bonjour Patrick, comment va Patrick ?", "Patrick")
+        assert result == [(8, 15), (28, 35)]
+
+    def test_ignores_partial_match_inside_word(self) -> None:
+        finder = RegexOccurrenceFinder()
+        result = finder.find_all("Salut Patrick, APatrick ne compte pas", "Patrick")
+        assert result == [(6, 13)]
+
+    def test_case_insensitive_by_default(self) -> None:
+        finder = RegexOccurrenceFinder()
+        result = finder.find_all("paris et PARIS", "Paris")
+        assert len(result) == 2
+
+    def test_no_match_returns_empty(self) -> None:
+        finder = RegexOccurrenceFinder()
+        assert finder.find_all("Rien à voir", "Patrick") == []
 
 
-# ------------------------------------------------------------------
-# _detect
-# ------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# CounterPlaceholderFactory
+# ---------------------------------------------------------------------------
 
 
-class TestDetect:
-    def test_basic_detection(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.95, "start": 0, "end": 6},
-                    ]
-                ),
+class TestCounterPlaceholderFactory:
+    """Unit tests for ``CounterPlaceholderFactory``."""
+
+    def test_increments_per_label(self) -> None:
+        factory = CounterPlaceholderFactory()
+        p1 = factory.get_or_create("Patrick", "PERSON")
+        p2 = factory.get_or_create("Marie", "PERSON")
+        assert p1.replacement == "<<PERSON_1>>"
+        assert p2.replacement == "<<PERSON_2>>"
+
+    def test_same_pair_returns_cached(self) -> None:
+        factory = CounterPlaceholderFactory()
+        p1 = factory.get_or_create("Paris", "LOCATION")
+        p2 = factory.get_or_create("Paris", "LOCATION")
+        assert p1 is p2
+
+    def test_different_labels_get_own_counter(self) -> None:
+        factory = CounterPlaceholderFactory()
+        p1 = factory.get_or_create("Patrick", "PERSON")
+        p2 = factory.get_or_create("Paris", "LOCATION")
+        assert p1.replacement == "<<PERSON_1>>"
+        assert p2.replacement == "<<LOCATION_1>>"
+
+    def test_reset_clears_state(self) -> None:
+        factory = CounterPlaceholderFactory()
+        factory.get_or_create("Patrick", "PERSON")
+        factory.reset()
+        p = factory.get_or_create("Marie", "PERSON")
+        assert p.replacement == "<<PERSON_1>>"
+
+
+# ---------------------------------------------------------------------------
+# Anonymizer (integration with fakes)
+# ---------------------------------------------------------------------------
+
+
+class TestAnonymizer:
+    """Integration tests for the full anonymization pipeline."""
+
+    def test_single_entity_single_occurrence(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=10, end=17, score=0.95),
             ]
         )
-        hits = anon._detect("Pierre habite ici")
-        assert hits == [("Pierre", "person")]
+        anonymizer = Anonymizer(detector=detector)
 
-    def test_filters_below_min_confidence(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.3, "start": 0, "end": 6},
-                        {"text": "Marie", "confidence": 0.9, "start": 10, "end": 15},
-                    ]
-                ),
-            ],
-            min_confidence=0.5,
+        result = anonymizer.anonymize(
+            "Bonjour, Patrick !",
+            labels=["PERSON"],
         )
-        hits = anon._detect("Pierre et Marie")
-        assert hits == [("Marie", "person")]
 
-    def test_strips_whitespace(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    location=[
-                        {"text": " Lyon ", "confidence": 0.9, "start": 5, "end": 11},
-                    ]
-                ),
+        assert "Patrick" not in result.anonymized_text
+        assert "<<PERSON_1>>" in result.anonymized_text
+        assert len(result.placeholders) == 1
+
+    def test_expands_to_all_occurrences(self) -> None:
+        # NER only finds the first "Patrick" but the pipeline should
+        # replace *both*.
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=0, end=7, score=0.9),
             ]
         )
-        hits = anon._detect("a Lyon b")
-        assert hits == [("Lyon", "location")]
+        anonymizer = Anonymizer(detector=detector)
+        text = "Patrick est gentil. Patrick habite ici."
 
-    def test_ignores_empty_after_strip(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "  ", "confidence": 0.9, "start": 0, "end": 2},
-                    ]
-                ),
+        result = anonymizer.anonymize(text, labels=["PERSON"])
+
+        assert result.anonymized_text.count("<<PERSON_1>>") == 2
+        assert "Patrick" not in result.anonymized_text
+
+    def test_multiple_entity_types(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=0, end=7, score=0.9),
+                Entity(text="Paris", label="LOCATION", start=18, end=23, score=0.85),
             ]
         )
-        hits = anon._detect("  ")
-        assert hits == []
+        anonymizer = Anonymizer(detector=detector)
+        text = "Patrick habite à Paris."
 
-    def test_multiple_types(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6}
-                    ],
-                    location=[
-                        {"text": "Lyon", "confidence": 0.8, "start": 18, "end": 22}
-                    ],
-                ),
+        result = anonymizer.anonymize(text, labels=["PERSON", "LOCATION"])
+
+        assert "<<PERSON_1>>" in result.anonymized_text
+        assert "<<LOCATION_1>>" in result.anonymized_text
+        assert "Patrick" not in result.anonymized_text
+        assert "Paris" not in result.anonymized_text
+
+    def test_deanonymize_restores_original(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=0, end=7, score=0.9),
+                Entity(text="Paris", label="LOCATION", start=18, end=23, score=0.85),
             ]
         )
-        hits = anon._detect("Pierre habite a Lyon")
-        assert ("Pierre", "person") in hits
-        assert ("Lyon", "location") in hits
+        anonymizer = Anonymizer(detector=detector)
+        text = "Patrick habite à Paris."
 
+        result = anonymizer.anonymize(text, labels=["PERSON", "LOCATION"])
+        restored = anonymizer.deanonymize(result)
 
-# ------------------------------------------------------------------
-# _assign
-# ------------------------------------------------------------------
+        assert restored == text
 
-
-class TestAssign:
-    def test_first_entity_gets_index_1(self):
-        anon = _make_anonymizer()
-        vocab: dict[str, str] = {}
-        anon._assign([("Pierre", "person")], vocab)
-        assert vocab == {"Pierre": "<PERSON_1>"}
-
-    def test_same_text_reuses_placeholder(self):
-        anon = _make_anonymizer()
-        vocab: dict[str, str] = {}
-        anon._assign([("Pierre", "person"), ("Pierre", "person")], vocab)
-        assert vocab == {"Pierre": "<PERSON_1>"}
-
-    def test_different_text_same_type_increments(self):
-        anon = _make_anonymizer()
-        vocab: dict[str, str] = {}
-        anon._assign([("Pierre", "person"), ("Marie", "person")], vocab)
-        assert vocab == {"Pierre": "<PERSON_1>", "Marie": "<PERSON_2>"}
-
-    def test_reuses_existing_vocab(self):
-        anon = _make_anonymizer()
-        vocab = {"Pierre": "<PERSON_1>"}
-        anon._assign([("Pierre", "person"), ("Marie", "person")], vocab)
-        assert vocab["Pierre"] == "<PERSON_1>"
-        assert vocab["Marie"] == "<PERSON_2>"
-
-    def test_multiple_types(self):
-        anon = _make_anonymizer()
-        vocab: dict[str, str] = {}
-        anon._assign([("Pierre", "person"), ("Lyon", "location")], vocab)
-        assert vocab == {"Pierre": "<PERSON_1>", "Lyon": "<LOCATION_1>"}
-
-    def test_fills_gap_in_indices(self):
-        """If index 1 is taken by another text, the new text gets index 2."""
-        anon = _make_anonymizer()
-        vocab = {"Pierre": "<PERSON_1>"}
-        anon._assign([("Marie", "person")], vocab)
-        assert vocab["Marie"] == "<PERSON_2>"
-
-
-# ------------------------------------------------------------------
-# _replace
-# ------------------------------------------------------------------
-
-
-class TestReplace:
-    def test_simple_replacement(self):
-        result = Anonymizer._replace("Pierre a Lyon", {"Pierre": "<P>", "Lyon": "<L>"})
-        assert result == "<P> a <L>"
-
-    def test_longest_first(self):
-        """'Apple Inc.' must be replaced before 'Apple'."""
-        result = Anonymizer._replace(
-            "Apple Inc. and Apple",
-            {"Apple Inc.": "<COMPANY_1>", "Apple": "<COMPANY_2>"},
-        )
-        assert result == "<COMPANY_1> and <COMPANY_2>"
-
-    def test_replaces_all_occurrences(self):
-        result = Anonymizer._replace(
-            "Lyon et Lyon encore Lyon",
-            {"Lyon": "<LOCATION_1>"},
-        )
-        assert result == "<LOCATION_1> et <LOCATION_1> encore <LOCATION_1>"
-
-    def test_empty_mapping(self):
-        assert Anonymizer._replace("hello", {}) == "hello"
-
-
-# ------------------------------------------------------------------
-# anonymize — full pipeline
-# ------------------------------------------------------------------
-
-
-class TestAnonymize:
-    def test_simple(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
+    def test_deanonymize_with_expanded_occurrences(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=0, end=7, score=0.9),
             ]
         )
-        text, vocab = anon.anonymize("Pierre est la", thread_id="t1")
-        assert text == "<PERSON_1> est la"
-        assert vocab == {"Pierre": "<PERSON_1>"}
+        anonymizer = Anonymizer(detector=detector)
+        text = "Patrick aime Patrick."
 
-    def test_duplicate_term_in_same_message(self):
-        """GLiNER detects only the first 'Lyon', but str.replace covers both."""
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    location=[
-                        {"text": "Lyon", "confidence": 0.9, "start": 0, "end": 4},
-                    ]
-                ),
+        result = anonymizer.anonymize(text, labels=["PERSON"])
+        restored = anonymizer.deanonymize(result)
+
+        assert restored == text
+
+    def test_no_entities_returns_original(self) -> None:
+        detector = FakeDetector([])
+        anonymizer = Anonymizer(detector=detector)
+        text = "Rien de spécial ici."
+
+        result = anonymizer.anonymize(text, labels=["PERSON"])
+
+        assert result.anonymized_text == text
+        assert result.placeholders == ()
+
+    def test_partial_word_not_replaced(self) -> None:
+        # "APatrick" should NOT be touched.
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=6, end=13, score=0.9),
             ]
         )
-        text, vocab = anon.anonymize("Lyon est a Lyon", thread_id="t1")
-        assert text == "<LOCATION_1> est a <LOCATION_1>"
+        anonymizer = Anonymizer(detector=detector)
+        text = "Salut Patrick, APatrick ne compte pas."
 
-    def test_thread_memory_reuses_placeholder(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-            ]
-        )
-        anon.anonymize("Pierre", thread_id="t1")
-        text2, vocab2 = anon.anonymize("Pierre revient", thread_id="t1")
-        assert text2 == "<PERSON_1> revient"
-        assert vocab2["Pierre"] == "<PERSON_1>"
+        result = anonymizer.anonymize(text, labels=["PERSON"])
 
-    def test_thread_memory_new_entity_next_turn(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-                _gliner_response(
-                    person=[
-                        {"text": "Marie", "confidence": 0.9, "start": 0, "end": 5},
-                    ]
-                ),
-            ]
-        )
-        anon.anonymize("Pierre", thread_id="t1")
-        text2, vocab2 = anon.anonymize("Marie arrive", thread_id="t1")
-        assert "<PERSON_2>" in text2
-        assert vocab2["Pierre"] == "<PERSON_1>"
-        assert vocab2["Marie"] == "<PERSON_2>"
-
-    def test_thread_memory_old_entity_replaced_in_new_turn(self):
-        """Even if GLiNER doesn't detect 'Pierre' in turn 2, the vocab still replaces it."""
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-                EMPTY,  # GLiNER detects nothing in turn 2
-            ]
-        )
-        anon.anonymize("Pierre", thread_id="t1")
-        text2, _ = anon.anonymize("Pierre est parti", thread_id="t1")
-        assert text2 == "<PERSON_1> est parti"
-
-    def test_no_thread_id_generates_uuid(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-            ]
-        )
-        text, vocab = anon.anonymize("Pierre")
-        assert text == "<PERSON_1>"
-        assert len(anon._thread_store) == 1
-
-    def test_different_threads_are_isolated(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-                _gliner_response(
-                    person=[
-                        {"text": "Marie", "confidence": 0.9, "start": 0, "end": 5},
-                    ]
-                ),
-            ]
-        )
-        anon.anonymize("Pierre", thread_id="t1")
-        _, vocab_t2 = anon.anonymize("Marie", thread_id="t2")
-        # Marie gets index 1 in t2 (no collision with Pierre from t1)
-        assert vocab_t2 == {"Marie": "<PERSON_1>"}
-
-    def test_no_entities_detected(self):
-        anon = _make_anonymizer(side_effect=[EMPTY])
-        text, vocab = anon.anonymize("Bonjour le monde", thread_id="t1")
-        assert text == "Bonjour le monde"
-        assert vocab == {}
-
-    def test_nested_entity_longest_first(self):
-        """'Apple Inc.' should not be broken by 'Apple'."""
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    company=[
-                        {
-                            "text": "Apple Inc.",
-                            "confidence": 0.95,
-                            "start": 0,
-                            "end": 10,
-                        },
-                        {"text": "Apple", "confidence": 0.8, "start": 25, "end": 30},
-                    ]
-                ),
-            ]
-        )
-        text, vocab = anon.anonymize(
-            "Apple Inc. est grande. Apple aussi.", thread_id="t1"
-        )
-        assert vocab["Apple Inc."] == "<COMPANY_1>"
-        assert vocab["Apple"] == "<COMPANY_2>"
-        assert text == "<COMPANY_1> est grande. <COMPANY_2> aussi."
-
-
-# ------------------------------------------------------------------
-# deanonymize
-# ------------------------------------------------------------------
-
-
-class TestDeanonymize:
-    def test_simple(self):
-        anon = _make_anonymizer()
-        vocab = {"Pierre": "<PERSON_1>", "Lyon": "<LOCATION_1>"}
-        result = anon.deanonymize("<PERSON_1> habite a <LOCATION_1>", vocab)
-        assert result == "Pierre habite a Lyon"
-
-    def test_multiple_occurrences(self):
-        anon = _make_anonymizer()
-        vocab = {"Lyon": "<LOCATION_1>"}
-        result = anon.deanonymize("<LOCATION_1> et <LOCATION_1>", vocab)
-        assert result == "Lyon et Lyon"
-
-    def test_llm_echoes_placeholder(self):
-        """The LLM response contains placeholders — deanonymize restores them."""
-        anon = _make_anonymizer()
-        vocab = {"Pierre": "<PERSON_1>", "Lyon": "<LOCATION_1>"}
-        llm_response = (
-            "<PERSON_1> est bien installe a <LOCATION_1>. <PERSON_1> aime <LOCATION_1>."
-        )
-        result = anon.deanonymize(llm_response, vocab)
-        assert result == "Pierre est bien installe a Lyon. Pierre aime Lyon."
-
-    def test_roundtrip(self):
-        """anonymize → deanonymize should restore original text."""
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6}
-                    ],
-                    location=[
-                        {"text": "Lyon", "confidence": 0.9, "start": 18, "end": 22}
-                    ],
-                ),
-            ]
-        )
-        original = "Pierre habite a Lyon"
-        anon_text, vocab = anon.anonymize(original, thread_id="t1")
-        assert anon.deanonymize(anon_text, vocab) == original
-
-    def test_empty_vocab(self):
-        anon = _make_anonymizer()
-        assert anon.deanonymize("hello", {}) == "hello"
-
-
-# ------------------------------------------------------------------
-# anonymize_messages / deanonymize_messages
-# ------------------------------------------------------------------
-
-
-class TestMessages:
-    def test_anonymize_messages(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-                _gliner_response(
-                    location=[
-                        {"text": "Lyon", "confidence": 0.9, "start": 10, "end": 14},
-                    ]
-                ),
-            ]
-        )
-        msgs = [
-            HumanMessage(content="Pierre est la"),
-            HumanMessage(content="Il est a Lyon"),
-        ]
-        anon_msgs, vocab = anon.anonymize_messages(msgs, thread_id="t1")
-        assert anon_msgs[0].content == "<PERSON_1> est la"
-        assert anon_msgs[1].content == "Il est a <LOCATION_1>"
-        assert "Pierre" in vocab
-        assert "Lyon" in vocab
-
-    def test_deanonymize_messages_via_thread_id(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6},
-                    ]
-                ),
-            ]
-        )
-        anon.anonymize("Pierre", thread_id="t1")
-
-        msgs = [AIMessage(content="<PERSON_1> est la")]
-        restored = anon.deanonymize_messages(msgs, thread_id="t1")
-        assert restored[0].content == "Pierre est la"
-
-    def test_deanonymize_messages_via_explicit_placeholders(self):
-        anon = _make_anonymizer()
-        vocab = {"Pierre": "<PERSON_1>"}
-        msgs = [AIMessage(content="<PERSON_1> est la")]
-        restored = anon.deanonymize_messages(msgs, placeholders=vocab)
-        assert restored[0].content == "Pierre est la"
-
-    def test_deanonymize_messages_no_vocab_no_change(self):
-        anon = _make_anonymizer()
-        msgs = [AIMessage(content="<PERSON_1> est la")]
-        restored = anon.deanonymize_messages(msgs)
-        assert restored[0].content == "<PERSON_1> est la"
-
-    def test_messages_roundtrip(self):
-        anon = _make_anonymizer(
-            side_effect=[
-                _gliner_response(
-                    person=[
-                        {"text": "Pierre", "confidence": 0.9, "start": 0, "end": 6}
-                    ],
-                    location=[
-                        {"text": "Lyon", "confidence": 0.9, "start": 18, "end": 22}
-                    ],
-                ),
-            ]
-        )
-        original_content = "Pierre habite a Lyon"
-        msgs = [HumanMessage(content=original_content)]
-        anon_msgs, vocab = anon.anonymize_messages(msgs, thread_id="t1")
-        restored = anon.deanonymize_messages(anon_msgs, placeholders=vocab)
-        assert restored[0].content == original_content
+        assert "APatrick" in result.anonymized_text
+        assert result.anonymized_text.count("<<PERSON_1>>") == 1

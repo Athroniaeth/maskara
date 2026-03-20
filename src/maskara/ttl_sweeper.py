@@ -80,8 +80,13 @@ async def sweep_expired_threads(base_url: str, default_ttl_minutes: int) -> None
                 continue
 
             try:
-                created_at = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
-            except ValueError:
+                if isinstance(raw_date, datetime):
+                    created_at = raw_date
+                else:
+                    created_at = datetime.fromisoformat(
+                        str(raw_date).replace("Z", "+00:00")
+                    )
+            except (ValueError, TypeError):
                 continue
 
             if created_at < cutoff:

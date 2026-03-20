@@ -19,11 +19,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Awaitable, Callable
 
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
-from langgraph.types import Command, StateT
+from langgraph.types import Command
 from langgraph.typing import ContextT
 
 from maskara.pipeline import AnonymizationPipeline
@@ -62,7 +62,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
     async def abefore_model(
         self,
-        state: StateT,
+        state: AgentState,
         runtime: Runtime[ContextT],
     ) -> dict[str, Any] | None:
         """Anonymise every message before the LLM sees the conversation.
@@ -111,7 +111,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
     async def aafter_model(
         self,
-        state: StateT,
+        state: AgentState,
         runtime: Runtime[ContextT],
     ) -> dict[str, Any] | None:
         """Deanonymise every message so the user sees real values.

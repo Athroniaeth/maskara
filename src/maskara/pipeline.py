@@ -194,6 +194,16 @@ class AnonymizationPipeline:
                 text = text.replace(placeholder.replacement, placeholder.original)
         return text
 
+    def reanonymize_text(self, text: str) -> str:
+        """Replace every known original value in *text* with its placeholder tag.
+
+        This is the inverse of ``deanonymize_text``.
+        """
+        for result in self._results:
+            for placeholder in result.placeholders:
+                text = text.replace(placeholder.original, placeholder.replacement)
+        return text
+
     @property
     def results(self) -> tuple[AnonymizationResult, ...]:
         """All results registered during this session (read-only)."""
