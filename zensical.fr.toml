@@ -1,19 +1,20 @@
 [project]
 site_name = "Maskara"
-site_description = "PII anonymization layer for LLM agents, powered by GLiNER2"
+site_description = "Couche d'anonymisation PII pour agents LLM, basée sur GLiNER2"
 site_author = "Maskara"
-docs_dir = "docs/en"
+docs_dir = "docs/fr"
+site_dir = "site/fr"
 
 nav = [
-  { "Home" = "index.md" },
-  { "Getting started" = "getting-started.md" },
+  { "Accueil" = "index.md" },
+  { "Démarrage rapide" = "getting-started.md" },
   { "Architecture" = "architecture.md" },
-  { "Examples" = [
-    { "Basic usage" = "examples/basic.md" },
-    { "LangChain integration" = "examples/langchain.md" },
+  { "Exemples" = [
+    { "Usage basique" = "examples/basic.md" },
+    { "Intégration LangChain" = "examples/langchain.md" },
   ]},
-  { "Extending Maskara" = "extending.md" },
-  { "API Reference" = [
+  { "Étendre Maskara" = "extending.md" },
+  { "Référence API" = [
     { "Anonymizer" = "reference/anonymizer.md" },
     { "Pipeline" = "reference/pipeline.md" },
     { "Middleware" = "reference/middleware.md" },
@@ -21,7 +22,7 @@ nav = [
 ]
 
 [project.theme]
-language = "en"
+language = "fr"
 features = [
   "announce.dismiss",
   "content.code.annotate",
@@ -44,12 +45,12 @@ features = [
 [[project.theme.palette]]
 scheme = "default"
 toggle.icon = "lucide/sun"
-toggle.name = "Switch to dark mode"
+toggle.name = "Passer en mode sombre"
 
 [[project.theme.palette]]
 scheme = "slate"
 toggle.icon = "lucide/moon"
-toggle.name = "Switch to light mode"
+toggle.name = "Passer en mode clair"
 
 [[project.extra.alternate]]
 name = "English"
