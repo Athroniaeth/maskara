@@ -1,0 +1,19 @@
+{
+  "name": "maskara",
+  "dependencies": [
+    "./src"
+  ],
+  "graphs": {
+    "agent": "./src/maskara/graph.py:graph"
+  },
+  "http": {
+    "app": "./src/maskara/app.py:app"
+  },
+  "checkpointer": {
+    "ttl": {
+      "strategy": "delete",
+      "sweep_interval_minutes": 60,
+      "default_ttl": 20160
+    }
+  }
+}
