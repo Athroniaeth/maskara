@@ -53,10 +53,10 @@ toggle.name = "Switch to light mode"
 
 [[project.extra.alternate]]
 name = "English"
-link = "/"
+link = "/piighost/"
 lang = "en"
 
 [[project.extra.alternate]]
 name = "Français"
-link = "/fr/"
+link = "/piighost/fr/"
 lang = "fr"
