@@ -33,17 +33,16 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.10"
+dependencies = [
+    "gliner2>=1.2",
+    "faker>=40.8.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/Athroniaeth/maskara"
 Documentation = "https://github.com/Athroniaeth/maskara#readme"
 Issues = "https://github.com/Athroniaeth/maskara/issues"
 Changelog = "https://github.com/Athroniaeth/maskara/blob/master/CHANGELOG.md"
-
-dependencies = [
-    "gliner2>=1.2",
-    "faker>=40.8.0",
-]
 
 [project.optional-dependencies]
 langchain = [
