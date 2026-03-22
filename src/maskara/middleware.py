@@ -91,7 +91,8 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         for idx, message in enumerate(messages):
             content = message.content
             if not isinstance(content, str) or not content.strip():
-                raise ValueError("This code only takes Langchain messages into account")
+                # This happens when the LLM uses a tool
+                continue
 
             if isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 result = await self._pipeline.anonymize(content)
@@ -100,6 +101,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
                 raise ValueError("This code only takes Langchain messages into account")
 
             if new_content == content:
+                # This happens in the second message of a conversation
                 continue
 
             if isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
@@ -136,12 +138,13 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             content = message.content
 
             if not isinstance(content, str) or not content.strip():
-                raise ValueError("This code only takes Langchain messages into account")
+                # This happens when the LLM uses a tool
+                continue
 
             restored = self._pipeline.deanonymize_text(content)
 
             if restored == content:
-                raise ValueError("This code only takes Langchain messages into account")
+                continue
 
             if isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 messages[idx].content = restored
