@@ -1,8 +1,42 @@
 [project]
 name = "maskara"
 version = "0.1.0"
-description = "Maskara is a tool for anonymizing sensitive data in text using AI models."
+description = "PII anonymization middleware for AI agent conversations — GLiNER2 NER + LangChain integration."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Athroniaeth" },
+]
+keywords = [
+    "pii",
+    "anonymization",
+    "nlp",
+    "ner",
+    "langchain",
+    "langgraph",
+    "gliner",
+    "privacy",
+    "ai",
+    "agents",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security",
+    "Topic :: Text Processing :: Linguistic",
+    "Typing :: Typed",
+]
 requires-python = ">=3.12"
+
+[project.urls]
+Homepage = "https://github.com/Athroniaeth/maskara"
+Documentation = "https://github.com/Athroniaeth/maskara#readme"
+Issues = "https://github.com/Athroniaeth/maskara/issues"
+Changelog = "https://github.com/Athroniaeth/maskara/blob/master/CHANGELOG.md"
 
 dependencies = [
     "gliner2>=1.2",
