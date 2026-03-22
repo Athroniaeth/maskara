@@ -10,6 +10,14 @@ from keyshield.api import create_depends_api_key
 from keyshield.hasher.argon2 import Argon2ApiKeyHasher
 from keyshield.repositories.in_memory import InMemoryApiKeyRepository
 
+# Bootstrap sys.path so 'graph' is importable when loaded by aegra's spec loader
+# (spec_from_file_location does not set __package__ or modify sys.path)
+import sys as _sys
+from pathlib import Path as _Path
+_src = str(_Path(__file__).parent.parent.resolve())
+if _src not in _sys.path:
+    _sys.path.insert(0, _src)
+
 from graph.ttl_sweeper import load_ttl_config, run_sweeper
 
 # ---------------------------------------------------------------------------

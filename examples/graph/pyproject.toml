@@ -18,6 +18,7 @@ dependencies = [
     "loguru>=0.7.3",
     "maskara",
     "python-dotenv>=1.2.2",
+    "gliner2>=1.2.0",
 ]
 
 [tool.uv.sources]

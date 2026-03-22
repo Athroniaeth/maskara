@@ -4,10 +4,10 @@
     "./src"
   ],
   "graphs": {
-    "agent": "./src/maskara/graph.py:graph"
+    "agent": "./src/graph/graph.py:graph"
   },
   "http": {
-    "app": "./src/maskara/app.py:app"
+    "app": "./src/graph/app.py:app"
   },
   "checkpointer": {
     "ttl": {
