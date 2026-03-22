@@ -2,8 +2,8 @@
 
 from typing import Sequence
 
-from maskara.span_replacer.models import ReplacementResult, Span
-from maskara.span_replacer.validator import DefaultSpanValidator, SpanValidator
+from piighost.span_replacer.models import ReplacementResult, Span
+from piighost.span_replacer.validator import DefaultSpanValidator, SpanValidator
 
 
 class SpanReplacer:

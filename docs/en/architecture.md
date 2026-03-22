@@ -4,7 +4,7 @@ icon: lucide/layers
 
 # Architecture
 
-Maskara is organized in distinct layers: a **stateless anonymizer** at the core, wrapped in a **session-aware pipeline**, adapted to LangChain via a **middleware**.
+PIIGhost is organized in distinct layers: a **stateless anonymizer** at the core, wrapped in a **session-aware pipeline**, adapted to LangChain via a **middleware**.
 
 ---
 
@@ -31,11 +31,11 @@ Maskara is organized in distinct layers: a **stateless anonymizer** at the core,
 
 ## 4-stage pipeline
 
-The core of Maskara is the `Anonymizer` class, which orchestrates 4 stages — each implemented by a swappable protocol.
+The core of PIIGhost is the `Anonymizer` class, which orchestrates 4 stages — each implemented by a swappable protocol.
 
 ```mermaid
 ---
-title: "maskara — Anonymizer.anonymize() flow"
+title: "piighost — Anonymizer.anonymize() flow"
 ---
 flowchart LR
     classDef stage fill:#90CAF9,stroke:#1565C0,color:#000
@@ -116,7 +116,7 @@ The provided implementation, `GlinerDetector`, wraps the **GLiNER2** model (`fas
 
 ```mermaid
 ---
-title: "maskara — PIIAnonymizationMiddleware in the agent loop"
+title: "piighost — PIIAnonymizationMiddleware in the agent loop"
 ---
 sequenceDiagram
     participant U as User
@@ -207,4 +207,4 @@ Anonymizer(
 )
 ```
 
-To replace a component, simply provide an object that implements the corresponding protocol. See [Extending Maskara](extending.md).
+To replace a component, simply provide an object that implements the corresponding protocol. See [Extending PIIGhost](extending.md).

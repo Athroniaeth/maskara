@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Protocol, Sequence
 if TYPE_CHECKING:
     from gliner2 import GLiNER2
 
-from maskara.anonymizer.models import Entity
+from piighost.anonymizer.models import Entity
 
 
 class EntityDetector(Protocol):

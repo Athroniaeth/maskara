@@ -4,7 +4,7 @@ icon: lucide/database
 
 # Référence Pipeline
 
-Module : `maskara.pipeline`
+Module : `piighost.pipeline`
 
 ---
 
@@ -123,7 +123,7 @@ InMemoryPlaceholderStore()
 Aucune configuration nécessaire. Non persistant les données sont perdues à l'arrêt du processus.
 
 ```python
-from maskara.pipeline import InMemoryPlaceholderStore, AnonymizationPipeline
+from piighost.pipeline import InMemoryPlaceholderStore, AnonymizationPipeline
 
 pipeline = AnonymizationPipeline(
     anonymizer=anonymizer,
@@ -138,8 +138,8 @@ pipeline = AnonymizationPipeline(
 
 ```python
 import asyncio
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.pipeline import AnonymizationPipeline
 from gliner2 import GLiNER2
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -175,4 +175,4 @@ asyncio.run(main())
 
 ## Store personnalisé
 
-Voir [Étendre Maskara PlaceholderStore](../extending.md#créer-un-placeholderstore-personnalisé) pour des exemples Redis et PostgreSQL.
+Voir [Étendre PIIGhost PlaceholderStore](../extending.md#créer-un-placeholderstore-personnalisé) pour des exemples Redis et PostgreSQL.

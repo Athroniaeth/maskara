@@ -4,7 +4,7 @@ icon: lucide/link
 
 # LangChain v1 integration
 
-This page shows the complete integration of Maskara into a LangGraph agent, based on the example available in [`examples/graph/`](https://github.com/Athroniaeth/maskara/tree/main/examples/graph).
+This page shows the complete integration of PIIGhost into a LangGraph agent, based on the example available in [`examples/graph/`](https://github.com/Athroniaeth/piighost/tree/main/examples/graph).
 
 ---
 
@@ -15,17 +15,17 @@ To use the LangChain middleware, install the additional dependencies:
 === "uv"
 
     ```bash
-    uv add maskara langchain langgraph langchain-openai
+    uv add piighost langchain langgraph langchain-openai
     ```
 
 === "pip"
 
     ```bash
-    pip install maskara langchain langgraph langchain-openai
+    pip install piighost langchain langgraph langchain-openai
     ```
 
 !!! warning "Optional dependency"
-    `PIIAnonymizationMiddleware` imports `langchain` when instantiated. If `langchain` is not installed, an explicit `ImportError` is raised: `"You must install maskara[langchain] for use middleware"`.
+    `PIIAnonymizationMiddleware` imports `langchain` when instantiated. If `langchain` is not installed, an explicit `ImportError` is raised: `"You must install piighost[langchain] for use middleware"`.
 
 ---
 
@@ -50,9 +50,9 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 load_dotenv()
 
@@ -263,7 +263,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 AEGRA_CONFIG=aegra.json
 
 # Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/maskara
+DATABASE_URL=postgresql://user:pass@localhost:5432/piighost
 
 # Observability (optional)
 LANGFUSE_PUBLIC_KEY=...

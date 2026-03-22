@@ -4,7 +4,7 @@ import hashlib
 from collections import defaultdict
 from typing import Protocol
 
-from maskara.anonymizer.models import Placeholder
+from piighost.anonymizer.models import Placeholder
 
 
 class PlaceholderFactory(Protocol):

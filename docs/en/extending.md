@@ -2,9 +2,9 @@
 icon: lucide/puzzle
 ---
 
-# Extending Maskara
+# Extending PIIGhost
 
-Maskara is built around **protocols** (Python structural subtyping). Every pipeline stage is an injection point where you can plug in your own implementation without touching the rest of the code.
+PIIGhost is built around **protocols** (Python structural subtyping). Every pipeline stage is an injection point where you can plug in your own implementation without touching the rest of the code.
 
 ```mermaid
 flowchart LR
@@ -36,7 +36,7 @@ class EntityDetector(Protocol):
 ```python
 from typing import Sequence
 import spacy
-from maskara.anonymizer.models import Entity
+from piighost.anonymizer.models import Entity
 
 class SpacyDetector:
     """NER detector backed by spaCy."""
@@ -63,7 +63,7 @@ class SpacyDetector:
 
 ```python
 from typing import Sequence
-from maskara.anonymizer.models import Entity
+from piighost.anonymizer.models import Entity
 
 class AllowlistDetector:
     """Detects entities from a fixed list (useful for tests or structured data)."""
@@ -92,7 +92,7 @@ class AllowlistDetector:
 ### Usage
 
 ```python
-from maskara.anonymizer import Anonymizer
+from piighost.anonymizer import Anonymizer
 
 anonymizer = Anonymizer(detector=SpacyDetector("en_core_web_sm"))
 # or
@@ -185,7 +185,7 @@ class PlaceholderFactory(Protocol):
 
 ```python
 import uuid
-from maskara.anonymizer.models import Placeholder
+from piighost.anonymizer.models import Placeholder
 
 class UUIDPlaceholderFactory:
     """Generates opaque UUID tags, e.g. <<a3f2-1b4c>>."""
@@ -211,7 +211,7 @@ class UUIDPlaceholderFactory:
 ### Example — custom format
 
 ```python
-from maskara.anonymizer.models import Placeholder
+from piighost.anonymizer.models import Placeholder
 
 class BracketPlaceholderFactory:
     """Generates tags in the format [PERSON:1], [LOCATION:2], etc."""
@@ -265,12 +265,12 @@ The key is always a **SHA-256 hash** of the source text.
 
 ```python
 import pickle
-from maskara.anonymizer.models import AnonymizationResult
+from piighost.anonymizer.models import AnonymizationResult
 
 class RedisPlaceholderStore:
     """Redis store for cross-process and cross-session persistence."""
 
-    def __init__(self, client, prefix: str = "maskara", ttl: int = 86400):
+    def __init__(self, client, prefix: str = "piighost", ttl: int = 86400):
         self._client = client  # async Redis client (e.g. redis.asyncio)
         self._prefix = prefix
         self._ttl = ttl
@@ -288,7 +288,7 @@ class RedisPlaceholderStore:
 
 ```python
 import pickle
-from maskara.anonymizer.models import AnonymizationResult
+from piighost.anonymizer.models import AnonymizationResult
 
 class PostgresPlaceholderStore:
     """PostgreSQL store for multi-instance deployments."""
@@ -299,7 +299,7 @@ class PostgresPlaceholderStore:
     async def get(self, key: str) -> AnonymizationResult | None:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT data FROM maskara_cache WHERE key = $1", key
+                "SELECT data FROM piighost_cache WHERE key = $1", key
             )
             return pickle.loads(row["data"]) if row else None
 
@@ -307,7 +307,7 @@ class PostgresPlaceholderStore:
         async with self._pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO maskara_cache (key, data) VALUES ($1, $2)
+                INSERT INTO piighost_cache (key, data) VALUES ($1, $2)
                 ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data
                 """,
                 key,
@@ -318,7 +318,7 @@ class PostgresPlaceholderStore:
 ### Usage
 
 ```python
-from maskara.pipeline import AnonymizationPipeline
+from piighost.pipeline import AnonymizationPipeline
 
 pipeline = AnonymizationPipeline(
     anonymizer=anonymizer,
@@ -334,9 +334,9 @@ pipeline = AnonymizationPipeline(
 All components are independent and can be freely combined:
 
 ```python
-from maskara.anonymizer import Anonymizer
-from maskara.pipeline import AnonymizationPipeline
-from maskara.middleware import PIIAnonymizationMiddleware
+from piighost.anonymizer import Anonymizer
+from piighost.pipeline import AnonymizationPipeline
+from piighost.middleware import PIIAnonymizationMiddleware
 
 anonymizer = Anonymizer(
     detector=SpacyDetector("en_core_web_sm"),       # Your detector
@@ -361,8 +361,8 @@ Protocols make unit testing straightforward. Here is how to test a custom detect
 
 ```python
 import pytest
-from maskara.anonymizer import Anonymizer
-from maskara.anonymizer.models import Entity
+from piighost.anonymizer import Anonymizer
+from piighost.anonymizer.models import Entity
 
 class FakeDetector:
     def __init__(self, entities):

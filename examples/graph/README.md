@@ -1,6 +1,6 @@
-# Maskara — PII Anonymization Example
+# PIIGhost — PII Anonymization Example
 
-This example demonstrates Maskara's PII anonymization middleware integrated into a LangGraph agent. All sensitive entities (names, locations, etc.) are transparently detected and anonymized before reaching the LLM, then deanonymized in the response shown to the user.
+This example demonstrates PIIGhost's PII anonymization middleware integrated into a LangGraph agent. All sensitive entities (names, locations, etc.) are transparently detected and anonymized before reaching the LLM, then deanonymized in the response shown to the user.
 
 ## Prerequisites
 

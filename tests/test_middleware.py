@@ -8,12 +8,12 @@ import pytest
 
 def test_import_error_when_langchain_missing() -> None:
     """ImportError is raised if langchain is not installed."""
-    module = "maskara.middleware"
+    module = "piighost.middleware"
     saved = sys.modules.pop(module, None)
     try:
         with patch("importlib.util.find_spec", return_value=None):
-            with pytest.raises(ImportError, match="maskara\\[langchain\\]"):
-                import maskara.middleware  # noqa: F401
+            with pytest.raises(ImportError, match="piighost\\[langchain\\]"):
+                import piighost.middleware  # noqa: F401
     finally:
         if saved is not None:
             sys.modules[module] = saved

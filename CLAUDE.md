@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Maskara is a PII anonymization system for AI agent conversations. It transparently intercepts LLM interactions to detect, anonymize, and deanonymize sensitive entities (names, locations, etc.) using GLiNER2 NER, integrated via LangChain middleware into a LangGraph agent. Built on Aegra (self-hosted LangSmith alternative).
+PIIGhost is a PII anonymization system for AI agent conversations. It transparently intercepts LLM interactions to detect, anonymize, and deanonymize sensitive entities (names, locations, etc.) using GLiNER2 NER, integrated via LangChain middleware into a LangGraph agent. Built on Aegra (self-hosted LangSmith alternative).
 
 ## Development Commands
 

@@ -4,7 +4,7 @@ icon: lucide/shield-check
 
 # Référence Middleware
 
-Module : `maskara.middleware`
+Module : `piighost.middleware`
 
 ---
 
@@ -33,8 +33,8 @@ PIIAnonymizationMiddleware(pipeline: AnonymizationPipeline)
 ### Utilisation
 
 ```python
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 from langchain.agents import create_agent
 
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
@@ -141,13 +141,13 @@ sequenceDiagram
 `PIIAnonymizationMiddleware` requiert que `langchain` soit installé. Si ce n'est pas le cas, une `ImportError` est levée lors de l'import :
 
 ```
-ImportError: You must install maskara[langchain] for use middleware
+ImportError: You must install piighost[langchain] for use middleware
 ```
 
 Installation :
 
 ```bash
-uv add maskara langchain langgraph
+uv add piighost langchain langgraph
 ```
 
 ---
@@ -160,9 +160,9 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 @tool
 def get_info(person: str) -> str:

@@ -2,11 +2,11 @@
 icon: lucide/shield
 ---
 
-# Maskara
+# PIIGhost
 
 **Transparent PII anonymization for LLM agents.**
 
-`maskara` is a Python library that automatically detects, anonymizes, and deanonymizes sensitive entities (names, locations, etc.) in AI agent conversations. It integrates via a LangChain middleware without modifying your existing agent code.
+`piighost` is a Python library that automatically detects, anonymizes, and deanonymizes sensitive entities (names, locations, etc.) in AI agent conversations. It integrates via a LangChain middleware without modifying your existing agent code.
 
 ---
 
@@ -26,13 +26,13 @@ icon: lucide/shield
 === "uv"
 
     ```bash
-    uv add maskara
+    uv add piighost
     ```
 
 === "pip"
 
     ```bash
-    pip install maskara
+    pip install piighost
     ```
 
 ---
@@ -41,7 +41,7 @@ icon: lucide/shield
 
 ```python
 from gliner2 import GLiNER2
-from maskara.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer, GlinerDetector
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
@@ -72,5 +72,5 @@ print(original)
 | [Getting started](getting-started.md) | Installation and first steps |
 | [Architecture](architecture.md) | Pipeline and flow diagrams |
 | [Examples](examples/basic.md) | Basic usage and LangChain integration |
-| [Extending Maskara](extending.md) | Build your own modules |
+| [Extending PIIGhost](extending.md) | Build your own modules |
 | [API Reference](reference/anonymizer.md) | Full API documentation |

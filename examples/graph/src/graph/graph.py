@@ -8,9 +8,9 @@ from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from loguru import logger
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 load_dotenv()
 

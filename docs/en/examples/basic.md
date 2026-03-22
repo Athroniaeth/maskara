@@ -12,7 +12,7 @@ This page covers the fundamental usages of the library without any LangChain int
 
 ```python
 from gliner2 import GLiNER2
-from maskara.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer, GlinerDetector
 
 # Load the GLiNER2 model
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -78,7 +78,7 @@ For multi-message scenarios (conversations), `AnonymizationPipeline` maintains a
 
 ```python
 import asyncio
-from maskara.pipeline import AnonymizationPipeline
+from piighost.pipeline import AnonymizationPipeline
 
 pipeline = AnonymizationPipeline(
     anonymizer=anonymizer,
@@ -114,8 +114,8 @@ asyncio.run(conversation())
 By default, the pipeline uses an in-memory store. For cross-process persistence, implement `PlaceholderStore`:
 
 ```python
-from maskara.pipeline import PlaceholderStore, AnonymizationPipeline
-from maskara.anonymizer.models import AnonymizationResult
+from piighost.pipeline import PlaceholderStore, AnonymizationPipeline
+from piighost.anonymizer.models import AnonymizationResult
 import pickle
 
 class RedisPlaceholderStore:
@@ -123,11 +123,11 @@ class RedisPlaceholderStore:
         self._client = client
 
     async def get(self, key: str) -> AnonymizationResult | None:
-        data = await self._client.get(f"maskara:{key}")
+        data = await self._client.get(f"piighost:{key}")
         return pickle.loads(data) if data else None
 
     async def set(self, key: str, result: AnonymizationResult) -> None:
-        await self._client.set(f"maskara:{key}", pickle.dumps(result))
+        await self._client.set(f"piighost:{key}", pickle.dumps(result))
 
 # Inject the Redis store
 pipeline = AnonymizationPipeline(
@@ -168,8 +168,8 @@ In tests, use a `FakeDetector` to avoid downloading the model:
 
 ```python
 from typing import Sequence
-from maskara.anonymizer.models import Entity
-from maskara.anonymizer import Anonymizer
+from piighost.anonymizer.models import Entity
+from piighost.anonymizer import Anonymizer
 
 class FakeDetector:
     def __init__(self, entities: list[Entity]):
@@ -186,4 +186,4 @@ fake = FakeDetector([
 anonymizer = Anonymizer(detector=fake)
 ```
 
-See also [Extending Maskara](../extending.md) for creating other custom components.
+See also [Extending PIIGhost](../extending.md) for creating other custom components.

@@ -4,7 +4,7 @@ icon: lucide/layers
 
 # Architecture
 
-Maskara est organisé en couches distinctes : un **anonymiseur stateless** au cœur, encapsulé dans un **pipeline avec état de session**, adapté au monde LangChain via un **middleware**.
+PIIGhost est organisé en couches distinctes : un **anonymiseur stateless** au cœur, encapsulé dans un **pipeline avec état de session**, adapté au monde LangChain via un **middleware**.
 
 ---
 
@@ -31,11 +31,11 @@ Maskara est organisé en couches distinctes : un **anonymiseur stateless** au c�
 
 ## Pipeline 4 étapes
 
-Le cœur de Maskara est la classe `Anonymizer` qui orchestre 4 étapes, chacune implémentée par un protocole swappable.
+Le cœur de PIIGhost est la classe `Anonymizer` qui orchestre 4 étapes, chacune implémentée par un protocole swappable.
 
 ```mermaid
 ---
-title: "maskara Anonymizer.anonymize() flow"
+title: "piighost Anonymizer.anonymize() flow"
 ---
 flowchart LR
     classDef stage fill:#90CAF9,stroke:#1565C0,color:#000
@@ -116,7 +116,7 @@ Le `PIIAnonymizationMiddleware` intercepte le cycle de l'agent à 3 points clés
 
 ```mermaid
 ---
-title: "maskara PIIAnonymizationMiddleware dans la boucle agent"
+title: "piighost PIIAnonymizationMiddleware dans la boucle agent"
 ---
 sequenceDiagram
     participant U as Utilisateur
@@ -207,4 +207,4 @@ Anonymizer(
 )
 ```
 
-Pour remplacer un composant, il suffit de fournir un objet implémentant le protocole correspondant. Voir [Étendre Maskara](../extending.md).
+Pour remplacer un composant, il suffit de fournir un objet implémentant le protocole correspondant. Voir [Étendre PIIGhost](../extending.md).

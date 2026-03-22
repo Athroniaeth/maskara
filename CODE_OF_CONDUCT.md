@@ -2,11 +2,11 @@
 
 ## Our Commitment
 
-The Maskara team and community welcomes contributors worldwide who share our mission of making PII protection accessible and composable. We are committed to maintaining an inclusive, respectful environment for all participants.
+The PIIGhost team and community welcomes contributors worldwide who share our mission of making PII protection accessible and composable. We are committed to maintaining an inclusive, respectful environment for all participants.
 
 ## Scope
 
-This code of conduct applies to all spaces managed by the Maskara project, including:
+This code of conduct applies to all spaces managed by the PIIGhost project, including:
 - GitHub issues, pull requests, and discussions
 - Community events and meetups
 - Any other communication forums related to the project
@@ -44,7 +44,7 @@ We are a professional community. The following are not acceptable:
 
 ## Reporting Violations
 
-If you witness a violation of this code of conduct, please report it **privately** by opening a confidential report via [GitHub's private vulnerability reporting](https://github.com/Athroniaeth/maskara/security/advisories/new) or by contacting the maintainer directly.
+If you witness a violation of this code of conduct, please report it **privately** by opening a confidential report via [GitHub's private vulnerability reporting](https://github.com/Athroniaeth/piighost/security/advisories/new) or by contacting the maintainer directly.
 
 Include:
 - Description of the violation
@@ -58,7 +58,7 @@ Violations may result in:
 - Temporary suspension from community participation
 - Permanent removal from the project
 
-The Maskara maintainers will review all reports and take appropriate action.
+The PIIGhost maintainers will review all reports and take appropriate action.
 
 ---
 

@@ -4,7 +4,7 @@ icon: lucide/scan-text
 
 # Reference — Anonymizer
 
-Module: `maskara.anonymizer`
+Module: `piighost.anonymizer`
 
 ---
 
@@ -91,7 +91,7 @@ GlinerDetector(
 
 ```python
 from gliner2 import GLiNER2
-from maskara.anonymizer import GlinerDetector
+from piighost.anonymizer import GlinerDetector
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
@@ -113,7 +113,7 @@ class EntityDetector(Protocol):
         ...
 ```
 
-See [Extending Maskara](../extending.md#custom-entitydetector) for examples.
+See [Extending PIIGhost](../extending.md#custom-entitydetector) for examples.
 
 ---
 
@@ -189,7 +189,7 @@ HashPlaceholderFactory(
 | `template` | `"<{label}:{digest}>"` | Format string with `{label}` and `{digest}` |
 
 ```python
-from maskara.anonymizer import HashPlaceholderFactory
+from piighost.anonymizer import HashPlaceholderFactory
 
 factory = HashPlaceholderFactory()
 factory.get_or_create("Patrick", "PERSON").replacement  # '<PERSON:3b4c5d6e>'

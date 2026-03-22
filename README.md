@@ -1,11 +1,11 @@
-# Maskara
+# PIIGhost
 
-![Python Version from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FAthroniaeth%2Fmaskara%2Fmain%2Fpyproject.toml)
+![Python Version from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FAthroniaeth%2Fpiighost%2Fmain%2Fpyproject.toml)
 [![Tested with pytest](https://img.shields.io/badge/tests-pytest-informational.svg)](https://pytest.org/)
 [![Deps: uv](https://img.shields.io/badge/deps-managed%20with%20uv-3E4DD8.svg)](https://docs.astral.sh/uv/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-4B32C3.svg)](https://docs.astral.sh/ruff/)
 
-`maskara` is a PII anonymization library for AI agent conversations. It transparently detects, anonymizes, and deanonymizes sensitive entities (names, locations, etc.) using [GLiNER2](https://github.com/knowledgator/gliner2) NER, with built-in LangChain middleware for seamless integration into LangGraph agents.
+`piighost` is a PII anonymization library for AI agent conversations. It transparently detects, anonymizes, and deanonymizes sensitive entities (names, locations, etc.) using [GLiNER2](https://github.com/knowledgator/gliner2) NER, with built-in LangChain middleware for seamless integration into LangGraph agents.
 
 ## Features
 
@@ -23,8 +23,8 @@
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
-uv add maskara
-uv pip install maskara
+uv add piighost
+uv pip install piighost
 ```
 
 ### Development installation
@@ -32,8 +32,8 @@ uv pip install maskara
 Clone the repository and install with dev dependencies:
 
 ```bash
-git clone https://github.com/Athroniaeth/maskara.git
-cd maskara
+git clone https://github.com/Athroniaeth/piighost.git
+cd piighost
 uv sync
 ```
 
@@ -53,7 +53,7 @@ This runs Ruff (format + lint) and PyReFly (type-check) through `uv run`.
 
 ```python
 from gliner2 import GLiNER2
-from maskara.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer, GlinerDetector
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
@@ -75,7 +75,7 @@ print(original)
 ### With session caching
 
 ```python
-from maskara.pipeline import AnonymizationPipeline
+from piighost.pipeline import AnonymizationPipeline
 
 pipeline = AnonymizationPipeline(
     anonymizer=anonymizer,
@@ -98,9 +98,9 @@ pipeline.reanonymize_text("Résultat pour Patrick à Paris")
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
@@ -131,7 +131,7 @@ The middleware intercepts every agent turn — the LLM only sees anonymized text
 
 ```mermaid
 ---
-title: "maskara — Anonymizer.anonymize() flow"
+title: "piighost — Anonymizer.anonymize() flow"
 ---
 flowchart LR
     classDef stage fill:#90CAF9,stroke:#1565C0,color:#000
@@ -185,7 +185,7 @@ Each stage uses a **protocol** (structural subtyping) — swap `GlinerDetector` 
 
 ```mermaid
 ---
-title: "maskara — PIIAnonymizationMiddleware in an agent loop"
+title: "piighost — PIIAnonymizationMiddleware in an agent loop"
 ---
 sequenceDiagram
     participant U as User

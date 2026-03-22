@@ -4,7 +4,7 @@ icon: lucide/link
 
 # Intégration LangChain v1
 
-Cette page présente l'intégration complète de Maskara dans un agent LangGraph, basée sur l'exemple disponible dans [`examples/graph/`](https://github.com/Athroniaeth/maskara/tree/main/examples/graph).
+Cette page présente l'intégration complète de PIIGhost dans un agent LangGraph, basée sur l'exemple disponible dans [`examples/graph/`](https://github.com/Athroniaeth/piighost/tree/main/examples/graph).
 
 ---
 
@@ -15,17 +15,17 @@ Pour utiliser le middleware LangChain, installez les dépendances supplémentair
 === "uv"
 
     ```bash
-    uv add maskara langchain langgraph langchain-openai
+    uv add piighost langchain langgraph langchain-openai
     ```
 
 === "pip"
 
     ```bash
-    pip install maskara langchain langgraph langchain-openai
+    pip install piighost langchain langgraph langchain-openai
     ```
 
 !!! warning "Dépendance optionnelle"
-    `PIIAnonymizationMiddleware` importe `langchain` au moment de son instanciation. Si `langchain` n'est pas installé, une `ImportError` explicite est levée avec le message `"You must install maskara[langchain] for use middleware"`.
+    `PIIAnonymizationMiddleware` importe `langchain` au moment de son instanciation. Si `langchain` n'est pas installé, une `ImportError` explicite est levée avec le message `"You must install piighost[langchain] for use middleware"`.
 
 ---
 
@@ -50,9 +50,9 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 load_dotenv()
 
@@ -264,7 +264,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 AEGRA_CONFIG=aegra.json
 
 # Base de données
-DATABASE_URL=postgresql://user:pass@localhost:5432/maskara
+DATABASE_URL=postgresql://user:pass@localhost:5432/piighost
 
 # Observabilité (optionnel)
 LANGFUSE_PUBLIC_KEY=...

@@ -10,7 +10,7 @@
 
 **Please do not report security vulnerabilities in public GitHub issues.**
 
-If you discover a security vulnerability in Maskara, please report it **privately** via [GitHub's private vulnerability reporting](https://github.com/Athroniaeth/maskara/security/advisories/new).
+If you discover a security vulnerability in PIIGhost, please report it **privately** via [GitHub's private vulnerability reporting](https://github.com/Athroniaeth/piighost/security/advisories/new).
 
 Please include:
 1. Description of the vulnerability
@@ -22,11 +22,11 @@ We aim to acknowledge reports within **48 hours** and provide an initial assessm
 
 ## Security Considerations
 
-Maskara handles potentially sensitive PII data. Key design decisions:
+PIIGhost handles potentially sensitive PII data. Key design decisions:
 
 - **Anonymization is local** — PII is detected and replaced before being sent to any LLM or external service
 - **SHA-256 keyed placeholder store** — placeholders are deterministically derived, not stored in plaintext
 - **No logging of raw PII** — the library itself does not log entity values
 - **Frozen dataclasses** — immutable data models prevent accidental mutation of sensitive data
 
-> **Note**: Maskara anonymizes PII before LLM calls but does not encrypt data at rest. Ensure your `PlaceholderStore` backend is appropriately secured in production.
+> **Note**: PIIGhost anonymizes PII before LLM calls but does not encrypt data at rest. Ensure your `PlaceholderStore` backend is appropriately secured in production.

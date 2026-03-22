@@ -1,7 +1,7 @@
 [project]
-site_name = "Maskara"
+site_name = "PIIGhost"
 site_description = "Couche d'anonymisation PII pour agents LLM, basée sur GLiNER2"
-site_author = "Maskara"
+site_author = "PIIGhost"
 docs_dir = "docs/fr"
 site_dir = "site/fr"
 
@@ -13,7 +13,7 @@ nav = [
     { "Usage basique" = "examples/basic.md" },
     { "Intégration LangChain" = "examples/langchain.md" },
   ]},
-  { "Étendre Maskara" = "extending.md" },
+  { "Étendre PIIGhost" = "extending.md" },
   { "Référence API" = [
     { "Anonymizer" = "reference/anonymizer.md" },
     { "Pipeline" = "reference/pipeline.md" },

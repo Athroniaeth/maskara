@@ -2,16 +2,16 @@
 
 from typing import Sequence
 
-from maskara.anonymizer.detector import EntityDetector
-from maskara.anonymizer.models import AnonymizationResult, Placeholder
-from maskara.anonymizer.occurrence import OccurrenceFinder, RegexOccurrenceFinder
-from maskara.anonymizer.placeholder import (
+from piighost.anonymizer.detector import EntityDetector
+from piighost.anonymizer.models import AnonymizationResult, Placeholder
+from piighost.anonymizer.occurrence import OccurrenceFinder, RegexOccurrenceFinder
+from piighost.anonymizer.placeholder import (
     CounterPlaceholderFactory,
     PlaceholderFactory,
 )
-from maskara.span_replacer.models import Span
-from maskara.span_replacer.replacer import SpanReplacer
-from maskara.span_replacer.models import ReplacementResult
+from piighost.span_replacer.models import Span
+from piighost.span_replacer.replacer import SpanReplacer
+from piighost.span_replacer.models import ReplacementResult
 
 
 class Anonymizer:

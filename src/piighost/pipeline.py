@@ -18,8 +18,8 @@ import hashlib
 import logging
 from typing import Protocol
 
-from maskara.anonymizer.anonymizer import Anonymizer
-from maskara.anonymizer.models import AnonymizationResult
+from piighost.anonymizer.anonymizer import Anonymizer
+from piighost.anonymizer.models import AnonymizationResult
 
 logger = logging.getLogger(__name__)
 

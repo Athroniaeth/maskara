@@ -16,20 +16,20 @@ icon: lucide/rocket
 === "uv"
 
     ```bash
-    uv add maskara
+    uv add piighost
     ```
 
 === "pip"
 
     ```bash
-    pip install maskara
+    pip install piighost
     ```
 
 ### Installation pour le développement
 
 ```bash
-git clone https://github.com/Athroniaeth/maskara.git
-cd maskara
+git clone https://github.com/Athroniaeth/piighost.git
+cd piighost
 uv sync
 ```
 
@@ -41,7 +41,7 @@ L'usage le plus simple : créer un `Anonymizer` et l'appeler directement.
 
 ```python
 from gliner2 import GLiNER2
-from maskara.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer, GlinerDetector
 
 # 1. Charger le modèle NER
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -78,7 +78,7 @@ print(original)
 
 ```python
 import asyncio
-from maskara.pipeline import AnonymizationPipeline
+from piighost.pipeline import AnonymizationPipeline
 
 pipeline = AnonymizationPipeline(
     anonymizer=anonymizer,
@@ -117,9 +117,9 @@ Pour intégrer l'anonymisation dans un agent LangGraph, utilisez `PIIAnonymizati
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from maskara.anonymizer import Anonymizer, GlinerDetector
-from maskara.middleware import PIIAnonymizationMiddleware
-from maskara.pipeline import AnonymizationPipeline
+from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import AnonymizationPipeline
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:

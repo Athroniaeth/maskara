@@ -18,7 +18,7 @@ import importlib.util
 
 if importlib.util.find_spec("langchain") is None:
     raise ImportError(
-        "You must install langchain to use PIIAnonymizationMiddleware, please install maskara[langchain] for use middleware"
+        "You must install langchain to use PIIAnonymizationMiddleware, please install piighost[langchain] for use middleware"
     )
 
 import logging
@@ -31,7 +31,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from langgraph.typing import ContextT
 
-from maskara.pipeline import AnonymizationPipeline
+from piighost.pipeline import AnonymizationPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             anonymizer, labels, and store).
 
     Example:
-        >>> from maskara.anonymizer.pipeline import AnonymizationPipeline
+        >>> from piighost.anonymizer.pipeline import AnonymizationPipeline
         >>> pipeline = AnonymizationPipeline(
         ...     anonymizer=anonymizer,
         ...     labels=["PERSON", "LOCATION"],

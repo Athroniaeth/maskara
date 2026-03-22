@@ -2,7 +2,7 @@
 
 from typing import Protocol, Sequence
 
-from maskara.span_replacer.models import Span
+from piighost.span_replacer.models import Span
 
 
 class SpanValidator(Protocol):

@@ -3,7 +3,7 @@
 import pytest
 from typing import Sequence
 
-from maskara.span_replacer import (
+from piighost.span_replacer import (
     ReplacementResult,
     Span,
     SpanReplacer,

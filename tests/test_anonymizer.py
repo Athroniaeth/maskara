@@ -6,11 +6,11 @@ Uses a fake detector to avoid loading a real GLiNER model in CI.
 from typing import Sequence
 
 
-from maskara.anonymizer.anonymizer import Anonymizer
-from maskara.anonymizer.detector import CompositeDetector, RegexDetector
-from maskara.anonymizer.models import Entity
-from maskara.anonymizer.occurrence import RegexOccurrenceFinder
-from maskara.anonymizer.placeholder import (
+from piighost.anonymizer.anonymizer import Anonymizer
+from piighost.anonymizer.detector import CompositeDetector, RegexDetector
+from piighost.anonymizer.models import Entity
+from piighost.anonymizer.occurrence import RegexOccurrenceFinder
+from piighost.anonymizer.placeholder import (
     CounterPlaceholderFactory,
     HashPlaceholderFactory,
 )

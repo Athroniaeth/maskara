@@ -1,6 +1,6 @@
-# Contributing to Maskara
+# Contributing to PIIGhost
 
-Thank you for your interest in contributing to Maskara! We welcome contributions from everyone.
+Thank you for your interest in contributing to PIIGhost! We welcome contributions from everyone.
 
 ## Prerequisites
 
@@ -13,12 +13,12 @@ Thank you for your interest in contributing to Maskara! We welcome contributions
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/YOUR-USERNAME/maskara.git
-   cd maskara
+   git clone https://github.com/YOUR-USERNAME/piighost.git
+   cd piighost
    ```
 3. **Add upstream remote** for syncing:
    ```bash
-   git remote add upstream https://github.com/Athroniaeth/maskara.git
+   git remote add upstream https://github.com/Athroniaeth/piighost.git
    ```
 
 ## Development Workflow
@@ -93,8 +93,8 @@ New detector, occurrence finder, or placeholder factory implementations must:
 
 ## Questions?
 
-Open a [GitHub Discussion](https://github.com/Athroniaeth/maskara/discussions) or an issue. We're happy to help!
+Open a [GitHub Discussion](https://github.com/Athroniaeth/piighost/discussions) or an issue. We're happy to help!
 
 ---
 
-Thank you for contributing to Maskara!
+Thank you for contributing to PIIGhost!
