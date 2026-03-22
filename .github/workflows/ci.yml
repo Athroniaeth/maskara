@@ -47,6 +47,5 @@ jobs:
           key: ${{ runner.os }}-uv-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-${{ matrix.python-version }}-
-      # --package maskara skips the workspace member (examples/graph requires >=3.13)
-      - run: uv sync --locked --package maskara --dev --no-progress -q
+      - run: uv sync --locked --dev --no-progress -q
       - run: uv run pytest

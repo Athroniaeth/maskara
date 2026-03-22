@@ -56,11 +56,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/maskara"]
 
-[tool.uv.workspace]
-members = [
-    "examples/graph",
-]
-
 [dependency-groups]
 dev = [
     "ruff>=0.15.5",
