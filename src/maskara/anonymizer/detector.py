@@ -1,6 +1,7 @@
 """Entity detection abstraction and GLiNER2 implementation."""
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import Protocol, Sequence
 
 from gliner2 import GLiNER2
@@ -81,3 +82,88 @@ class GlinerDetector:
             for entity_type, list_entity in raw_entities.items()
             for entity in list_entity
         ]
+
+
+@dataclass
+class RegexDetector:
+    """Detect entities using regular expressions, one pattern per label.
+
+    Useful for structured secrets with a known format (API keys, emails,
+    credit-card numbers, etc.) that GLiNER2 may miss.
+
+    Args:
+        patterns: Mapping from entity label to a regex pattern (string or
+            compiled).  Only labels present in this dict can be detected.
+
+    Example:
+        >>> detector = RegexDetector(patterns={
+        ...     "OPENAI_API_KEY": r"sk-(?:proj-)?[A-Za-z0-9\\-_]{20,}",
+        ... })
+        >>> entities = detector.detect("my key is sk-proj-abc123xyz456789", ["OPENAI_API_KEY"])
+    """
+
+    patterns: dict[str, str | re.Pattern[str]] = field(default_factory=dict)
+
+    def detect(self, text: str, labels: Sequence[str]) -> list[Entity]:
+        """Find all regex matches for the requested *labels*.
+
+        Args:
+            text: The source string to analyse.
+            labels: Only patterns whose label appears here are executed.
+
+        Returns:
+            One ``Entity`` per regex match, with ``score=1.0``.
+        """
+        entities: list[Entity] = []
+        label_set = set(labels)
+        for label, pattern in self.patterns.items():
+            if label not in label_set:
+                continue
+            compiled = re.compile(pattern) if isinstance(pattern, str) else pattern
+            for m in compiled.finditer(text):
+                entities.append(
+                    Entity(
+                        text=m.group(),
+                        label=label,
+                        start=m.start(),
+                        end=m.end(),
+                        score=1.0,
+                    )
+                )
+        return entities
+
+
+@dataclass
+class CompositeDetector:
+    """Run multiple detectors and merge their results.
+
+    Lets you combine a GLiNER-based detector (natural language) with a
+    ``RegexDetector`` (structured patterns) without changing ``Anonymizer``.
+    Deduplication of overlapping spans is handled downstream by ``Anonymizer``.
+
+    Args:
+        detectors: Ordered list of ``EntityDetector`` implementations to run.
+
+    Example:
+        >>> detector = CompositeDetector(detectors=[
+        ...     GlinerDetector(model=gliner_model),
+        ...     RegexDetector(patterns={"OPENAI_API_KEY": r"sk-[A-Za-z0-9\\-_]{20,}"}),
+        ... ])
+    """
+
+    detectors: list[EntityDetector] = field(default_factory=list)
+
+    def detect(self, text: str, labels: Sequence[str]) -> list[Entity]:
+        """Collect entities from every child detector.
+
+        Args:
+            text: The source string.
+            labels: Forwarded to each child detector unchanged.
+
+        Returns:
+            Concatenated list of entities from all detectors.
+        """
+        entities: list[Entity] = []
+        for detector in self.detectors:
+            entities.extend(detector.detect(text, labels))
+        return entities

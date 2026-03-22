@@ -7,6 +7,7 @@ from typing import Sequence
 
 
 from maskara.anonymizer.anonymizer import Anonymizer
+from maskara.anonymizer.detector import CompositeDetector, RegexDetector
 from maskara.anonymizer.models import Entity
 from maskara.anonymizer.occurrence import RegexOccurrenceFinder
 from maskara.anonymizer.placeholder import (
@@ -265,3 +266,126 @@ class TestAnonymizer:
 
         assert "APatrick" in result.anonymized_text
         assert result.anonymized_text.count("<<PERSON_1>>") == 1
+
+
+# ---------------------------------------------------------------------------
+# RegexDetector
+# ---------------------------------------------------------------------------
+
+
+class TestRegexDetector:
+    """Unit tests for ``RegexDetector``."""
+
+    OPENAI_PATTERN = r"sk-(?:proj-)?[A-Za-z0-9\-_]{20,}"
+
+    def test_detects_matching_pattern(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        key = "sk-proj-abc123xyz456789ABCDEF"
+        entities = detector.detect(f"My key is {key}", ["OPENAI_API_KEY"])
+        assert len(entities) == 1
+        assert entities[0].text == key
+        assert entities[0].label == "OPENAI_API_KEY"
+        assert entities[0].score == 1.0
+
+    def test_returns_correct_span(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        text = "key: sk-abc123xyz456789ABCDEF end"
+        entities = detector.detect(text, ["OPENAI_API_KEY"])
+        assert len(entities) == 1
+        start, end = entities[0].start, entities[0].end
+        assert text[start:end] == entities[0].text
+
+    def test_ignores_label_not_requested(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        entities = detector.detect("sk-proj-abc123xyz456789ABCDEF", ["PERSON"])
+        assert entities == []
+
+    def test_multiple_matches_in_text(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        text = "k1=sk-abc123xyz456789ABCDEF k2=sk-proj-zyxwvu987654321fedcba"
+        entities = detector.detect(text, ["OPENAI_API_KEY"])
+        assert len(entities) == 2
+
+    def test_no_match_returns_empty(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        entities = detector.detect("no key here", ["OPENAI_API_KEY"])
+        assert entities == []
+
+    def test_multiple_patterns_different_labels(self) -> None:
+        detector = RegexDetector(
+            patterns={
+                "OPENAI_API_KEY": self.OPENAI_PATTERN,
+                "EMAIL": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+            }
+        )
+        text = "key=sk-abc123xyz456789ABCDEF mail=user@example.com"
+        entities = detector.detect(text, ["OPENAI_API_KEY", "EMAIL"])
+        labels = {e.label for e in entities}
+        assert labels == {"OPENAI_API_KEY", "EMAIL"}
+
+    def test_integration_with_anonymizer(self) -> None:
+        detector = RegexDetector(patterns={"OPENAI_API_KEY": self.OPENAI_PATTERN})
+        anonymizer = Anonymizer(detector=detector)
+        text = "My API key is sk-proj-secretkey1234567890abcdef here."
+        result = anonymizer.anonymize(text, labels=["OPENAI_API_KEY"])
+        assert "sk-proj-secretkey1234567890abcdef" not in result.anonymized_text
+        assert "<<OPENAI_API_KEY_1>>" in result.anonymized_text
+
+
+# ---------------------------------------------------------------------------
+# CompositeDetector
+# ---------------------------------------------------------------------------
+
+
+class TestCompositeDetector:
+    """Unit tests for ``CompositeDetector``."""
+
+    def test_merges_results_from_all_detectors(self) -> None:
+        person_entity = Entity(
+            text="Patrick", label="PERSON", start=0, end=7, score=0.9
+        )
+        key_entity = Entity(
+            text="sk-abc123", label="OPENAI_API_KEY", start=10, end=19, score=1.0
+        )
+        composite = CompositeDetector(
+            detectors=[
+                FakeDetector([person_entity]),
+                FakeDetector([key_entity]),
+            ]
+        )
+        entities = composite.detect("Patrick - sk-abc123", ["PERSON", "OPENAI_API_KEY"])
+        assert person_entity in entities
+        assert key_entity in entities
+
+    def test_empty_detectors_returns_empty(self) -> None:
+        composite = CompositeDetector(detectors=[])
+        assert composite.detect("some text", ["PERSON"]) == []
+
+    def test_forwards_labels_to_children(self) -> None:
+        regex_detector = RegexDetector(
+            patterns={"OPENAI_API_KEY": r"sk-[A-Za-z0-9\-_]{20,}"}
+        )
+        composite = CompositeDetector(detectors=[regex_detector])
+        # Label not requested — regex_detector should skip it
+        entities = composite.detect("sk-abc123xyz456789ABCDE", ["PERSON"])
+        assert entities == []
+
+    def test_integration_gliner_and_regex(self) -> None:
+        person_entity = Entity(
+            text="Patrick", label="PERSON", start=0, end=7, score=0.9
+        )
+        composite = CompositeDetector(
+            detectors=[
+                FakeDetector([person_entity]),
+                RegexDetector(
+                    patterns={"OPENAI_API_KEY": r"sk-(?:proj-)?[A-Za-z0-9\-_]{20,}"}
+                ),
+            ]
+        )
+        anonymizer = Anonymizer(detector=composite)
+        text = "Patrick a utilisé la clé sk-proj-mysecretkey12345678abcd"
+        result = anonymizer.anonymize(text, labels=["PERSON", "OPENAI_API_KEY"])
+        assert "Patrick" not in result.anonymized_text
+        assert "sk-proj-mysecretkey12345678abcd" not in result.anonymized_text
+        assert "<<PERSON_1>>" in result.anonymized_text
+        assert "<<OPENAI_API_KEY_1>>" in result.anonymized_text

@@ -1111,8 +1111,6 @@ dependencies = [
 [package.optional-dependencies]
 langchain = [
     { name = "langchain" },
-    { name = "langchain-core" },
-    { name = "langgraph" },
 ]
 
 [package.dev-dependencies]
@@ -1129,8 +1127,6 @@ requires-dist = [
     { name = "faker", specifier = ">=40.8.0" },
     { name = "gliner2", specifier = ">=1.2" },
     { name = "langchain", marker = "extra == 'langchain'", specifier = ">=1.2" },
-    { name = "langchain-core", marker = "extra == 'langchain'", specifier = ">=0.3" },
-    { name = "langgraph", marker = "extra == 'langchain'", specifier = ">=1.1" },
 ]
 provides-extras = ["langchain"]
 
