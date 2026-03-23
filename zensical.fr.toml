@@ -12,6 +12,7 @@ nav = [
   { "Exemples" = [
     { "Usage basique" = "examples/basic.md" },
     { "Intégration LangChain" = "examples/langchain.md" },
+    { "Détecteurs prêts à l'emploi" = "examples/detectors.md" },
   ]},
   { "Étendre PIIGhost" = "extending.md" },
   { "Référence API" = [

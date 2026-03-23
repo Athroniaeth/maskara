@@ -11,6 +11,7 @@ nav = [
   { "Examples" = [
     { "Basic usage" = "examples/basic.md" },
     { "LangChain integration" = "examples/langchain.md" },
+    { "Pre-built detectors" = "examples/detectors.md" },
   ]},
   { "Extending PIIGhost" = "extending.md" },
   { "API Reference" = [

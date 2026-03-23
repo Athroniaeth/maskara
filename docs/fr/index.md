@@ -72,5 +72,6 @@ print(original)
 | [Démarrage rapide](getting-started.md) | Installation et premiers pas |
 | [Architecture](architecture.md) | Pipeline et diagrammes de flux |
 | [Exemples](examples/basic.md) | Usage basique et intégration LangChain |
+| [Détecteurs prêts à l'emploi](examples/detectors.md) | Patterns regex pour PII courants (US & Europe) |
 | [Étendre PIIGhost](extending.md) | Créer ses propres modules |
 | [Référence API](reference/anonymizer.md) | Documentation complète de l'API |
