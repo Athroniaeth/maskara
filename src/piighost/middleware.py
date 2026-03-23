@@ -158,7 +158,6 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             logger.debug(f"Deanonymised {nbr_messages} message(s)")
         return {"messages": messages} if changed else None
 
-
     # -----------------------------------------------------------------
     # awrap_tool_call – deanonymise args → run tool → anonymise result
     # -----------------------------------------------------------------

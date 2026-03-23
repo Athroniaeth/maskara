@@ -14,6 +14,7 @@ from keyshield.repositories.in_memory import InMemoryApiKeyRepository
 # (spec_from_file_location does not set __package__ or modify sys.path)
 import sys as _sys
 from pathlib import Path as _Path
+
 _src = str(_Path(__file__).parent.parent.resolve())
 if _src not in _sys.path:
     _sys.path.insert(0, _src)

@@ -57,8 +57,14 @@ class RegexOccurrenceFinder:
         Returns:
             Sorted ``(start, end)`` pairs for every match.
         """
+        escaped = re.escape(fragment)
+        # \b only fires between a word and non-word character, so it
+        # fails when the fragment starts/ends with a non-word char
+        # (e.g. "+33…").  Fall back to a lookaround in that case.
+        prefix = r"\b" if fragment[0:1].isalnum() or fragment[0:1] == "_" else r"(?<!\w)"
+        suffix = r"\b" if fragment[-1:].isalnum() or fragment[-1:] == "_" else r"(?!\w)"
         pattern = re.compile(
-            rf"\b{re.escape(fragment)}\b",
+            f"{prefix}{escaped}{suffix}",
             self._flags,
         )
         return [(m.start(), m.end()) for m in pattern.finditer(text)]
