@@ -64,6 +64,20 @@ original = anonymizer.deanonymize(result)
 
 **Returns**: `str` — the original text
 
+**Raises**: `IrreversibleAnonymizationError` if the placeholder factory is not reversible.
+
+#### `reversible` (property)
+
+Returns `True` if the placeholder factory supports deanonymization.
+
+```python
+anonymizer = Anonymizer(detector=detector)
+anonymizer.reversible  # True (CounterPlaceholderFactory is the default)
+
+anonymizer = Anonymizer(detector=detector, placeholder_factory=RedactPlaceholderFactory())
+anonymizer.reversible  # False
+```
+
 ---
 
 ## `GlinerDetector`
@@ -145,7 +159,7 @@ finder.find_all("Hello Patrick, APatrick", "Patrick")
 
 ## `PlaceholderFactory` (Protocol)
 
-Interface for generating replacement tags.
+Interface for generating replacement tags. Not all factories support deanonymization — see the [reversibility](#reversible-vs-irreversible) section below.
 
 ```python
 class PlaceholderFactory(Protocol):
@@ -155,6 +169,14 @@ class PlaceholderFactory(Protocol):
     def reset(self) -> None:
         ...
 ```
+
+### `ReversiblePlaceholderFactory` (ABC)
+
+Base class for factories that produce **unique, distinguishable** replacement tags. Factories inheriting from this class guarantee that each `(original, label)` pair gets a distinct tag, making deanonymization possible.
+
+`CounterPlaceholderFactory` and `HashPlaceholderFactory` both inherit from `ReversiblePlaceholderFactory`.
+
+Use `isinstance(factory, ReversiblePlaceholderFactory)` to check at runtime whether deanonymization is safe.
 
 ### `CounterPlaceholderFactory`
 
@@ -207,6 +229,88 @@ anonymizer = Anonymizer(
     detector=detector,
     placeholder_factory=HashPlaceholderFactory(digest_length=12),
 )
+```
+
+### `RedactPlaceholderFactory`
+
+Replaces **all** entities with the same opaque tag (`[REDACTED]`). No index, no label, no distinction between entities — maximum privacy, zero information leakage.
+
+```python
+RedactPlaceholderFactory(tag: str = "[REDACTED]")
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `tag` | `"[REDACTED]"` | The replacement string for all entities |
+
+```python
+from piighost.anonymizer import RedactPlaceholderFactory
+
+factory = RedactPlaceholderFactory()
+factory.get_or_create("Patrick", "PERSON").replacement   # '[REDACTED]'
+factory.get_or_create("Paris", "LOCATION").replacement    # '[REDACTED]'
+factory.get_or_create("alice@example.com", "EMAIL").replacement  # '[REDACTED]'
+```
+
+**Usage with `Anonymizer`:**
+
+```python
+anonymizer = Anonymizer(
+    detector=detector,
+    placeholder_factory=RedactPlaceholderFactory(),
+)
+result = anonymizer.anonymize("Patrick lives in Paris.")
+print(result.anonymized_text)
+# [REDACTED] lives in [REDACTED].
+```
+
+!!! warning "Not reversible"
+    `RedactPlaceholderFactory` does **not** inherit from `ReversiblePlaceholderFactory`. Calling `anonymizer.deanonymize(result)` will raise `IrreversibleAnonymizationError`. It cannot be used with `AnonymizationPipeline` (which requires deanonymization for tool calls).
+
+---
+
+### Reversible vs irreversible
+
+PIIGhost distinguishes two categories of placeholder factories:
+
+| | Reversible | Irreversible |
+|---|---|---|
+| **Base class** | `ReversiblePlaceholderFactory` | `PlaceholderFactory` only |
+| **Unique tags** | Each entity gets a distinct tag | All entities share the same tag |
+| **Deanonymization** | Supported | Raises `IrreversibleAnonymizationError` |
+| **Information leakage** | Reveals entity count and co-references | Zero leakage |
+| **Use with Pipeline** | Yes | No |
+| **Use with Middleware** | Yes | No |
+| **Implementations** | `CounterPlaceholderFactory`, `HashPlaceholderFactory` | `RedactPlaceholderFactory` |
+
+**When to use each:**
+
+- **Reversible** (default) — when you need bidirectional anonymization, e.g. in LLM agent conversations where tool calls must be deanonymized before execution.
+- **Irreversible** — when you only need to strip PII from text and never recover it, e.g. logging, analytics, data export, compliance redaction.
+
+---
+
+## Exceptions
+
+### `IrreversibleAnonymizationError`
+
+Raised when attempting to deanonymize a result produced by a non-reversible factory.
+
+```python
+from piighost.anonymizer import IrreversibleAnonymizationError
+
+anonymizer = Anonymizer(
+    detector=detector,
+    placeholder_factory=RedactPlaceholderFactory(),
+)
+result = anonymizer.anonymize("Patrick lives in Paris.")
+
+try:
+    anonymizer.deanonymize(result)
+except IrreversibleAnonymizationError as e:
+    print(e)
+    # RedactPlaceholderFactory is not reversible. Deanonymization requires
+    # a ReversiblePlaceholderFactory (e.g. CounterPlaceholderFactory or HashPlaceholderFactory).
 ```
 
 ---

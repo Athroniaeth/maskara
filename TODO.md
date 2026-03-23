@@ -18,7 +18,7 @@ Fonctionnalités manquantes identifiées par analyse comparative avec [PIICloak]
 
 - [ ] **Stratégies d'anonymisation supplémentaires** — Nouveaux `PlaceholderFactory` :
   - [ ] Masquage partiel (`MaskPlaceholderFactory`) — ex: `****4567`, `j***@email.com`
-  - [ ] Suppression pure (`RedactPlaceholderFactory`) — ex: `[REDACTED]`
+  - [x] Suppression pure (`RedactPlaceholderFactory`) — ex: `[REDACTED]`
   - [ ] Génération de fausses données (`FakerPlaceholderFactory`) — utiliser Faker (déjà en dépendance) pour générer des noms, adresses, emails réalistes
 
 ## Priorité moyenne
