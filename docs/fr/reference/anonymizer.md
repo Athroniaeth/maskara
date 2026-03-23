@@ -73,9 +73,11 @@ Retourne `True` si le placeholder factory supporte la désanonymisation.
 ```python
 anonymizer = Anonymizer(detector=detector)
 anonymizer.reversible  # True (CounterPlaceholderFactory par défaut)
+anonymizer.check_reversible()  # no-op
 
 anonymizer = Anonymizer(detector=detector, placeholder_factory=RedactPlaceholderFactory())
 anonymizer.reversible  # False
+anonymizer.check_reversible()  # lève IrreversibleAnonymizationError
 ```
 
 ---
@@ -157,18 +159,27 @@ finder.find_all("Salut Patrick, APatrick", "Patrick")
 
 ---
 
-## `PlaceholderFactory` (Protocole)
+## `PlaceholderFactory` (ABC)
 
-Interface pour générer des tags de remplacement. Toutes les factories ne supportent pas la désanonymisation — voir la section [réversibilité](#réversible-vs-irréversible) ci-dessous.
+Classe de base abstraite pour toutes les placeholder factories. Fournit deux méthodes polymorphiques pour vérifier la réversibilité — pas besoin de `isinstance`.
 
 ```python
-class PlaceholderFactory(Protocol):
+class PlaceholderFactory(ABC):
     def get_or_create(self, original: str, label: str) -> Placeholder:
         ...
 
     def reset(self) -> None:
         ...
+
+    @property
+    def reversible(self) -> bool:
+        """Retourne False par défaut."""
+
+    def check_reversible(self) -> None:
+        """Lève IrreversibleAnonymizationError par défaut."""
 ```
+
+Utilisez `factory.reversible` pour vérifier au runtime, ou `factory.check_reversible()` pour lever une exception si non supporté.
 
 ### `ReversiblePlaceholderFactory` (ABC)
 
@@ -176,7 +187,7 @@ Classe de base pour les factories qui produisent des tags de remplacement **uniq
 
 `CounterPlaceholderFactory` et `HashPlaceholderFactory` héritent de `ReversiblePlaceholderFactory`.
 
-Utilisez `isinstance(factory, ReversiblePlaceholderFactory)` pour vérifier au runtime si la désanonymisation est possible.
+Override `reversible` pour retourner `True` et `check_reversible()` pour ne rien faire.
 
 ### `CounterPlaceholderFactory`
 
@@ -275,7 +286,9 @@ PIIGhost distingue deux catégories de placeholder factories :
 
 | | Réversible | Irréversible |
 |---|---|---|
-| **Classe de base** | `ReversiblePlaceholderFactory` | `PlaceholderFactory` uniquement |
+| **Classe de base** | `ReversiblePlaceholderFactory` | `PlaceholderFactory` directement |
+| **`reversible`** | `True` | `False` |
+| **`check_reversible()`** | No-op | Lève `IrreversibleAnonymizationError` |
 | **Tags uniques** | Chaque entité reçoit un tag distinct | Toutes les entités partagent le même tag |
 | **Désanonymisation** | Supportée | Lève `IrreversibleAnonymizationError` |
 | **Fuite d'information** | Révèle le nombre d'entités et les co-références | Zéro fuite |

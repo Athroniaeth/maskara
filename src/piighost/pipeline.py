@@ -19,7 +19,7 @@ import logging
 from typing import Protocol
 
 from piighost.anonymizer.anonymizer import Anonymizer
-from piighost.anonymizer.models import AnonymizationResult, IrreversibleAnonymizationError
+from piighost.anonymizer.models import AnonymizationResult
 
 logger = logging.getLogger(__name__)
 
@@ -170,12 +170,7 @@ class AnonymizationPipeline:
 
     def _check_reversible(self) -> None:
         """Raise if the underlying anonymizer is not reversible."""
-        if not self._anonymizer.reversible:
-            msg = (
-                "Deanonymization requires a ReversiblePlaceholderFactory. "
-                "The current anonymizer uses a non-reversible factory."
-            )
-            raise IrreversibleAnonymizationError(msg)
+        self._anonymizer.check_reversible()
 
     def deanonymize_text(self, text: str) -> str:
         """Replace every known placeholder tag in *text* with its original.

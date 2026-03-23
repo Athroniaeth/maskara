@@ -12,6 +12,7 @@ from piighost.anonymizer.occurrence import OccurrenceFinder, RegexOccurrenceFind
 from piighost.anonymizer.placeholder import (
     CounterPlaceholderFactory,
     HashPlaceholderFactory,
+    IrreversiblePlaceholderFactory,
     PlaceholderFactory,
     RedactPlaceholderFactory,
     ReversiblePlaceholderFactory,
@@ -26,6 +27,7 @@ __all__ = [
     "GlinerDetector",
     "HashPlaceholderFactory",
     "IrreversibleAnonymizationError",
+    "IrreversiblePlaceholderFactory",
     "OccurrenceFinder",
     "Placeholder",
     "PlaceholderFactory",

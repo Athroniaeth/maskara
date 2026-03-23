@@ -5,7 +5,6 @@ correctly detect AND anonymize entities when followed by '.' or ','
 (typical end-of-sentence / list separators).
 """
 
-import pytest
 
 from piighost.anonymizer.anonymizer import Anonymizer
 from piighost.anonymizer.detector import RegexDetector
@@ -47,16 +46,11 @@ from examples.detectors.common import PATTERNS as COMMON_PATTERNS
 
 
 class TestCommonPatternsTrailingPunctuation:
-
     def test_email(self) -> None:
-        _assert_anonymized_with_trailing(
-            COMMON_PATTERNS, "EMAIL", "alice@example.com"
-        )
+        _assert_anonymized_with_trailing(COMMON_PATTERNS, "EMAIL", "alice@example.com")
 
     def test_ip_v4(self) -> None:
-        _assert_anonymized_with_trailing(
-            COMMON_PATTERNS, "IP_V4", "192.168.1.42"
-        )
+        _assert_anonymized_with_trailing(COMMON_PATTERNS, "IP_V4", "192.168.1.42")
 
     def test_url(self) -> None:
         _assert_anonymized_with_trailing(
@@ -106,7 +100,6 @@ from examples.detectors.us import PATTERNS as US_PATTERNS
 
 
 class TestUSPatternsTrailingPunctuation:
-
     def test_ssn(self) -> None:
         _assert_anonymized_with_trailing(US_PATTERNS, "US_SSN", "123-45-6789")
 
@@ -114,22 +107,16 @@ class TestUSPatternsTrailingPunctuation:
         _assert_anonymized_with_trailing(US_PATTERNS, "US_PHONE", "555-867-5309")
 
     def test_passport(self) -> None:
-        _assert_anonymized_with_trailing(
-            US_PATTERNS, "US_PASSPORT", "C12345678"
-        )
+        _assert_anonymized_with_trailing(US_PATTERNS, "US_PASSPORT", "C12345678")
 
     def test_zip_code(self) -> None:
-        _assert_anonymized_with_trailing(
-            US_PATTERNS, "US_ZIP_CODE", "90210-1234"
-        )
+        _assert_anonymized_with_trailing(US_PATTERNS, "US_ZIP_CODE", "90210-1234")
 
     def test_ein(self) -> None:
         _assert_anonymized_with_trailing(US_PATTERNS, "US_EIN", "12-3456789")
 
     def test_bank_routing(self) -> None:
-        _assert_anonymized_with_trailing(
-            US_PATTERNS, "US_BANK_ROUTING", "021000021"
-        )
+        _assert_anonymized_with_trailing(US_PATTERNS, "US_BANK_ROUTING", "021000021")
 
 
 # ---------------------------------------------------------------------------
@@ -140,34 +127,25 @@ from examples.detectors.europe import PATTERNS as EU_PATTERNS
 
 
 class TestEuropePatternsTrailingPunctuation:
-
     def test_iban(self) -> None:
         _assert_anonymized_with_trailing(
             EU_PATTERNS, "EU_IBAN", "FR7630006000011234567890189"
         )
 
     def test_vat(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "EU_VAT", "FR12345678901"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "EU_VAT", "FR12345678901")
 
     def test_fr_ssn(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "FR_SSN", "185017512345612"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "FR_SSN", "185017512345612")
 
     def test_fr_phone(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "FR_PHONE", "06 12 34 56 78"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "FR_PHONE", "06 12 34 56 78")
 
     def test_fr_zip(self) -> None:
         _assert_anonymized_with_trailing(EU_PATTERNS, "FR_ZIP", "75001")
 
     def test_de_phone(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "DE_PHONE", "030 1234567"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "DE_PHONE", "030 1234567")
 
     def test_de_zip(self) -> None:
         # DE_ZIP and FR_ZIP overlap (both match 5 digits); whichever label
@@ -178,16 +156,10 @@ class TestEuropePatternsTrailingPunctuation:
             assert "10115" not in result
 
     def test_uk_nino(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "UK_NINO", "AB123456C"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "UK_NINO", "AB123456C")
 
     def test_uk_nhs(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "UK_NHS", "943-476-5919"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "UK_NHS", "943-476-5919")
 
     def test_uk_postcode(self) -> None:
-        _assert_anonymized_with_trailing(
-            EU_PATTERNS, "UK_POSTCODE", "SW1A 1AA"
-        )
+        _assert_anonymized_with_trailing(EU_PATTERNS, "UK_POSTCODE", "SW1A 1AA")

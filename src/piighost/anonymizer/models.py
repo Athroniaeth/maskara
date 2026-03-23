@@ -66,3 +66,4 @@ class IrreversibleAnonymizationError(Exception):
     identical replacement tags for every entity, making it impossible to
     map a tag back to its original value.
     """
+    ...

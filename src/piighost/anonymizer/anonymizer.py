@@ -5,14 +5,12 @@ from typing import Sequence
 from piighost.anonymizer.detector import EntityDetector
 from piighost.anonymizer.models import (
     AnonymizationResult,
-    IrreversibleAnonymizationError,
     Placeholder,
 )
 from piighost.anonymizer.occurrence import OccurrenceFinder, RegexOccurrenceFinder
 from piighost.anonymizer.placeholder import (
     CounterPlaceholderFactory,
     PlaceholderFactory,
-    ReversiblePlaceholderFactory,
 )
 from piighost.span_replacer.models import ReplacementResult, Span
 from piighost.span_replacer.replacer import SpanReplacer
@@ -125,7 +123,16 @@ class Anonymizer:
     @property
     def reversible(self) -> bool:
         """Whether the placeholder factory supports deanonymization."""
-        return isinstance(self._placeholder_factory, ReversiblePlaceholderFactory)
+        return self._placeholder_factory.reversible
+
+    def check_reversible(self) -> None:
+        """Raise if the placeholder factory does not support deanonymization.
+
+        Raises:
+            IrreversibleAnonymizationError: If the placeholder factory
+                is not reversible (e.g. ``RedactPlaceholderFactory``).
+        """
+        self._placeholder_factory.check_reversible()
 
     def deanonymize(self, result: AnonymizationResult) -> str:
         """Restore the original text from an ``AnonymizationResult``.
@@ -142,13 +149,7 @@ class Anonymizer:
             IrreversibleAnonymizationError: If the placeholder factory
                 is not reversible (e.g. ``RedactPlaceholderFactory``).
         """
-        if not self.reversible:
-            msg = (
-                f"{type(self._placeholder_factory).__name__} is not reversible. "
-                "Deanonymization requires a ReversiblePlaceholderFactory "
-                "(e.g. CounterPlaceholderFactory or HashPlaceholderFactory)."
-            )
-            raise IrreversibleAnonymizationError(msg)
+        self.check_reversible()
 
         replacement_result = ReplacementResult(
             text=result.anonymized_text,

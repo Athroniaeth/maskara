@@ -1,25 +1,27 @@
 """Strategies for generating placeholder replacement strings."""
 
 import hashlib
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Protocol
+from typing import Literal, NoReturn
 
-from piighost.anonymizer.models import Placeholder
+from piighost.anonymizer.models import IrreversibleAnonymizationError, Placeholder
 
 
-class PlaceholderFactory(Protocol):
-    """Interface for creating placeholder tags.
+class PlaceholderFactory(ABC):
+    """Abstract base for all placeholder factories.
 
-    Each call must return a replacement string for a given
-    ``(original, label)`` pair, and return the *same* string if the
-    same pair is requested again within the same pass.
+    Subclasses must implement ``get_or_create``, ``reset``,
+    the ``reversible`` property, and ``check_reversible``.
 
-    Not all factories are reversible.  Factories that produce unique,
-    distinguishable tags should inherit from
-    ``ReversiblePlaceholderFactory``.
+    Use one of the two intermediate bases instead of subclassing
+    this directly:
+
+    * ``ReversiblePlaceholderFactory`` — unique tags, deanonymization OK.
+    * ``IrreversiblePlaceholderFactory`` — opaque tags, no deanonymization.
     """
 
+    @abstractmethod
     def get_or_create(self, original: str, label: str) -> Placeholder:
         """Return an existing placeholder or create a new one.
 
@@ -30,23 +32,66 @@ class PlaceholderFactory(Protocol):
         Returns:
             A ``Placeholder`` with the replacement tag.
         """
-        ...  # pragma: no cover
 
+    @abstractmethod
     def reset(self) -> None:
         """Clear internal state for a fresh anonymization pass."""
-        ...  # pragma: no cover
+
+    @property
+    @abstractmethod
+    def reversible(self) -> bool:
+        """Whether this factory supports deanonymization."""
+
+    @abstractmethod
+    def check_reversible(self) -> None:
+        """Raise if the factory does not support deanonymization.
+
+        Raises:
+            IrreversibleAnonymizationError: If the factory is not
+                reversible.
+        """
 
 
-class ReversiblePlaceholderFactory(ABC):
+class ReversiblePlaceholderFactory(PlaceholderFactory, ABC):
     """Base class for factories that support deanonymization.
 
     Factories inheriting from this class produce *unique* replacement
     tags for each ``(original, label)`` pair, making it possible to map
     a tag back to its original value.
 
-    Use ``isinstance(factory, ReversiblePlaceholderFactory)`` to check
-    at runtime whether deanonymization is safe.
+    Use ``factory.reversible`` to check at runtime whether
+    deanonymization is safe.
     """
+
+    @property
+    def reversible(self) -> Literal[True]:
+        """Always ``True`` — reversible factories support deanonymization."""
+        return True
+
+    def check_reversible(self) -> None:
+        """No-op — reversible factories always pass this check."""
+
+
+class IrreversiblePlaceholderFactory(PlaceholderFactory, ABC):
+    """Base class for factories that do **not** support deanonymization.
+
+    Calling ``check_reversible`` always raises
+    ``IrreversibleAnonymizationError``.
+    """
+
+    @property
+    def reversible(self) -> Literal[False]:
+        """Always ``False`` — irreversible factories cannot deanonymize."""
+        return False
+
+    def check_reversible(self) -> NoReturn:
+        """Raise ``IrreversibleAnonymizationError``."""
+        msg = (
+            f"{type(self).__name__} is not reversible. "
+            "Deanonymization requires a ReversiblePlaceholderFactory "
+            "(e.g. CounterPlaceholderFactory or HashPlaceholderFactory)."
+        )
+        raise IrreversibleAnonymizationError(msg)
 
 
 class CounterPlaceholderFactory(ReversiblePlaceholderFactory):
@@ -176,7 +221,7 @@ class HashPlaceholderFactory(ReversiblePlaceholderFactory):
         self._cache.clear()
 
 
-class RedactPlaceholderFactory:
+class RedactPlaceholderFactory(IrreversiblePlaceholderFactory):
     """Replace all entities with a single opaque tag: ``[REDACTED]``.
 
     Every entity is mapped to the *same* replacement string regardless

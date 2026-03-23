@@ -15,7 +15,6 @@ from piighost.anonymizer.placeholder import (
     CounterPlaceholderFactory,
     HashPlaceholderFactory,
     RedactPlaceholderFactory,
-    ReversiblePlaceholderFactory,
 )
 
 
@@ -439,15 +438,19 @@ class TestRedactPlaceholderFactory:
 
     def test_is_not_reversible(self) -> None:
         factory = RedactPlaceholderFactory()
-        assert not isinstance(factory, ReversiblePlaceholderFactory)
+        assert factory.reversible is False
+        with pytest.raises(IrreversibleAnonymizationError):
+            factory.check_reversible()
 
     def test_counter_is_reversible(self) -> None:
         factory = CounterPlaceholderFactory()
-        assert isinstance(factory, ReversiblePlaceholderFactory)
+        assert factory.reversible is True
+        factory.check_reversible()  # should not raise
 
     def test_hash_is_reversible(self) -> None:
         factory = HashPlaceholderFactory()
-        assert isinstance(factory, ReversiblePlaceholderFactory)
+        assert factory.reversible is True
+        factory.check_reversible()  # should not raise
 
 
 class TestRedactAnonymizer:
@@ -478,7 +481,10 @@ class TestRedactAnonymizer:
     def test_reversible_property(self) -> None:
         detector = FakeDetector([])
         assert Anonymizer(detector=detector).reversible is True
-        assert Anonymizer(
-            detector=detector,
-            placeholder_factory=RedactPlaceholderFactory(),
-        ).reversible is False
+        assert (
+            Anonymizer(
+                detector=detector,
+                placeholder_factory=RedactPlaceholderFactory(),
+            ).reversible
+            is False
+        )
