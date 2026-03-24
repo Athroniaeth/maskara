@@ -256,6 +256,42 @@ class TestAnonymizer:
         assert result.anonymized_text == text
         assert result.placeholders == ()
 
+    def test_reset_clears_factory_state(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Patrick", label="PERSON", start=0, end=7, score=0.9),
+            ]
+        )
+        anonymizer = Anonymizer(detector=detector)
+
+        r1 = anonymizer.anonymize("Patrick est ici.")
+        assert r1.placeholders[0].replacement == "<<PERSON_1>>"
+
+        anonymizer.reset()
+
+        r2 = anonymizer.anonymize("Patrick est ici.")
+        # After reset, counter restarts — still <<PERSON_1>>
+        assert r2.placeholders[0].replacement == "<<PERSON_1>>"
+
+    def test_reset_allows_new_counter_sequence(self) -> None:
+        detector = FakeDetector(
+            [
+                Entity(text="Marie", label="PERSON", start=0, end=5, score=0.9),
+            ]
+        )
+        anonymizer = Anonymizer(detector=detector)
+
+        # First session: Patrick gets PERSON_1 (from a different detector call)
+        anonymizer._placeholder_factory.get_or_create("Patrick", "PERSON")
+        r1 = anonymizer.anonymize("Marie est là.")
+        assert r1.placeholders[0].replacement == "<<PERSON_2>>"
+
+        anonymizer.reset()
+
+        # After reset: Marie gets PERSON_1 again
+        r2 = anonymizer.anonymize("Marie est là.")
+        assert r2.placeholders[0].replacement == "<<PERSON_1>>"
+
     def test_partial_word_not_replaced(self) -> None:
         # "APatrick" should NOT be touched.
         detector = FakeDetector(

@@ -30,6 +30,11 @@ class Anonymizer:
     4. **Replace** – the ``SpanReplacer`` applies the substitutions and
        computes reverse spans for deanonymization.
 
+    The ``PlaceholderFactory`` maintains an internal cache across calls
+    so that the same ``(text, label)`` pair always receives the same
+    placeholder tag within a session.  Call ``reset`` to clear that
+    state and start a fresh session.
+
     All collaborators are injected so they can be swapped or mocked.
 
     Args:
@@ -120,6 +125,14 @@ class Anonymizer:
             reverse_spans=replacement_result.reverse_spans,
         )
 
+    def reset(self) -> None:
+        """Clear factory state for a new session.
+
+        Resets the ``PlaceholderFactory``'s internal cache and counters
+        so that subsequent ``anonymize`` calls start with a clean slate.
+        """
+        self._placeholder_factory.reset()
+
     @property
     def reversible(self) -> bool:
         """Whether the placeholder factory supports deanonymization."""
@@ -137,7 +150,13 @@ class Anonymizer:
     def deanonymize(self, result: AnonymizationResult) -> str:
         """Restore the original text from an ``AnonymizationResult``.
 
-        This is a convenience wrapper around ``SpanReplacer.restore``.
+        This performs **span-based** exact reversal using the reverse
+        spans stored in *result*.  It only works on the exact text
+        returned by ``anonymize``.
+
+        For **string-based** reversal that works on any derived text
+        (LLM output, tool arguments, etc.), use
+        ``PlaceholderRegistry.deanonymize`` instead.
 
         Args:
             result: A result previously returned by ``anonymize``.
