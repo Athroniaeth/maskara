@@ -12,6 +12,17 @@ class Span:
     start_pos: int
     end_pos: int
 
+    def overlaps(self, other: "Span") -> bool:
+        """Check whether this span overlaps with another.
+
+        Args:
+            other: The span to test against.
+
+        Returns:
+            ``True`` if the two spans share at least one character position.
+        """
+        return self.start_pos < other.end_pos and other.start_pos < self.end_pos
+
 
 @dataclass
 class Detection:
