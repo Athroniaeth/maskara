@@ -113,6 +113,7 @@ class ExactMatchDetector(AbstractDetector):
             for match in pattern.finditer(text):
                 detections.append(
                     Detection(
+                        text=text[match.start():match.end()],
                         label=label,
                         position=Span(
                             start_pos=match.start(),

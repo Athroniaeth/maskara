@@ -4,8 +4,8 @@ from v2.models import Detection, Span
 from v2.resolver import ConfidenceSpanConflictResolver
 
 
-def _make(label: str, start: int, end: int, confidence: float) -> Detection:
-    return Detection(label=label, position=Span(start, end), confidence=confidence)
+def _make(label: str, start: int, end: int, confidence: float, text: str = "") -> Detection:
+    return Detection(text=text, label=label, position=Span(start, end), confidence=confidence)
 
 
 # ---------------------------------------------------------------------------
