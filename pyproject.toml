@@ -51,6 +51,9 @@ gliner = [
 langchain = [
     "langchain>=1.2",
 ]
+cache = [
+    "aiocache>=0.12",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -67,6 +70,7 @@ dev = [
     "pyrefly>=0.55.0",
     "zensical>=0.0.27",
     "commitizen>=4.13.9",
+    "pytest-asyncio>=0.25",
 ]
 
 [tool.pytest.ini_options]

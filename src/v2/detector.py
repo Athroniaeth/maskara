@@ -11,7 +11,7 @@ class AnyDetector(Protocol):
     that performs Named Entity Recognition (NER) on a given text.
     """
 
-    def detect(self, text: str) -> list[Detection]:
+    async def detect(self, text: str) -> list[Detection]:
         """Detect and extract entities from the given text.
 
         Args:
@@ -58,7 +58,7 @@ class ExactMatchDetector:
         self.bag_of_words = bag_of_words
         self._flags = flags
 
-    def detect(self, text: str) -> list[Detection]:
+    async def detect(self, text: str) -> list[Detection]:
         """Detect entities by matching words from the dictionary in the text.
 
         Iterates over each word in ``bag_of_words``, builds a word-boundary

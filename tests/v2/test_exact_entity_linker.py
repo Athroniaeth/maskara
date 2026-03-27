@@ -1,6 +1,5 @@
 """Tests for ``ExactEntityLinker``."""
 
-
 from v2.entity_linker import ExactEntityLinker
 from v2.models import Detection, Span
 
