@@ -57,6 +57,11 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
 
         self.memory = memory or ConversationMemory()
 
+    @property
+    def resolved_entities(self) -> list[Entity]:
+        """All entities from memory, merged by the pipeline's entity resolver."""
+        return self._entity_resolver.resolve(self.memory.all_entities)
+
     async def anonymize(self, text: str) -> tuple[str, list[Entity]]:
         """Run detection, record entities in memory, then anonymize.
 
@@ -87,10 +92,10 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
         Returns:
             Text with tokens replaced by original values.
         """
-        if not self.memory.all_entities:
+        if not self.resolved_entities:
             return text
 
-        tokens = self.ph_factory.create(self.memory.all_entities)
+        tokens = self.ph_factory.create(self.resolved_entities)
 
         # Sort by token length descending (longest-first).
         for entity, token in sorted(
@@ -115,10 +120,10 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
         Returns:
             Text with original values replaced by tokens.
         """
-        if not self.memory.all_entities:
+        if not self.resolved_entities:
             return text
 
-        tokens = self.ph_factory.create(self.memory.all_entities)
+        tokens = self.ph_factory.create(self.resolved_entities)
 
         # Collect all (detection_text, token) pairs for all variants.
         replacements: list[tuple[str, str]] = []

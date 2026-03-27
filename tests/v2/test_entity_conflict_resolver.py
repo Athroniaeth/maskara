@@ -1,7 +1,8 @@
-"""Tests for ``MergeEntityConflictResolver``."""
+"""Tests for ``MergeEntityConflictResolver`` and ``FuzzyEntityConflictResolver``."""
 
-from v2.entity_resolver import MergeEntityConflictResolver
+from v2.entity_resolver import FuzzyEntityConflictResolver, MergeEntityConflictResolver
 from v2.models import Detection, Entity, Span
+from v2.similarity import levenshtein_similarity
 
 
 def _det(
@@ -193,3 +194,105 @@ class TestOutputOrdering:
         result = MergeEntityConflictResolver().resolve(entities)
         positions = [min(d.position.start_pos for d in e.detections) for e in result]
         assert positions == sorted(positions)
+
+
+# ---------------------------------------------------------------------------
+# FuzzyEntityConflictResolver — have_conflict
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzyHaveConflict:
+    """Two entities conflict when same label and similar canonical text."""
+
+    def test_similar_text_same_label_is_conflict(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("patric", "PERSON", 20, 26),))
+
+        assert FuzzyEntityConflictResolver().have_conflict(entity_a, entity_b)
+
+    def test_different_label_no_conflict(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("Patrice", "LOCATION", 20, 27),))
+
+        assert not FuzzyEntityConflictResolver().have_conflict(entity_a, entity_b)
+
+    def test_very_different_text_same_label_no_conflict(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("Paris", "PERSON", 20, 25),))
+
+        assert not FuzzyEntityConflictResolver().have_conflict(entity_a, entity_b)
+
+    def test_identical_text_same_label_is_conflict(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("Patrick", "PERSON", 20, 27),))
+
+        assert FuzzyEntityConflictResolver().have_conflict(entity_a, entity_b)
+
+    def test_custom_threshold(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("patric", "PERSON", 20, 26),))
+
+        # Very high threshold should reject a near-miss.
+        resolver = FuzzyEntityConflictResolver(threshold=0.99)
+        assert not resolver.have_conflict(entity_a, entity_b)
+
+    def test_custom_similarity_fn(self) -> None:
+        entity_a = Entity(detections=(_det("Patrick", "PERSON", 0, 7),))
+        entity_b = Entity(detections=(_det("patric", "PERSON", 20, 26),))
+
+        resolver = FuzzyEntityConflictResolver(similarity_fn=levenshtein_similarity)
+        assert resolver.have_conflict(entity_a, entity_b)
+
+
+# ---------------------------------------------------------------------------
+# FuzzyEntityConflictResolver — resolve
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzyResolve:
+    """Fuzzy resolver merges entities with similar canonical text."""
+
+    def test_merges_similar_entities(self) -> None:
+        entities = [
+            Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
+            Entity(detections=(_det("patric", "PERSON", 20, 26),)),
+        ]
+        result = FuzzyEntityConflictResolver().resolve(entities)
+
+        assert len(result) == 1
+        assert len(result[0].detections) == 2
+
+    def test_does_not_merge_different_entities(self) -> None:
+        entities = [
+            Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
+            Entity(detections=(_det("Paris", "LOCATION", 20, 25),)),
+        ]
+        result = FuzzyEntityConflictResolver().resolve(entities)
+
+        assert len(result) == 2
+
+    def test_transitive_fuzzy_merge(self) -> None:
+        # "Patrick" ~ "Patrik" ~ "Patri" — chain of similarity
+        entities = [
+            Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
+            Entity(detections=(_det("Patrik", "PERSON", 20, 26),)),
+            Entity(detections=(_det("Patri", "PERSON", 40, 45),)),
+        ]
+        result = FuzzyEntityConflictResolver().resolve(entities)
+
+        assert len(result) == 1
+        assert len(result[0].detections) == 3
+
+    def test_with_levenshtein(self) -> None:
+        entities = [
+            Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
+            Entity(detections=(_det("patric", "PERSON", 20, 26),)),
+        ]
+        resolver = FuzzyEntityConflictResolver(similarity_fn=levenshtein_similarity)
+        result = resolver.resolve(entities)
+
+        assert len(result) == 1
+        assert len(result[0].detections) == 2
+
+    def test_empty_list(self) -> None:
+        assert FuzzyEntityConflictResolver().resolve([]) == []

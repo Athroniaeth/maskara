@@ -7,24 +7,28 @@ from v2.conversation_memory import ConversationMemory
 from v2.conversation_pipeline import ConversationAnonymizationPipeline
 from v2.detector import ExactMatchDetector
 from v2.entity_linker import ExactEntityLinker
-from v2.entity_resolver import MergeEntityConflictResolver
+from v2.entity_resolver import FuzzyEntityConflictResolver, MergeEntityConflictResolver
 from v2.placeholder import CounterPlaceholderFactory, AnyPlaceholderFactory
 from v2.span_resolver import ConfidenceSpanConflictResolver
 
 pytestmark = pytest.mark.asyncio
 
 
+from v2.entity_resolver import AnyEntityConflictResolver
+
+
 def _pipeline(
     words: list[tuple[str, str]],
     memory: ConversationMemory | None = None,
     factory: AnyPlaceholderFactory | None = None,
+    entity_resolver: AnyEntityConflictResolver | None = None,
 ) -> ConversationAnonymizationPipeline:
     """Build a conversation pipeline for testing."""
     return ConversationAnonymizationPipeline(
         detector=ExactMatchDetector(words),
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
-        entity_resolver=MergeEntityConflictResolver(),
+        entity_resolver=entity_resolver or MergeEntityConflictResolver(),
         anonymizer=Anonymizer(factory or CounterPlaceholderFactory()),
         memory=memory or ConversationMemory(),
     )
@@ -151,3 +155,65 @@ class TestCrossMessageConsistency:
         await pipeline.anonymize("Bonjour Patrick")
         assert len(memory.all_entities) == 1
         assert memory.all_entities[0].label == "PERSON"
+
+
+# ---------------------------------------------------------------------------
+# Cross-message fuzzy entity resolution
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzyEntityResolution:
+    """FuzzyEntityConflictResolver merges similar entities across messages."""
+
+    async def test_fuzzy_merges_similar_names(self) -> None:
+        pipeline = _pipeline(
+            [("Patrick", "PERSON"), ("patric", "PERSON")],
+            entity_resolver=FuzzyEntityConflictResolver(),
+        )
+        r1, _ = await pipeline.anonymize("Bonjour Patrick")
+        r2, _ = await pipeline.anonymize("Bonjour patric")
+
+        assert "<<PERSON_1>>" in r1
+        assert "<<PERSON_1>>" in r2
+
+    async def test_without_fuzzy_keeps_separate(self) -> None:
+        pipeline = _pipeline([("Patrick", "PERSON"), ("patric", "PERSON")])
+        r1, _ = await pipeline.anonymize("Bonjour Patrick")
+        r2, _ = await pipeline.anonymize("Bonjour patric")
+
+        assert "<<PERSON_1>>" in r1
+        assert "<<PERSON_2>>" in r2
+
+    async def test_fuzzy_does_not_merge_different_labels(self) -> None:
+        pipeline = _pipeline(
+            [("Patrick", "PERSON"), ("patric", "LOCATION")],
+            entity_resolver=FuzzyEntityConflictResolver(),
+        )
+        await pipeline.anonymize("Bonjour Patrick")
+        r2, _ = await pipeline.anonymize("A patric")
+
+        assert "<<LOCATION_1>>" in r2
+
+    async def test_fuzzy_deanonymize_with_ent(self) -> None:
+        pipeline = _pipeline(
+            [("Patrick", "PERSON"), ("patric", "PERSON")],
+            entity_resolver=FuzzyEntityConflictResolver(),
+        )
+        await pipeline.anonymize("Bonjour Patrick")
+        await pipeline.anonymize("Bonjour patric")
+
+        result = pipeline.deanonymize_with_ent("<<PERSON_1>> est là")
+        assert result == "Patrick est là"
+
+    async def test_fuzzy_anonymize_with_ent_replaces_all_variants(self) -> None:
+        pipeline = _pipeline(
+            [("Patrick", "PERSON"), ("patric", "PERSON")],
+            entity_resolver=FuzzyEntityConflictResolver(),
+        )
+        await pipeline.anonymize("Bonjour Patrick")
+        await pipeline.anonymize("Bonjour patric")
+
+        result = pipeline.anonymize_with_ent("patric et Patrick")
+        assert "patric" not in result
+        assert "Patrick" not in result
+        assert "<<PERSON_1>>" in result

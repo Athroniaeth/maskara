@@ -1,6 +1,7 @@
 from typing import Protocol
 
 from v2.models import Detection, Entity
+from v2.similarity import AnySimilarityFn, jaro_winkler_similarity
 
 
 class AnyEntityConflictResolver(Protocol):
@@ -123,3 +124,52 @@ class MergeEntityConflictResolver:
 
         result.sort(key=lambda e: min(d.position.start_pos for d in e.detections))
         return result
+
+
+class FuzzyEntityConflictResolver(MergeEntityConflictResolver):
+    """Resolver that merges entities with similar canonical text.
+
+    Subclasses ``MergeEntityConflictResolver`` and overrides
+    ``have_conflict`` to use string similarity instead of shared
+    detections.  The ``resolve`` loop is inherited as-is.
+
+    Args:
+        similarity_fn: A ``(str, str) -> float`` function returning
+            a score in [0.0, 1.0].  Defaults to Jaro-Winkler.
+        threshold: Minimum similarity score to consider two entities
+            as the same.  Defaults to 0.85.
+
+    Example:
+        >>> from v2.models import Detection, Entity, Span
+        >>> e1 = Entity(detections=(Detection("Patrick", "PERSON", Span(0, 7), 0.9),))
+        >>> e2 = Entity(detections=(Detection("patric", "PERSON", Span(20, 26), 0.8),))
+        >>> resolver = FuzzyEntityConflictResolver()
+        >>> result = resolver.resolve([e1, e2])
+        >>> len(result)
+        1
+    """
+
+    def __init__(
+        self,
+        similarity_fn: AnySimilarityFn = jaro_winkler_similarity,
+        threshold: float = 0.85,
+    ) -> None:
+        self._similarity_fn = similarity_fn
+        self._threshold = threshold
+
+    def have_conflict(self, entity_a: Entity, entity_b: Entity) -> bool:
+        """Check whether two entities have similar canonical text.
+
+        Args:
+            entity_a: The first entity.
+            entity_b: The second entity.
+
+        Returns:
+            ``True`` if the entities have the same label and their
+            canonical texts are similar above the threshold.
+        """
+        if entity_a.label != entity_b.label:
+            return False
+        text_a = entity_a.detections[0].text.lower()
+        text_b = entity_b.detections[0].text.lower()
+        return self._similarity_fn(text_a, text_b) >= self._threshold
