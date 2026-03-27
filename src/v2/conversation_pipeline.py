@@ -11,6 +11,7 @@ from v2.conversation_memory import ConversationMemory, AnyConversationMemory
 from v2.detector import AnyDetector
 from v2.entity_linker import AnyEntityLinker
 from v2.entity_resolver import AnyEntityConflictResolver
+from v2.models import Entity
 from v2.pipeline import AnonymizationPipeline
 from v2.span_resolver import AnySpanConflictResolver
 from v2.utils import hash_sha256
@@ -56,18 +57,22 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
 
         self.memory = memory or ConversationMemory()
 
-    async def anonymize(self, text: str) -> str:
-        """Run detection, record entities in memory, then str.replace.
+    async def anonymize(self, text: str) -> tuple[str, list[Entity]]:
+        """Run detection, record entities in memory, then anonymize.
+
+        Uses ``all_entities`` from memory for token creation so that
+        counters stay consistent across messages.
 
         Args:
             text: The original text to anonymize.
 
         Returns:
-            The anonymized text with consistent tokens across messages.
+            A tuple of (anonymized text, entities used for anonymization).
         """
-        result, entities = await super().anonymize(text=text)
+        entities = await self.detect_entities(text)
         self.memory.record(hash_sha256(text), entities)
-        return result
+        result = self.anonymize_with_ent(text)
+        return result, entities
 
     def deanonymize_with_ent(self, text: str) -> str:
         """Replace all known tokens with original values via ``str.replace``.

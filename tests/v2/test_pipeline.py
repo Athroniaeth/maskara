@@ -21,7 +21,7 @@ pytestmark = pytest.mark.asyncio
 def _pipeline(
     words: list[tuple[str, str]],
     cache: BaseCache | None = None,
-    factory: AnyPlaceholderFactory = None,
+    factory: AnyPlaceholderFactory | None = None,
 ) -> AnonymizationPipeline:
     """Build a pipeline with ExactMatchDetector for testing."""
     return AnonymizationPipeline(
@@ -44,12 +44,12 @@ class TestAnonymize:
 
     async def test_single_entity(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        result = await pipeline.anonymize("Bonjour Patrick")
+        result, _ = await pipeline.anonymize("Bonjour Patrick")
         assert result == "Bonjour <<PERSON_1>>"
 
     async def test_multiple_entities(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Paris", "LOCATION")])
-        result = await pipeline.anonymize("Patrick habite à Paris")
+        result, _ = await pipeline.anonymize("Patrick habite à Paris")
         assert "<<PERSON_1>>" in result
         assert "<<LOCATION_1>>" in result
         assert "Patrick" not in result
@@ -57,12 +57,12 @@ class TestAnonymize:
 
     async def test_expands_to_all_occurrences(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        result = await pipeline.anonymize("Patrick est gentil. Patrick habite ici.")
+        result, _ = await pipeline.anonymize("Patrick est gentil. Patrick habite ici.")
         assert result.count("<<PERSON_1>>") == 2
 
     async def test_no_match_returns_unchanged(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        result = await pipeline.anonymize("Rien à voir ici")
+        result, _ = await pipeline.anonymize("Rien à voir ici")
         assert result == "Rien à voir ici"
 
     async def test_with_redact_factory(self) -> None:
@@ -70,7 +70,7 @@ class TestAnonymize:
             [("Patrick", "PERSON"), ("Henri", "PERSON")],
             factory=RedactPlaceholderFactory(),
         )
-        result = await pipeline.anonymize("Patrick et Henri")
+        result, _ = await pipeline.anonymize("Patrick et Henri")
         assert result == "<PERSON> et <PERSON>"
 
 
@@ -85,8 +85,8 @@ class TestDeanonymize:
     async def test_deanonymize_from_anonymized_text(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=Cache(Cache.MEMORY))
         text = "Bonjour Patrick"
-        anonymized = await pipeline.anonymize(text)
-        restored = await pipeline.deanonymize(anonymized)
+        anonymized, _ = await pipeline.anonymize(text)
+        restored, _ = await pipeline.deanonymize(anonymized)
         assert restored == text
 
     async def test_deanonymize_multiple_entities(self) -> None:
@@ -94,8 +94,8 @@ class TestDeanonymize:
             [("Patrick", "PERSON"), ("Paris", "LOCATION")], cache=Cache(Cache.MEMORY)
         )
         text = "Patrick habite à Paris"
-        anonymized = await pipeline.anonymize(text)
-        restored = await pipeline.deanonymize(anonymized)
+        anonymized, _ = await pipeline.anonymize(text)
+        restored, _ = await pipeline.deanonymize(anonymized)
         assert restored == text
 
     async def test_deanonymize_unknown_text_raises(self) -> None:
@@ -108,15 +108,16 @@ class TestDeanonymize:
             [("Patrick", "PERSON"), ("patric", "PERSON")], cache=Cache(Cache.MEMORY)
         )
         text = "Patrick et patric sont amis"
-        anonymized = await pipeline.anonymize(text)
-        restored = await pipeline.deanonymize(anonymized)
+        anonymized, _ = await pipeline.anonymize(text)
+        restored, _ = await pipeline.deanonymize(anonymized)
         assert restored == text
 
-    async def test_deanonymize_without_cache_raises(self) -> None:
+    async def test_deanonymize_with_default_cache(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=None)
-        anonymized = await pipeline.anonymize("Bonjour Patrick")
-        with pytest.raises(KeyError):
-            await pipeline.deanonymize(anonymized)
+        text = "Bonjour Patrick"
+        anonymized, _ = await pipeline.anonymize(text)
+        restored, _ = await pipeline.deanonymize(anonymized)
+        assert restored == text
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +133,7 @@ class TestCache:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=cache)
 
         # First call detector runs.
-        result1 = await pipeline.anonymize("Bonjour Patrick")
+        result1, _ = await pipeline.anonymize("Bonjour Patrick")
         assert result1 == "Bonjour <<PERSON_1>>"
 
         # Spy on the detector to check it's not called again.
@@ -147,7 +148,7 @@ class TestCache:
         pipeline._detector.detect = counting_detect  # type: ignore
 
         # Second call same text, should use cache.
-        result2 = await pipeline.anonymize("Bonjour Patrick")
+        result2, _ = await pipeline.anonymize("Bonjour Patrick")
         assert result2 == "Bonjour <<PERSON_1>>"
         assert call_count == 0
 
@@ -156,10 +157,10 @@ class TestCache:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=cache)
 
         await pipeline.anonymize("Bonjour Patrick")
-        result = await pipeline.anonymize("Salut Patrick")
+        result, _ = await pipeline.anonymize("Salut Patrick")
         assert "<<PERSON_1>>" in result
 
     async def test_no_cache_still_works(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=None)
-        result = await pipeline.anonymize("Bonjour Patrick")
+        result, _ = await pipeline.anonymize("Bonjour Patrick")
         assert result == "Bonjour <<PERSON_1>>"

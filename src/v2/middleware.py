@@ -90,12 +90,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(content, str) or not content.strip():
                 continue
 
-            if isinstance(message, HumanMessage):
-                # Full NER detection for new user input.
-                result = await self._pipeline.anonymize(content)
-            elif isinstance(message, ToolMessage):
-                # Full NER — tools can return new sensitive data.
-                result = await self._pipeline.anonymize(content)
+            if isinstance(message, (HumanMessage, ToolMessage)):
+                # Full NER detection for user input and tool can return new sensitive data..
+                result, _ = await self._pipeline.anonymize(content)
             elif isinstance(message, AIMessage):
                 # AI messages already contain tokens no anonymization needed.
                 continue
@@ -140,7 +137,15 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
 
-            restored = self._pipeline.deanonymize_with_ent(content)
+            if isinstance(message, HumanMessage):
+                # Use cache-aware deanonymization for human messages,
+                # which may contain tokens from previous LLM output or tool calls.
+                restored = self._pipeline.deanonymize(content)
+            elif isinstance(message, (AIMessage, ToolMessage)):
+                # Fast string replacement for AI and tool messages, which
+                # should only contain tokens from the current conversation.
+
+                restored = self._pipeline.deanonymize_with_ent(content)
 
             if restored == content:
                 continue
@@ -191,7 +196,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         # Re-anonymise the tool response.
         if isinstance(response, ToolMessage) and isinstance(response.content, str):
-            anonymized_content = await self._pipeline.anonymize(response.content)
+            anonymized_content, _ = await self._pipeline.anonymize(response.content)
             response.content = anonymized_content
             return response
 

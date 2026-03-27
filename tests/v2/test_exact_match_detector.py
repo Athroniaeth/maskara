@@ -5,9 +5,9 @@ import re
 import pytest
 
 from v2.detector import ExactMatchDetector
+from v2.models import Detection
 
 pytestmark = pytest.mark.asyncio
-from v2.models import Detection
 
 
 # ---------------------------------------------------------------------------

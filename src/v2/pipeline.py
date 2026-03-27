@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from aiocache.backends.memory import SimpleMemoryBackend
+from aiocache import Cache
 
 from v2.anonymizer import AnyAnonymizer
 from v2.detector import AnyDetector
@@ -56,12 +56,12 @@ class AnonymizationPipeline:
         self._entity_linker = entity_linker
         self._entity_resolver = entity_resolver
         self._anonymizer = anonymizer
-        self._cache = cache or SimpleMemoryBackend()
+        self._cache = cache or Cache(Cache.MEMORY)
 
     @property
     def ph_factory(self) -> "AnyPlaceholderFactory":
         """The placeholder factory used by the anonymizer."""
-        return self._anonymizer._ph_factory
+        return self._anonymizer.ph_factory
 
     async def detect_entities(self, text: str) -> list[Entity]:
         """Run the detection pipeline: detect → resolve → link → resolve.

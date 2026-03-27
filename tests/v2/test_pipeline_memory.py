@@ -8,7 +8,6 @@ from v2.conversation_pipeline import ConversationAnonymizationPipeline
 from v2.detector import ExactMatchDetector
 from v2.entity_linker import ExactEntityLinker
 from v2.entity_resolver import MergeEntityConflictResolver
-from v2.pipeline import AnonymizationPipeline
 from v2.placeholder import CounterPlaceholderFactory, AnyPlaceholderFactory
 from v2.span_resolver import ConfidenceSpanConflictResolver
 
@@ -21,15 +20,12 @@ def _pipeline(
     factory: AnyPlaceholderFactory | None = None,
 ) -> ConversationAnonymizationPipeline:
     """Build a conversation pipeline for testing."""
-    base = AnonymizationPipeline(
+    return ConversationAnonymizationPipeline(
         detector=ExactMatchDetector(words),
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
         anonymizer=Anonymizer(factory or CounterPlaceholderFactory()),
-    )
-    return ConversationAnonymizationPipeline(
-        pipeline=base,
         memory=memory or ConversationMemory(),
     )
 
@@ -128,15 +124,15 @@ class TestCrossMessageConsistency:
 
     async def test_same_entity_same_token_across_messages(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        r1 = await pipeline.anonymize("Bonjour Patrick")
-        r2 = await pipeline.anonymize("Au revoir Patrick")
+        r1, _ = await pipeline.anonymize("Bonjour Patrick")
+        r2, _ = await pipeline.anonymize("Au revoir Patrick")
         assert "<<PERSON_1>>" in r1
         assert "<<PERSON_1>>" in r2
 
     async def test_new_entity_gets_next_counter(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
-        r2 = await pipeline.anonymize("Bonjour Marie")
+        r2, _ = await pipeline.anonymize("Bonjour Marie")
         assert "<<PERSON_2>>" in r2
 
     async def test_mixed_labels_stable(self) -> None:
@@ -144,7 +140,7 @@ class TestCrossMessageConsistency:
             [("Patrick", "PERSON"), ("Paris", "LOCATION"), ("Marie", "PERSON")]
         )
         await pipeline.anonymize("Patrick habite à Paris")
-        r2 = await pipeline.anonymize("Marie habite à Paris")
+        r2, _ = await pipeline.anonymize("Marie habite à Paris")
         # Marie is the 2nd PERSON, Paris stays LOCATION_1
         assert "<<PERSON_2>>" in r2
         assert "<<LOCATION_1>>" in r2

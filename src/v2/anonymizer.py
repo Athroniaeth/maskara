@@ -11,6 +11,8 @@ class AnyAnonymizer(Protocol):
     anonymization and deanonymization of text based on entities.
     """
 
+    ph_factory: AnyPlaceholderFactory
+
     def anonymize(self, text: str, entities: list[Entity]) -> str:
         """Replace entity detections in the text with tokens.
 
@@ -58,7 +60,7 @@ class Anonymizer:
     """
 
     def __init__(self, ph_factory: AnyPlaceholderFactory) -> None:
-        self._ph_factory = ph_factory
+        self.ph_factory = ph_factory
 
     def anonymize(self, text: str, entities: list[Entity]) -> str:
         """Replace each detection in the text with its entity's token.
@@ -77,7 +79,7 @@ class Anonymizer:
         replacements: list[tuple[Span, str]] = []
 
         # Ask the factory to create all tokens at once.
-        tokens = self._ph_factory.create(entities)
+        tokens = self.ph_factory.create(entities)
 
         for entity, token in tokens.items():
             for detection in entity.detections:
@@ -111,7 +113,7 @@ class Anonymizer:
             The restored original text.
         """
         # Recreate the same tokens for each entity.
-        tokens = self._ph_factory.create(entities)
+        tokens = self.ph_factory.create(entities)
 
         # Build a list of (original_position, token, original_text)
         # so we can replace tokens in the correct order.
