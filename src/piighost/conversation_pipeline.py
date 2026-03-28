@@ -77,14 +77,20 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
         entities = await self.detect_entities(text)
         self.memory.record(hash_sha256(text), entities)
         result = self.anonymize_with_ent(text)
+
+        # Required for deanonymize method which looks up mappings via cache.
+        await self._store_mapping(text, result, entities)
         return result, entities
 
-    def deanonymize_with_ent(self, text: str) -> str:
+    async def deanonymize_with_ent(self, text: str) -> str:
         """Replace all known tokens with original values via ``str.replace``.
 
         Works on any text containing tokens, even text never anonymized
         by this pipeline (e.g. LLM-generated output, tool arguments).
         Tokens are replaced **longest-first** to avoid partial matches.
+
+        The result is stored in the cache so that ``deanonymize()`` can
+        look it up later.
 
         Args:
             text: Text potentially containing placeholder tokens.
@@ -97,6 +103,7 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
 
         tokens = self.ph_factory.create(self.resolved_entities)
 
+        anonymized = text
         # Sort by token length descending (longest-first).
         for entity, token in sorted(
             tokens.items(),
@@ -105,6 +112,9 @@ class ConversationAnonymizationPipeline(AnonymizationPipeline):
         ):
             canonical = entity.detections[0].text
             text = text.replace(token, canonical)
+
+        # Store mapping so deanonymize() cache lookup works for this text.
+        await self._store_mapping(text, anonymized, self.resolved_entities)
         return text
 
     def anonymize_with_ent(self, text: str) -> str:

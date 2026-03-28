@@ -7,6 +7,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
 from piighost.entity_linker import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.exceptions import CacheMissError
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import (
     CounterPlaceholderFactory,
@@ -100,7 +101,7 @@ class TestDeanonymize:
 
     async def test_deanonymize_unknown_text_raises(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=Cache(Cache.MEMORY))
-        with pytest.raises(KeyError):
+        with pytest.raises(CacheMissError):
             await pipeline.deanonymize("unknown text")
 
     async def test_deanonymize_with_spelling_variants(self) -> None:

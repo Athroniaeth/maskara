@@ -8,9 +8,14 @@ from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from loguru import logger
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 load_dotenv()
 
@@ -65,8 +70,14 @@ extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 detector = GlinerDetector(
     model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5, flat_ner=True
 )
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(anonymizer=anonymizer)
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+pipeline = ConversationAnonymizationPipeline(
+    detector=detector,
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=anonymizer,
+)
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 graph = create_agent(
     model="openai:gpt-5-mini",

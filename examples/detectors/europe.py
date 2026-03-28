@@ -13,7 +13,7 @@ Combine with common patterns for full coverage:
 """
 
 from piighost.anonymizer import Anonymizer
-from piighost.anonymizer.detector import CompositeDetector, RegexDetector
+from piighost.detector import CompositeDetector, RegexDetector
 
 from .common import create_detector as create_common_detector
 

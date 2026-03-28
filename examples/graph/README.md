@@ -19,10 +19,20 @@ cp .env.example .env
 # Start PostgreSQL
 docker compose up postgres -d
 
-# Install dependencies and start the dev server (http://localhost:8000)
+# Install dependencies and start the dev server (http://localhost:2024)
 uv sync
 uv run aegra dev
 ```
+
+> **Developing piighost locally?** The dependency on `piighost` is configured
+> as an editable path source (`editable = true` in `[tool.uv.sources]`).
+> This means changes you make in `src/piighost/` at the repository root are
+> immediately visible without reinstalling. If you just cloned the repo and
+> `uv sync` installed a stale copy, run:
+>
+> ```bash
+> uv sync --reinstall-package piighost
+> ```
 
 ### 2. Frontend
 

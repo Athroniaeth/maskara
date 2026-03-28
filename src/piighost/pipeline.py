@@ -3,6 +3,7 @@ from typing import Tuple
 from aiocache import Cache
 
 from piighost.anonymizer import AnyAnonymizer
+from piighost.exceptions import CacheMissError
 from piighost.detector import AnyDetector
 from piighost.placeholder import AnyPlaceholderFactory
 from piighost.entity_linker import AnyEntityLinker
@@ -112,7 +113,7 @@ class AnonymizationPipeline:
         cached = await self._cache_get(key)
 
         if cached is None:
-            raise KeyError("No anonymization found for this text")
+            raise CacheMissError(f"No anonymization mapping cached for hash {key!r}")
 
         entities = self._deserialize_entities(cached["entities"])
         result = self._anonymizer.deanonymize(anonymized_text, entities)

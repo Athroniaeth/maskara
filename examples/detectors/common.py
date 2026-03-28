@@ -8,7 +8,7 @@ Usage:
 """
 
 from piighost.anonymizer import Anonymizer
-from piighost.anonymizer.detector import RegexDetector
+from piighost.detector import RegexDetector
 
 PATTERNS: dict[str, str] = {
     "EMAIL": r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",

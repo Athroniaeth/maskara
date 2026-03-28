@@ -28,6 +28,8 @@ from typing import Any, Awaitable, Callable
 
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+from piighost.exceptions import CacheMissError
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 from langgraph.types import Command
@@ -90,12 +92,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(content, str) or not content.strip():
                 continue
 
-            if isinstance(message, (HumanMessage, ToolMessage)):
+            if isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 # Full NER detection for user input and tool can return new sensitive data..
                 result, _ = await self._pipeline.anonymize(content)
-            elif isinstance(message, AIMessage):
-                # AI messages already contain tokens no anonymization needed.
-                continue
             else:
                 raise ValueError("This code only takes Langchain messages into account")
 
@@ -137,15 +136,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
 
-            if isinstance(message, HumanMessage):
-                # Use cache-aware deanonymization for human messages,
-                # which may contain tokens from previous LLM output or tool calls.
-                restored = self._pipeline.deanonymize(content)
-            elif isinstance(message, (AIMessage, ToolMessage)):
-                # Fast string replacement for AI and tool messages, which
-                # should only contain tokens from the current conversation.
-
-                restored = self._pipeline.deanonymize_with_ent(content)
+            try:
+                restored, _ = await self._pipeline.deanonymize(content)
+            except CacheMissError:
+                restored = await self._pipeline.deanonymize_with_ent(content)
 
             if restored == content:
                 continue
@@ -186,7 +180,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         for arg_name, arg_value in args.items():
             if isinstance(arg_value, str):
-                arg_value = self._pipeline.deanonymize_with_ent(arg_value)
+                try:
+                    arg_value, _ = await self._pipeline.deanonymize(arg_value)
+                except CacheMissError:
+                    arg_value = await self._pipeline.deanonymize_with_ent(arg_value)
             patched_args[arg_name] = arg_value
 
         call["args"] = patched_args

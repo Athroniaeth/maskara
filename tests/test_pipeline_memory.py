@@ -49,7 +49,7 @@ class TestDeanonymizeWithEnt:
 
         # LLM generates a new sentence with known tokens
         llm_output = "Il fait beau à <<LOCATION_1>>"
-        result = pipeline.deanonymize_with_ent(llm_output)
+        result = await pipeline.deanonymize_with_ent(llm_output)
         assert result == "Il fait beau à Paris"
 
     async def test_deanonymize_single_token(self) -> None:
@@ -57,26 +57,26 @@ class TestDeanonymizeWithEnt:
         pipeline = _pipeline([("Patrick", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
 
-        result = pipeline.deanonymize_with_ent("<<PERSON_1>>")
+        result = await pipeline.deanonymize_with_ent("<<PERSON_1>>")
         assert result == "Patrick"
 
     async def test_deanonymize_no_tokens_unchanged(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
 
-        result = pipeline.deanonymize_with_ent("Pas de tokens ici")
+        result = await pipeline.deanonymize_with_ent("Pas de tokens ici")
         assert result == "Pas de tokens ici"
 
     async def test_deanonymize_empty_memory(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        result = pipeline.deanonymize_with_ent("<<PERSON_1>>")
+        result = await pipeline.deanonymize_with_ent("<<PERSON_1>>")
         assert result == "<<PERSON_1>>"
 
     async def test_deanonymize_multiple_tokens(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Paris", "LOCATION")])
         await pipeline.anonymize("Patrick habite à Paris")
 
-        result = pipeline.deanonymize_with_ent("<<PERSON_1>> est à <<LOCATION_1>>")
+        result = await pipeline.deanonymize_with_ent("<<PERSON_1>> est à <<LOCATION_1>>")
         assert result == "Patrick est à Paris"
 
 
@@ -202,7 +202,7 @@ class TestFuzzyEntityResolution:
         await pipeline.anonymize("Bonjour Patrick")
         await pipeline.anonymize("Bonjour patric")
 
-        result = pipeline.deanonymize_with_ent("<<PERSON_1>> est là")
+        result = await pipeline.deanonymize_with_ent("<<PERSON_1>> est là")
         assert result == "Patrick est là"
 
     async def test_fuzzy_anonymize_with_ent_replaces_all_variants(self) -> None:

@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 import re
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Protocol
 
 from piighost.models import Detection, Span
+
+if TYPE_CHECKING:
+    from gliner2 import GLiNER2
 
 
 class AnyDetector(Protocol):
@@ -95,3 +101,151 @@ class ExactMatchDetector:
                 )
 
         return detections
+
+
+@dataclass
+class RegexDetector:
+    """Detect entities using regular expressions, one pattern per label.
+
+    Useful for structured PII with a known format (phone numbers, IBANs,
+    API keys, etc.) that a model-based detector may miss.
+
+    Args:
+        patterns: Mapping from entity label to a regex pattern string.
+
+    Example:
+        >>> detector = RegexDetector(patterns={"FR_PHONE": r"\\b(?:\\+33|0)[1-9](?:[\\s.\\-]?\\d{2}){4}\\b"})
+        >>> detections = await detector.detect("Appelez le 06 12 34 56 78")
+    """
+
+    patterns: dict[str, str] = field(default_factory=dict)
+
+    async def detect(self, text: str) -> list[Detection]:
+        """Find all regex matches for the configured patterns.
+
+        Args:
+            text: The input text to search for entities.
+
+        Returns:
+            One ``Detection`` per regex match, with ``confidence=1.0``.
+        """
+        detections: list[Detection] = []
+
+        for label, pattern in self.patterns.items():
+            compiled = re.compile(pattern)
+
+            for match in compiled.finditer(text):
+                detections.append(
+                    Detection(
+                        text=match.group(),
+                        label=label,
+                        position=Span(
+                            start_pos=match.start(),
+                            end_pos=match.end(),
+                        ),
+                        confidence=1.0,
+                    ),
+                )
+
+        return detections
+
+
+@dataclass
+class CompositeDetector:
+    """Run multiple detectors and merge their results.
+
+    Lets you combine detectors (e.g. a model-based detector with a
+    ``RegexDetector``) without changing the pipeline. Deduplication of
+    overlapping spans is handled downstream by the span resolver.
+
+    Args:
+        detectors: Ordered list of detectors to run.
+
+    Example:
+        >>> detector = CompositeDetector(detectors=[
+        ...     ExactMatchDetector([("Patrick", "PERSON")]),
+        ...     RegexDetector(patterns={"FR_PHONE": r"\\b0[1-9](?:[\\s.\\-]?\\d{2}){4}\\b"}),
+        ... ])
+    """
+
+    detectors: list[AnyDetector] = field(default_factory=list)
+
+    async def detect(self, text: str) -> list[Detection]:
+        """Collect detections from every child detector.
+
+        Args:
+            text: The input text to search for entities.
+
+        Returns:
+            Concatenated list of detections from all detectors.
+        """
+        detections: list[Detection] = []
+
+        for detector in self.detectors:
+            detections.extend(await detector.detect(text))
+
+        return detections
+
+
+class GlinerDetector:
+    """Detect entities using a GLiNER2 model.
+
+    Wraps a ``GLiNER2`` model instance so that callers can inject a
+    pre-loaded model (useful for tests and shared workers).
+
+    Args:
+        model: A loaded ``GLiNER2`` model instance.
+        labels: Entity types this detector is configured to find.
+        threshold: Minimum confidence score to keep a prediction.
+        flat_ner: Whether to use flat NER mode (no nested entities).
+
+    Example:
+        >>> from gliner2 import GLiNER2
+        >>> model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+        >>> detector = GlinerDetector(model=model, labels=["PERSON", "LOCATION"])
+        >>> detections = await detector.detect("Je m'appelle Patrick")
+    """
+
+    def __init__(
+        self,
+        model: GLiNER2,
+        labels: list[str],
+        threshold: float = 0.5,
+        flat_ner: bool = True,
+    ) -> None:
+        self.model = model
+        self.labels = labels
+        self.threshold = threshold
+        self.flat_ner = flat_ner
+
+    async def detect(self, text: str) -> list[Detection]:
+        """Run GLiNER2 prediction and convert results to ``Detection`` objects.
+
+        Args:
+            text: The input text to search for entities.
+
+        Returns:
+            Detections whose score meets the configured threshold.
+        """
+        raw_entities = self.model.extract_entities(
+            text,
+            entity_types=self.labels,
+            threshold=self.threshold,
+            include_spans=True,
+            include_confidence=True,
+        )["entities"]
+
+        return [
+            Detection(
+                text=entity["text"],
+                label=entity_type,
+                position=Span(
+                    start_pos=entity["start"],
+                    end_pos=entity["end"],
+                ),
+                confidence=entity["confidence"],
+            )
+            for entity_type, list_entity in raw_entities.items()
+            for entity in list_entity
+        ]
+
