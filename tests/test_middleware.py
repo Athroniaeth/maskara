@@ -16,14 +16,14 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.pipeline.thread import ConversationMemory
+from piighost.pipeline.thread import ThreadAnonymizationPipeline
 from piighost.detector import ExactMatchDetector
-from piighost.entity_linker import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.linker.entity import ExactEntityLinker
+from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 pytestmark = pytest.mark.asyncio
 
@@ -60,8 +60,8 @@ def get_weather(country_or_city: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_pipeline() -> ConversationAnonymizationPipeline:
-    return ConversationAnonymizationPipeline(
+def _build_pipeline() -> ThreadAnonymizationPipeline:
+    return ThreadAnonymizationPipeline(
         detector=ExactMatchDetector([("Patrick", "PERSON"), ("France", "LOCATION")]),
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
@@ -153,7 +153,7 @@ class TestMiddlewareConversation:
 
         # -- Turn 3 ----------------------------------------------------------
         # User asks for weather → triggers tool call.
-        r3 = await agent.ainvoke(
+        await agent.ainvoke(
             {"messages": [HumanMessage(content="Donne moi la meteo ou j'habite")]},
             config,
         )

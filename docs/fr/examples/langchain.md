@@ -54,14 +54,15 @@ from langchain_core.tools import tool
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 load_dotenv()
+
 
 # ---------------------------------------------------------------------------
 # 1. Definir les outils de l'agent
@@ -122,7 +123,7 @@ informations personnelles."
 extractor = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 pipeline = ConversationAnonymizationPipeline(
-    detector=GlinerDetector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),

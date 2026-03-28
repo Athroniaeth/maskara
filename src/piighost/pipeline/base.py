@@ -3,13 +3,13 @@ from typing import Tuple
 from aiocache import Cache
 
 from piighost.anonymizer import AnyAnonymizer
-from piighost.exceptions import CacheMissError
 from piighost.detector import AnyDetector
-from piighost.placeholder import AnyPlaceholderFactory
-from piighost.entity_linker import AnyEntityLinker
-from piighost.entity_resolver import AnyEntityConflictResolver
+from piighost.exceptions import CacheMissError
+from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity, Span
-from piighost.span_resolver import AnySpanConflictResolver
+from piighost.placeholder import AnyPlaceholderFactory
+from piighost.resolver.entity import AnyEntityConflictResolver
+from piighost.resolver.span import AnySpanConflictResolver
 from piighost.utils import hash_sha256
 
 try:

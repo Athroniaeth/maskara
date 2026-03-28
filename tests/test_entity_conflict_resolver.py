@@ -1,6 +1,6 @@
 """Tests for ``MergeEntityConflictResolver`` and ``FuzzyEntityConflictResolver``."""
 
-from piighost.entity_resolver import (
+from piighost.resolver.entity import (
     FuzzyEntityConflictResolver,
     MergeEntityConflictResolver,
 )

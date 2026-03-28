@@ -1,7 +1,7 @@
 """Tests for ``ConfidenceSpanConflictResolver``."""
 
 from piighost.models import Detection, Span
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 
 def _make(

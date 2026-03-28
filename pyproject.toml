@@ -72,6 +72,9 @@ dev = [
     "commitizen>=4.13.9",
     "pytest-asyncio>=0.25",
 ]
+gliner2 = [
+    "gliner2>=1.2.4",
+]
 langchain = [
     "langchain>=1.2.13",
 ]

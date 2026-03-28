@@ -6,16 +6,16 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
-from loguru import logger
+import logging
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline.thread import ThreadAnonymizationPipeline
+from piighost.detector.gliner2 import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
+from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 load_dotenv()
 
@@ -32,7 +32,7 @@ def send_email(to: str, subject: str, body: str) -> str:
     Returns:
         Confirmation string.
     """
-    logger.info("\n[EMAIL SENT] To: {} | Subject: {}\n{}\n", to, subject, body)
+    logging.info("\n[EMAIL SENT] To: {} | Subject: {}\n{}\n", to, subject, body)
     return f"Email successfully sent to {to}."
 
 
@@ -67,11 +67,11 @@ langfuse = get_client()
 langfuse_handler = CallbackHandler()
 extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
-detector = GlinerDetector(
+detector = Gliner2Detector(
     model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5, flat_ner=True
 )
 anonymizer = Anonymizer(CounterPlaceholderFactory())
-pipeline = ConversationAnonymizationPipeline(
+pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),

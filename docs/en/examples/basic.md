@@ -16,8 +16,8 @@ import asyncio
 from gliner2 import GLiNER2
 
 from piighost.anonymizer import Anonymizer
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
@@ -28,12 +28,13 @@ model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 # Build the pipeline
 pipeline = AnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
+
 
 async def main():
     # Anonymize a text
@@ -47,6 +48,7 @@ async def main():
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
     # Patrick lives in Paris. Patrick loves Paris.
+
 
 asyncio.run(main())
 ```
@@ -84,20 +86,21 @@ import asyncio
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 conv_pipeline = ConversationAnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
     memory=ConversationMemory(),
 )
+
 
 async def conversation():
     # First message: NER detection + entity recording
@@ -119,6 +122,7 @@ async def conversation():
     reanon = conv_pipeline.anonymize_with_ent("Answer for Patrick in Paris")
     print(reanon)
     # Answer for <<PERSON_1>> in <<LOCATION_1>>
+
 
 asyncio.run(conversation())
 ```
@@ -156,7 +160,7 @@ In tests, use `ExactMatchDetector` to avoid downloading the model:
 ```python
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory

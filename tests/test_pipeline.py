@@ -5,16 +5,16 @@ from aiocache import Cache, BaseCache
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
-from piighost.entity_linker import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.exceptions import CacheMissError
-from piighost.pipeline import AnonymizationPipeline
+from piighost.linker.entity import ExactEntityLinker
+from piighost.pipeline.base import AnonymizationPipeline
 from piighost.placeholder import (
     CounterPlaceholderFactory,
     RedactPlaceholderFactory,
     AnyPlaceholderFactory,
 )
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.resolver.entity import MergeEntityConflictResolver
+from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 pytestmark = pytest.mark.asyncio
 

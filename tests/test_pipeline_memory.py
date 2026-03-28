@@ -1,23 +1,25 @@
-"""Tests for ``ConversationAnonymizationPipeline``."""
+"""Tests for ``ThreadAnonymizationPipeline``."""
 
 import pytest
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.pipeline.thread import (
+    ThreadAnonymizationPipeline,
+    ConversationMemory,
+)
 from piighost.detector import ExactMatchDetector
-from piighost.entity_linker import ExactEntityLinker
-from piighost.entity_resolver import (
+from piighost.linker.entity import ExactEntityLinker
+from piighost.resolver.entity import (
     FuzzyEntityConflictResolver,
     MergeEntityConflictResolver,
 )
 from piighost.placeholder import CounterPlaceholderFactory, AnyPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.resolver.span import ConfidenceSpanConflictResolver
+
+
+from piighost.resolver.entity import AnyEntityConflictResolver
 
 pytestmark = pytest.mark.asyncio
-
-
-from piighost.entity_resolver import AnyEntityConflictResolver
 
 
 def _pipeline(
@@ -25,9 +27,9 @@ def _pipeline(
     memory: ConversationMemory | None = None,
     factory: AnyPlaceholderFactory | None = None,
     entity_resolver: AnyEntityConflictResolver | None = None,
-) -> ConversationAnonymizationPipeline:
+) -> ThreadAnonymizationPipeline:
     """Build a conversation pipeline for testing."""
-    return ConversationAnonymizationPipeline(
+    return ThreadAnonymizationPipeline(
         detector=ExactMatchDetector(words),
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),

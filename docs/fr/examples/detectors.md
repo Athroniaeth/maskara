@@ -67,7 +67,7 @@ PIIGhost fournit des ensembles de patterns `RegexDetector` dans `examples/detect
 from examples.detectors.common import create_detector
 
 from piighost.anonymizer import Anonymizer
-from piighost.entity_linker import ExactEntityLinker
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
@@ -135,14 +135,14 @@ detector = RegexDetector(patterns=my_patterns)
 ```python
 from gliner2 import GLiNER2
 
-from piighost.detector import GlinerDetector, CompositeDetector
+from piighost.detector import Gliner2Detector, CompositeDetector
 from examples.detectors.common import create_detector as create_regex
 
 model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 detector = CompositeDetector(
     detectors=[
-        GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+        Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
         create_regex(),  # emails, IPs, URLs, cles API, etc.
     ]
 )

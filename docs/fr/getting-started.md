@@ -45,8 +45,8 @@ import asyncio
 from gliner2 import GLiNER2
 
 from piighost.anonymizer import Anonymizer
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
@@ -57,12 +57,13 @@ model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 # 2. Construire le pipeline
 pipeline = AnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
+
 
 async def main():
     # 3. Anonymiser
@@ -76,6 +77,7 @@ async def main():
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
     # Patrick habite a Paris. Patrick aime Paris.
+
 
 asyncio.run(main())
 ```
@@ -95,20 +97,21 @@ import asyncio
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 conv_pipeline = ConversationAnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
     memory=ConversationMemory(),
 )
+
 
 async def conversation():
     # Premier message : detection NER + enregistrement des entites
@@ -125,6 +128,7 @@ async def conversation():
     reanon = conv_pipeline.anonymize_with_ent("Resultat pour Patrick a Paris")
     print(reanon)
     # Resultat pour <<PERSON_1>> a <<LOCATION_1>>
+
 
 asyncio.run(conversation())
 ```
@@ -145,21 +149,23 @@ from langchain_core.tools import tool
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
+
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Envoie un email a l'adresse donnee."""
     return f"Email envoye a {to}."
 
+
 # Construire le pipeline conversationnel
 pipeline = ConversationAnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),

@@ -11,12 +11,12 @@ Intercepts the agent loop at three points:
   to the LLM.
 
 All caching, hashing, and text-level replacement logic is delegated to
-``ConversationAnonymizationPipeline``.  This class is a thin LangChain adapter.
+``ThreadAnonymizationPipeline``.  This class is a thin LangChain adapter.
 """
 
 import importlib.util
 
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.pipeline.thread import ThreadAnonymizationPipeline
 
 if importlib.util.find_spec("langchain") is None:
     raise ImportError(
@@ -35,7 +35,6 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from langgraph.typing import ContextT
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -47,8 +46,8 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             (wraps the base pipeline with conversation memory).
 
     Example:
-        >>> from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-        >>> conv_pipeline = ConversationAnonymizationPipeline(pipeline=base, ph_factory=factory)
+        >>> from piighost.pipeline.thread import ThreadAnonymizationPipeline
+        >>> conv_pipeline = ThreadAnonymizationPipeline(pipeline=base, ph_factory=factory)
         >>> middleware = PIIAnonymizationMiddleware(pipeline=conv_pipeline)
         >>> agent = create_agent(
         ...     model="anthropic:claude-sonnet-4-20250514",
@@ -57,7 +56,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         ... )
     """
 
-    def __init__(self, pipeline: ConversationAnonymizationPipeline) -> None:
+    def __init__(self, pipeline: ThreadAnonymizationPipeline) -> None:
         super().__init__()
         self._pipeline = pipeline
 
@@ -103,7 +102,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
             messages[idx].content = result
 
-            logger.debug(f"Anonymised message {idx} : {result}")
+            logging.debug(f"Anonymised message {idx} : {result}")
             changed = True
 
         return {"messages": messages} if changed else None
@@ -150,7 +149,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         if changed:
             nbr_messages = len(messages)
-            logger.debug(f"Deanonymised {nbr_messages} message(s)")
+            logging.debug(f"Deanonymised {nbr_messages} message(s)")
 
         return {"messages": messages} if changed else None
 

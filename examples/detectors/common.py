@@ -7,7 +7,6 @@ Usage:
     from examples.detectors.common import PATTERNS, create_detector
 """
 
-from piighost.anonymizer import Anonymizer
 from piighost.detector import RegexDetector
 
 PATTERNS: dict[str, str] = {
@@ -36,6 +35,15 @@ def create_detector() -> RegexDetector:
 
 
 if __name__ == "__main__":
+    import asyncio
+
+    from piighost.anonymizer import Anonymizer
+    from piighost.linker.entity import ExactEntityLinker
+    from piighost.resolver.entity import MergeEntityConflictResolver
+    from piighost.pipeline.base import AnonymizationPipeline
+    from piighost.placeholder import CounterPlaceholderFactory
+    from piighost.resolver.span import ConfidenceSpanConflictResolver
+
     text = (
         "Contact me at alice.smith@example.com or call +33 6 12 34 56 78. "
         "My server is at 192.168.1.42 and also at https://api.example.com/v1. "
@@ -43,13 +51,25 @@ if __name__ == "__main__":
         "Card: 4532-1234-5678-9012."
     )
 
-    detector = create_detector()
-    anonymizer = Anonymizer(detector=detector)
-    result = anonymizer.anonymize(text)
+    pipeline = AnonymizationPipeline(
+        detector=create_detector(),
+        span_resolver=ConfidenceSpanConflictResolver(),
+        entity_linker=ExactEntityLinker(),
+        entity_resolver=MergeEntityConflictResolver(),
+        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    )
 
-    print("=== Common PII Detector ===\n")
-    print(f"Original:\n  {result.original_text}\n")
-    print(f"Anonymized:\n  {result.anonymized_text}\n\n")
-    print("Detected entities:")
-    for p in result.placeholders:
-        print(f"  [{p.label}] {p.original!r} -> {p.replacement}")
+    async def main() -> None:
+        anonymized, entities = await pipeline.anonymize(text)
+
+        print("=== Common PII Detector ===\n")
+        print(f"Original:\n  {text}\n")
+        print(f"Anonymized:\n  {anonymized}\n")
+        print("Detected entities:")
+
+        tokens = pipeline.ph_factory.create(entities)
+        for entity, token in tokens.items():
+            canonical = entity.detections[0].text
+            print(f"  [{entity.label}] {canonical!r} -> {token}")
+
+    asyncio.run(main())

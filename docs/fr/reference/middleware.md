@@ -118,22 +118,24 @@ from langchain_core.tools import tool
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
+
 
 @tool
 def get_info(person: str) -> str:
     """Retourne des informations sur une personne."""
     return f"{person} est ingenieur logiciel a Paris."
 
+
 model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 pipeline = ConversationAnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
@@ -149,11 +151,13 @@ agent = create_agent(
     middleware=[middleware],
 )
 
+
 async def main():
     result = await agent.ainvoke({
         "messages": [{"role": "user", "content": "Qui est Patrick ?"}]
     })
     print(result["messages"][-1].content)
+
 
 asyncio.run(main())
 ```

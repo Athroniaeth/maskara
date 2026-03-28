@@ -211,16 +211,16 @@ Tous les composants sont independants et peuvent etre combines librement :
 from piighost.anonymizer import Anonymizer
 from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.entity_linker import ExactEntityLinker
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import FuzzyEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 pipeline = ConversationAnonymizationPipeline(
-    detector=SpacyDetector("fr_core_news_sm"),        # Votre detecteur
-    span_resolver=ConfidenceSpanConflictResolver(),   # Ou votre resolver
-    entity_linker=ExactEntityLinker(),                # Ou votre linker
-    entity_resolver=FuzzyEntityConflictResolver(),    # Fusion floue
+    detector=SpacyDetector("fr_core_news_sm"),  # Votre detecteur
+    span_resolver=ConfidenceSpanConflictResolver(),  # Ou votre resolver
+    entity_linker=ExactEntityLinker(),  # Ou votre linker
+    entity_resolver=FuzzyEntityConflictResolver(),  # Fusion floue
     anonymizer=Anonymizer(UUIDPlaceholderFactory()),  # Tags UUID opaques
     memory=ConversationMemory(),
 )
@@ -238,11 +238,12 @@ Les protocoles facilitent les tests unitaires. Utilisez `ExactMatchDetector` pou
 import pytest
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
+
 
 @pytest.mark.asyncio
 async def test_my_pipeline():

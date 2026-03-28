@@ -19,7 +19,7 @@ _src = str(_Path(__file__).parent.parent.resolve())
 if _src not in _sys.path:
     _sys.path.insert(0, _src)
 
-from graph.ttl_sweeper import load_ttl_config, run_sweeper
+from graph.ttl_sweeper import load_ttl_config, run_sweeper  # ty: ignore[E402]
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -92,9 +92,9 @@ async def lifespan(application: FastAPI):
                 default_ttl_minutes=int(ttl_config.get("default_ttl", 20160)),
             )
         )
-        logger.info("TTL sweeper background task started.")
+        logging.info("TTL sweeper background task started.")
     else:
-        logger.info(
+        logging.info(
             "No TTL config found sweeper disabled. "
             "Add checkpointer.ttl to aegra.json to enable it."
         )
@@ -108,7 +108,7 @@ async def lifespan(application: FastAPI):
             await sweeper_task
         except asyncio.CancelledError:
             pass
-        logger.info("TTL sweeper stopped.")
+        logging.info("TTL sweeper stopped.")
 
 
 # ---------------------------------------------------------------------------

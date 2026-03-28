@@ -199,8 +199,8 @@ pipeline = AnonymizationPipeline(
 ```python
 import asyncio
 from piighost.anonymizer import Anonymizer
-from piighost.detector import GlinerDetector
-from piighost.entity_linker import ExactEntityLinker
+from piighost.detector import Gliner2Detector
+from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
@@ -210,12 +210,13 @@ from gliner2 import GLiNER2
 model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 pipeline = AnonymizationPipeline(
-    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
     span_resolver=ConfidenceSpanConflictResolver(),
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
+
 
 async def main():
     # Async anonymization
@@ -225,6 +226,7 @@ async def main():
     # Deanonymize via cache lookup
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)  # Patrick is in Lyon.
+
 
 asyncio.run(main())
 ```

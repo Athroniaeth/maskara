@@ -1,6 +1,6 @@
 """Tests for ``ConversationMemory``."""
 
-from piighost.conversation_memory import ConversationMemory
+from piighost.pipeline.thread import ConversationMemory
 from piighost.models import Detection, Entity, Span
 
 

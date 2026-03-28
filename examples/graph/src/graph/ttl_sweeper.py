@@ -46,10 +46,10 @@ def load_ttl_config() -> dict | None:
                 data = json.loads(path.read_text())
                 ttl = data.get("checkpointer", {}).get("ttl")
                 if ttl:
-                    logger.info("TTL config loaded from %s: %s", path, ttl)
+                    logging.info("TTL config loaded from %s: %s", path, ttl)
                     return ttl
             except Exception:
-                logger.exception("Failed to read config file: %s", path)
+                logging.exception("Failed to read config file: %s", path)
 
     return None
 
@@ -92,14 +92,14 @@ async def sweep_expired_threads(base_url: str, default_ttl_minutes: int) -> None
             if created_at < cutoff:
                 await client.threads.delete(thread_id)
                 deleted += 1
-                logger.info("Deleted thread %s (created %s)", thread_id, created_at)
+                logging.info("Deleted thread %s (created %s)", thread_id, created_at)
 
         if len(threads) < limit:
             break
         offset += limit
 
     if deleted:
-        logger.info("Sweep complete %d thread(s) deleted.", deleted)
+        logging.info("Sweep complete %d thread(s) deleted.", deleted)
 
 
 async def run_sweeper(
@@ -117,7 +117,7 @@ async def run_sweeper(
         sweep_interval_minutes: How often to run a sweep.
         default_ttl_minutes: Max thread age in minutes before deletion.
     """
-    logger.info(
+    logging.info(
         "TTL sweeper started ttl=%d min, interval=%d min, server=%s",
         default_ttl_minutes,
         sweep_interval_minutes,
@@ -129,13 +129,13 @@ async def run_sweeper(
         try:
             await sweep_expired_threads(base_url, default_ttl_minutes)
         except asyncio.CancelledError:
-            logger.info("TTL sweeper stopped.")
+            logging.info("TTL sweeper stopped.")
             return
         except Exception:
-            logger.exception("Unexpected error during sweep.")
+            logging.exception("Unexpected error during sweep.")
 
         try:
             await asyncio.sleep(sweep_interval_minutes * 60)
         except asyncio.CancelledError:
-            logger.info("TTL sweeper stopped.")
+            logging.info("TTL sweeper stopped.")
             return
