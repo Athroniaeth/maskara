@@ -2,14 +2,14 @@
 icon: lucide/rocket
 ---
 
-# Démarrage rapide
+# Demarrage rapide
 
 ## Installation
 
-### Prérequis
+### Prerequis
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (recommandé) ou pip
+- [uv](https://docs.astral.sh/uv/) (recommande) ou pip
 
 ### Installation basique
 
@@ -25,7 +25,7 @@ icon: lucide/rocket
     pip install piighost
     ```
 
-### Installation pour le développement
+### Installation pour le developpement
 
 ```bash
 git clone https://github.com/Athroniaeth/piighost.git
@@ -35,104 +35,140 @@ uv sync
 
 ---
 
-## Usage 1 Anonymisation standalone
+## Usage 1 Pipeline standalone
 
-L'usage le plus simple : créer un `Anonymizer` et l'appeler directement.
-
-```python
-from gliner2 import GLiNER2
-from piighost.anonymizer import Anonymizer, GlinerDetector
-
-# 1. Charger le modèle NER
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-
-# 2. Créer le détecteur
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-
-# 3. Créer l'anonymiseur
-anonymizer = Anonymizer(detector=detector)
-
-# 4. Anonymiser
-result = anonymizer.anonymize(
-    "Patrick habite à Paris. Patrick aime Paris.",
-    labels=["PERSON", "LOCATION"],
-)
-
-print(result.anonymized_text)
-# <<PERSON_1>> habite à <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
-
-# 5. Désanonymiser
-original = anonymizer.deanonymize(result)
-print(original)
-# Patrick habite à Paris. Patrick aime Paris.
-```
-
-!!! info "Labels disponibles"
-    Les labels supportés dépendent du modèle GLiNER2 utilisé. `"fastino/gliner2-multi-v1"` supporte notamment `"PERSON"`, `"LOCATION"`, `"ORGANIZATION"`, `"EMAIL"`, `"PHONE"`.
-
----
-
-## Usage 2 Pipeline avec cache de session
-
-`AnonymizationPipeline` encapsule l'`Anonymizer` avec un cache de session pour réutiliser les placeholders entre plusieurs messages.
+L'usage le plus simple : creer un `AnonymizationPipeline` et l'appeler directement.
 
 ```python
 import asyncio
-from piighost.pipeline import AnonymizationPipeline
 
+from gliner2 import GLiNER2
+
+from piighost.anonymizer import Anonymizer
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+# 1. Charger le modele NER
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+
+# 2. Construire le pipeline
 pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
 
 async def main():
-    # Anonymisation (async, avec cache)
-    result = await pipeline.anonymize("Patrick habite à Paris.")
-    print(result.anonymized_text)
-    # <<PERSON_1>> habite à <<LOCATION_1>>.
+    # 3. Anonymiser
+    anonymized, entities = await pipeline.anonymize(
+        "Patrick habite a Paris. Patrick aime Paris.",
+    )
+    print(anonymized)
+    # <<PERSON_1>> habite a <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
 
-    # Désanonymisation synchrone par remplacement de chaîne
-    restored = pipeline.deanonymize_text("<<PERSON_1>> habite à <<LOCATION_1>>.")
-    print(restored)
-    # Patrick habite à Paris.
-
-    # Reanonymisation (inverse : original → placeholder)
-    reanon = pipeline.reanonymize_text("Résultat pour Patrick à Paris")
-    print(reanon)
-    # Résultat pour <<PERSON_1>> à <<LOCATION_1>>
+    # 4. Desanonymiser
+    original, _ = await pipeline.deanonymize(anonymized)
+    print(original)
+    # Patrick habite a Paris. Patrick aime Paris.
 
 asyncio.run(main())
 ```
 
+!!! info "Labels disponibles"
+    Les labels supportes dependent du modele GLiNER2 utilise. Les labels courants incluent `"PERSON"`, `"LOCATION"`, `"ORGANIZATION"`, `"EMAIL"`, `"PHONE"`.
+
+---
+
+## Usage 2 Pipeline conversationnel avec memoire
+
+`ConversationAnonymizationPipeline` encapsule le pipeline de base avec une `ConversationMemory` pour accumuler les entites entre les messages et fournir desanonymisation/reanonymisation par remplacement de chaine.
+
+```python
+import asyncio
+
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+conv_pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
+)
+
+async def conversation():
+    # Premier message : detection NER + enregistrement des entites
+    anonymized, _ = await conv_pipeline.anonymize("Patrick habite a Paris.")
+    print(anonymized)
+    # <<PERSON_1>> habite a <<LOCATION_1>>.
+
+    # Desanonymisation par remplacement de chaine (fonctionne sur tout texte avec tokens)
+    restored = await conv_pipeline.deanonymize_with_ent("Bonjour <<PERSON_1>> !")
+    print(restored)
+    # Bonjour Patrick !
+
+    # Reanonymisation (valeurs originales → tokens)
+    reanon = conv_pipeline.anonymize_with_ent("Resultat pour Patrick a Paris")
+    print(reanon)
+    # Resultat pour <<PERSON_1>> a <<LOCATION_1>>
+
+asyncio.run(conversation())
+```
+
 ??? info "Cache SHA-256"
-    Le pipeline calcule un hash SHA-256 du texte source. Si le même texte est soumis plusieurs fois, le résultat mis en cache est retourné immédiatement sans appel au modèle NER.
+    Le pipeline utilise aiocache avec des cles SHA-256. Si le meme texte est soumis plusieurs fois, le resultat mis en cache est retourne sans appel au modele NER.
 
 ---
 
 ## Usage 3 Middleware LangChain
 
-Pour intégrer l'anonymisation dans un agent LangGraph, utilisez `PIIAnonymizationMiddleware` :
+Pour integrer l'anonymisation dans un agent LangGraph, utilisez `PIIAnonymizationMiddleware` :
 
 ```python
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
-    """Envoie un email à l'adresse donnée."""
-    return f"Email envoyé à {to}."
+    """Envoie un email a l'adresse donnee."""
+    return f"Email envoye a {to}."
 
-# Construire la stack d'anonymisation
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(anonymizer=anonymizer, labels=["PERSON", "LOCATION"])
+# Construire le pipeline conversationnel
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
+)
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
-# Créer l'agent avec le middleware
+# Creer l'agent avec le middleware
 agent = create_agent(
     model="openai:gpt-4o-mini",
     system_prompt="Tu es un assistant utile.",
@@ -141,15 +177,15 @@ agent = create_agent(
 )
 ```
 
-Le middleware intercepte automatiquement chaque tour de l'agent le LLM ne voit que du texte anonymisé, les outils reçoivent les vraies valeurs, et les messages affichés à l'utilisateur sont désanonymisés.
+Le middleware intercepte automatiquement chaque tour de l'agent le LLM ne voit que du texte anonymise, les outils recoivent les vraies valeurs, et les messages affiches a l'utilisateur sont desanonymises.
 
 ---
 
-## Commandes de développement
+## Commandes de developpement
 
 ```bash
-uv sync                      # Installer les dépendances
+uv sync                      # Installer les dependances
 make lint                    # Format (ruff) + lint (ruff) + type-check (pyrefly)
 uv run pytest                # Lancer tous les tests
-uv run pytest tests/ -k "test_name"  # Lancer un test spécifique
+uv run pytest tests/ -k "test_name"  # Lancer un test specifique
 ```

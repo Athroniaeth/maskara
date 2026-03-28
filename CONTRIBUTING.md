@@ -39,9 +39,9 @@ uv sync
 ### 3. Make Your Changes
 
 Follow the existing code style and patterns. Key conventions:
-- **Protocols** for every pipeline stage — keep components swappable
-- **Frozen dataclasses** for data models (`Entity`, `Placeholder`, `Span`, etc.)
-- **`FakeDetector`** in tests — never load the real GLiNER2 model in CI
+- **Protocols** for every pipeline stage keep components swappable
+- **Frozen dataclasses** for data models (`Entity`, `Detection`, `Span`)
+- **`ExactMatchDetector`** in tests never load the real GLiNER2 model in CI
 
 ### 4. Quality Assurance
 
@@ -65,8 +65,8 @@ Follow the prompts to select commit type (`feat`, `fix`, `docs`, `refactor`, etc
 
 1. **Target the `master` branch**
 2. **Ensure all checks pass**:
-   - `make lint` — no linting or type errors
-   - `uv run pytest` — all tests green
+   - `make lint` no linting or type errors
+   - `uv run pytest` all tests green
 3. **Add tests** for any new functionality
 4. **Update documentation** if the public API changes
 5. **Sync with upstream** if your branch diverged:
@@ -86,10 +86,10 @@ Follow the prompts to select commit type (`feat`, `fix`, `docs`, `refactor`, etc
 
 ## Adding a New Pipeline Stage
 
-New detector, occurrence finder, or placeholder factory implementations must:
-- Implement the corresponding **protocol** (`EntityDetector`, `OccurrenceFinder`, `PlaceholderFactory`, `SpanValidator`)
+New detector, entity linker, entity resolver, or placeholder factory implementations must:
+- Implement the corresponding **protocol** (`AnyDetector`, `AnyEntityLinker`, `AnyEntityConflictResolver`, `AnyPlaceholderFactory`, `AnySpanConflictResolver`)
 - Include tests that use the protocol interface (not the concrete class)
-- Not load heavy ML models in test code — use `FakeDetector` or equivalents
+- Not load heavy ML models in test code use `ExactMatchDetector` or equivalents
 
 ## Questions?
 

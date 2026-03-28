@@ -25,7 +25,7 @@ To people of all backgrounds, identities, cultures, national origins, educationa
 
 ### Be Considerate
 
-Our community spans the globe with varied primary languages. Your work and words affect others globally — be mindful of that.
+Our community spans the globe with varied primary languages. Your work and words affect others globally be mindful of that.
 
 ### Be Respectful
 

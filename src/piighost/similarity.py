@@ -1,6 +1,6 @@
 """String similarity functions for fuzzy entity matching.
 
-Pure Python implementations — no external dependencies.
+Pure Python implementations no external dependencies.
 Both functions return a float in ``[0.0, 1.0]`` where 1.0 means identical.
 """
 
@@ -12,7 +12,7 @@ AnySimilarityFn = Callable[[str, str], float]
 def jaro_winkler_similarity(s1: str, s2: str, prefix_weight: float = 0.1) -> float:
     """Jaro-Winkler similarity between two strings.
 
-    Good for short strings like entity names — gives a bonus for a shared
+    Good for short strings like entity names gives a bonus for a shared
     prefix (up to 4 characters).
 
     Args:

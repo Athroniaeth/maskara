@@ -8,100 +8,116 @@ This page covers the fundamental usages of the library without any LangChain int
 
 ---
 
-## Simple anonymization
-
-```python
-from gliner2 import GLiNER2
-from piighost.anonymizer import Anonymizer, GlinerDetector
-
-# Load the GLiNER2 model
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-
-# Create the detector with a confidence threshold
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-
-# Create the anonymizer
-anonymizer = Anonymizer(detector=detector)
-
-# Anonymize a text
-result = anonymizer.anonymize(
-    "Patrick lives in Paris. Patrick loves Paris.",
-    labels=["PERSON", "LOCATION"],
-)
-
-print(result.anonymized_text)
-# <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
-
-print(result.original_text)
-# Patrick lives in Paris. Patrick loves Paris.
-
-# Inspect the created placeholders
-for placeholder in result.placeholders:
-    print(f"{placeholder.original!r} → {placeholder.replacement!r} ({placeholder.label})")
-# 'Patrick' → '<<PERSON_1>>' (PERSON)
-# 'Paris' → '<<LOCATION_1>>' (LOCATION)
-```
-
----
-
-## Deanonymization
-
-```python
-# Restore the original text from an AnonymizationResult
-original = anonymizer.deanonymize(result)
-print(original)
-# Patrick lives in Paris. Patrick loves Paris.
-```
-
-!!! note "Span-based"
-    `Anonymizer.deanonymize()` uses **precomputed reverse spans** — it is character-precise but requires keeping the `AnonymizationResult` object.
-
----
-
-## Multiple entity types
-
-```python
-result = anonymizer.anonymize(
-    "Mary Smith works at Acme Corp in Lyon.",
-    labels=["PERSON", "ORGANIZATION", "LOCATION"],
-)
-
-print(result.anonymized_text)
-# <<PERSON_1>> works at <<ORGANIZATION_1>> in <<LOCATION_1>>.
-```
-
----
-
-## Session pipeline with caching
-
-For multi-message scenarios (conversations), `AnonymizationPipeline` maintains a placeholder registry and avoids re-detecting the same entities.
+## Simple anonymization with the pipeline
 
 ```python
 import asyncio
-from piighost.pipeline import AnonymizationPipeline
 
+from gliner2 import GLiNER2
+
+from piighost.anonymizer import Anonymizer
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+# Load the GLiNER2 model
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+
+# Build the pipeline
 pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+)
+
+async def main():
+    # Anonymize a text
+    anonymized, entities = await pipeline.anonymize(
+        "Patrick lives in Paris. Patrick loves Paris.",
+    )
+    print(anonymized)
+    # <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
+
+    # Deanonymize
+    original, _ = await pipeline.deanonymize(anonymized)
+    print(original)
+    # Patrick lives in Paris. Patrick loves Paris.
+
+asyncio.run(main())
+```
+
+---
+
+## Inspecting entities
+
+The pipeline returns the entities used for anonymization:
+
+```python
+async def main():
+    anonymized, entities = await pipeline.anonymize(
+        "Mary Smith works at Acme Corp in Lyon.",
+    )
+    print(anonymized)
+    # <<PERSON_1>> works at <<ORGANIZATION_1>> in <<LOCATION_1>>.
+
+    for entity in entities:
+        canonical = entity.detections[0].text
+        print(f"'{canonical}' [{entity.label}] {len(entity.detections)} detection(s)")
+
+asyncio.run(main())
+```
+
+---
+
+## Conversation pipeline with memory
+
+For multi-message scenarios (conversations), `ConversationAnonymizationPipeline` accumulates entities across messages and provides string-based deanonymization/reanonymization.
+
+```python
+import asyncio
+
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+conv_pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
 )
 
 async def conversation():
-    # First message: NER detection + caching
-    r1 = await pipeline.anonymize("Patrick is in Paris.")
-    print(r1.anonymized_text)
+    # First message: NER detection + entity recording
+    r1, _ = await conv_pipeline.anonymize("Patrick is in Paris.")
+    print(r1)
     # <<PERSON_1>> is in <<LOCATION_1>>.
 
-    # Same text again: result from cache (no second NER call)
-    r2 = await pipeline.anonymize("Patrick is in Paris.")
-    print(r2.anonymized_text)
+    # Same text again: cache hit (no second NER call)
+    r2, _ = await conv_pipeline.anonymize("Patrick is in Paris.")
+    print(r2)
     # <<PERSON_1>> is in <<LOCATION_1>>.
 
-    # Synchronous deanonymization on any derived string
-    print(pipeline.deanonymize_text("Hello, <<PERSON_1>>!"))
+    # String-based deanonymization on any text with tokens
+    restored = await conv_pipeline.deanonymize_with_ent("Hello, <<PERSON_1>>!")
+    print(restored)
     # Hello, Patrick!
 
-    # Reanonymize (original → placeholder)
-    print(pipeline.reanonymize_text("Answer for Patrick in Paris"))
+    # String-based reanonymization (original → token)
+    reanon = conv_pipeline.anonymize_with_ent("Answer for Patrick in Paris")
+    print(reanon)
     # Answer for <<PERSON_1>> in <<LOCATION_1>>
 
 asyncio.run(conversation())
@@ -109,81 +125,54 @@ asyncio.run(conversation())
 
 ---
 
-## Custom store (Redis, PostgreSQL…)
+## Different placeholder factories
 
-By default, the pipeline uses an in-memory store. For cross-process persistence, implement `PlaceholderStore`:
-
-```python
-from piighost.pipeline import PlaceholderStore, AnonymizationPipeline
-from piighost.anonymizer.models import AnonymizationResult
-import pickle
-
-class RedisPlaceholderStore:
-    def __init__(self, client):
-        self._client = client
-
-    async def get(self, key: str) -> AnonymizationResult | None:
-        data = await self._client.get(f"piighost:{key}")
-        return pickle.loads(data) if data else None
-
-    async def set(self, key: str, result: AnonymizationResult) -> None:
-        await self._client.set(f"piighost:{key}", pickle.dumps(result))
-
-# Inject the Redis store
-pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
-    store=RedisPlaceholderStore(redis_client),
-)
-```
-
----
-
-## Inspecting results
-
-`AnonymizationResult` exposes all information from the anonymization pass:
+By default, `CounterPlaceholderFactory` generates `<<LABEL_N>>` tags. You can swap it for other strategies:
 
 ```python
-result = anonymizer.anonymize(
-    "Contact John Martin at the Lyon office.",
-    labels=["PERSON", "LOCATION"],
+from piighost.placeholder import HashPlaceholderFactory, RedactPlaceholderFactory
+
+# Hash-based: deterministic opaque tags
+pipeline_hash = AnonymizationPipeline(
+    ...,
+    anonymizer=Anonymizer(HashPlaceholderFactory()),
 )
+# Produces: <PERSON:a1b2c3d4>
 
-# Anonymized text
-print(result.anonymized_text)
-
-# Iterate over placeholders
-for p in result.placeholders:
-    print(f"'{p.original}' → '{p.replacement}' [{p.label}]")
-
-# Count anonymized entities
-print(f"{len(result.placeholders)} entity(ies) anonymized")
+# Redact: all entities get <LABEL> (no counter)
+pipeline_redact = AnonymizationPipeline(
+    ...,
+    anonymizer=Anonymizer(RedactPlaceholderFactory()),
+)
+# Produces: <PERSON>
 ```
 
 ---
 
 ## Testing without loading GLiNER2
 
-In tests, use a `FakeDetector` to avoid downloading the model:
+In tests, use `ExactMatchDetector` to avoid downloading the model:
 
 ```python
-from typing import Sequence
-from piighost.anonymizer.models import Entity
 from piighost.anonymizer import Anonymizer
+from piighost.detector import ExactMatchDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
-class FakeDetector:
-    def __init__(self, entities: list[Entity]):
-        self._entities = entities
-
-    def detect(self, text: str, labels: Sequence[str]) -> list[Entity]:
-        return self._entities
+pipeline = AnonymizationPipeline(
+    detector=ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")]),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+)
 
 # Deterministic detection without an NER model
-fake = FakeDetector([
-    Entity(text="Patrick", label="PERSON", start=0, end=7, score=1.0),
-    Entity(text="Paris", label="LOCATION", start=17, end=22, score=1.0),
-])
-anonymizer = Anonymizer(detector=fake)
+anonymized, entities = await pipeline.anonymize("Patrick lives in Paris.")
+assert anonymized == "<<PERSON_1>> lives in <<LOCATION_1>>."
 ```
 
 See also [Extending PIIGhost](../extending.md) for creating other custom components.

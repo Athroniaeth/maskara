@@ -2,7 +2,7 @@
 icon: lucide/link
 ---
 
-# LangChain v1 integration
+# LangChain integration
 
 This page shows the complete integration of PIIGhost into a LangGraph agent, based on the example available in [`examples/graph/`](https://github.com/Athroniaeth/piighost/tree/main/examples/graph).
 
@@ -34,10 +34,11 @@ To use the LangChain middleware, install the additional dependencies:
 ```
 GLiNER2 model
     └── GlinerDetector
-            └── Anonymizer
-                    └── AnonymizationPipeline
-                                └── PIIAnonymizationMiddleware
-                                            └── create_agent(middleware=[...])
+            └── ConversationAnonymizationPipeline
+                    ├── AnonymizationPipeline (base)
+                    ├── ConversationMemory
+                    └── PIIAnonymizationMiddleware
+                                └── create_agent(middleware=[...])
 ```
 
 ---
@@ -50,9 +51,15 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 load_dotenv()
 
@@ -85,7 +92,7 @@ def get_weather(country_or_city: str) -> str:
     Returns:
         A weather summary string.
     """
-    return f"The weather in {country_or_city} is 22°C and sunny."
+    return f"The weather in {country_or_city} is 22C and sunny."
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +106,7 @@ that replace real values for privacy reasons.
 Rules:
 1. Treat every placeholder as if it were the real value. Never comment on its \
 format, never say it is a token, never ask the user to reveal it.
-2. Placeholders can be passed directly to tools — use them as-is as input arguments. \
+2. Placeholders can be passed directly to tools use them as-is as input arguments. \
 This preserves the user's privacy while still allowing tools to operate.
 3. If the user asks for a specific detail about a placeholder \
 (e.g. "what is the first letter?"), reply briefly: "I cannot answer that question \
@@ -111,13 +118,15 @@ as the data has been anonymized to protect your personal information."
 # ---------------------------------------------------------------------------
 
 # Load the GLiNER2 model (HuggingFace download ~500 MB on first run)
-extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+extractor = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
-detector = GlinerDetector(model=extractor, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
@@ -139,18 +148,18 @@ graph = create_agent(
 
 `PIIAnonymizationMiddleware` intercepts each agent turn at three points:
 
-### `abefore_model` — before the LLM
+### `abefore_model` before the LLM
 
 ```
 User       : "Send an email to Patrick in Paris"
       ↓
-Middleware : NER detection on HumanMessage
+Middleware : NER detection via pipeline.anonymize()
            → "Send an email to <<PERSON_1>> in <<LOCATION_1>>"
       ↓
 LLM sees   : "Send an email to <<PERSON_1>> in <<LOCATION_1>>"
 ```
 
-### `awrap_tool_call` — around tools
+### `awrap_tool_call` around tools
 
 ```
 LLM calls    : send_email(to="<<PERSON_1>>", subject="...", body="...")
@@ -168,7 +177,7 @@ Middleware   : reanonymize response
 LLM sees     : "Email successfully sent to <<PERSON_1>>."
 ```
 
-### `aafter_model` — after the LLM
+### `aafter_model` after the LLM
 
 ```
 LLM replies  : "Done! Email sent to <<PERSON_1>>."
@@ -218,7 +227,7 @@ graph = create_agent(
 )
 ```
 
-1. Langfuse callbacks are added to `create_agent`. All LLM interactions are traced — with **anonymized** text (the tracing layer never sees personal data).
+1. Langfuse callbacks are added to `create_agent`. All LLM interactions are traced with **anonymized** text (the tracing layer never sees personal data).
 
 ---
 

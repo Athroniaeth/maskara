@@ -30,7 +30,6 @@ class AnonymizationPipeline:
 
     Cache keys use prefixes to avoid collisions:
     - ``detect:<hash>`` detector results
-    - ``anon:original:<hash>`` original text → (anonymized, entities)
     - ``anon:anonymized:<hash>`` anonymized text → (original, entities)
 
     Args:

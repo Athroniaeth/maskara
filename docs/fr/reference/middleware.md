@@ -2,7 +2,7 @@
 icon: lucide/shield-check
 ---
 
-# Référence Middleware
+# Reference Middleware
 
 Module : `piighost.middleware`
 
@@ -10,34 +10,34 @@ Module : `piighost.middleware`
 
 ## `PIIAnonymizationMiddleware`
 
-Middleware LangChain qui anonymise les données personnelles de façon transparente autour de la frontière LLM / outils.
+Middleware LangChain qui anonymise les donnees personnelles de facon transparente autour de la frontiere LLM / outils.
 
-Étend `AgentMiddleware` de LangChain et intercepte le cycle de l'agent en **3 points** :
+Etend `AgentMiddleware` de LangChain et intercepte le cycle de l'agent en **3 points** :
 
-| Hook | Moment | Opération |
+| Hook | Moment | Operation |
 |------|--------|-----------|
 | `abefore_model` | Avant chaque appel LLM | Anonymise tous les messages |
-| `aafter_model` | Après chaque réponse LLM | Désanonymise pour l'utilisateur |
-| `awrap_tool_call` | Autour de chaque outil | Désanonymise les args, ré-anonymise la réponse |
+| `aafter_model` | Apres chaque reponse LLM | Desanonymise pour l'utilisateur |
+| `awrap_tool_call` | Autour de chaque outil | Desanonymise les args, reanonymise la reponse |
 
 ### Constructeur
 
 ```python
-PIIAnonymizationMiddleware(pipeline: AnonymizationPipeline)
+PIIAnonymizationMiddleware(pipeline: ConversationAnonymizationPipeline)
 ```
 
-| Paramètre | Type | Description |
+| Parametre | Type | Description |
 |-----------|------|-------------|
-| `pipeline` | `AnonymizationPipeline` | Pipeline configuré avec anonymizer, labels et store |
+| `pipeline` | `ConversationAnonymizationPipeline` | Pipeline conversationnel configure avec memoire |
 
 ### Utilisation
 
 ```python
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from langchain.agents import create_agent
 
-middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
+middleware = PIIAnonymizationMiddleware(pipeline=conv_pipeline)
 
 agent = create_agent(
     model="openai:gpt-4o-mini",
@@ -48,66 +48,21 @@ agent = create_agent(
 
 ---
 
-## Hooks détaillés
+## Hooks detailles
 
-### `abefore_model(state, runtime) → dict | None` *(async)*
+### `abefore_model(state, runtime) -> dict | None` *(async)*
 
-Appelé avant chaque appel au LLM. Anonymise tous les messages de la conversation.
+Appele avant chaque appel au LLM. Anonymise tous les messages via `pipeline.anonymize()`.
 
-**Comportement par type de message :**
+### `aafter_model(state, runtime) -> dict | None` *(async)*
 
-- `HumanMessage` → **NER complet** via `pipeline.anonymize()` (détecte de nouvelles entités)
-- `AIMessage` → **remplacement de chaîne** via `pipeline.reanonymize_text()`
-- `ToolMessage` → **remplacement de chaîne** via `pipeline.reanonymize_text()`
+Appele apres chaque reponse du LLM. Desanonymise via `pipeline.deanonymize()` puis `pipeline.deanonymize_with_ent()` en cas de `CacheMissError`.
 
-```python
-# Avant abefore_model :
-# [HumanMessage("Envoie un email à Patrick à Paris")]
+### `awrap_tool_call(request, handler) -> ToolMessage | Command` *(async)*
 
-# Après abefore_model :
-# [HumanMessage("Envoie un email à <<PERSON_1>> à <<LOCATION_1>>")]
-```
-
-**Retourne** : `{"messages": [...]}` si des modifications ont eu lieu, `None` sinon.
-
----
-
-### `aafter_model(state, runtime) → dict | None` *(async)*
-
-Appelé après chaque réponse du LLM. Désanonymise tous les messages pour que l'utilisateur voie les vraies valeurs.
-
-```python
-# Avant aafter_model :
-# [AIMessage("C'est fait ! Email envoyé à <<PERSON_1>>.")]
-
-# Après aafter_model :
-# [AIMessage("C'est fait ! Email envoyé à Patrick.")]
-```
-
-Les métadonnées des messages (`id`, `name`, `tool_calls`) sont préservées lors de la reconstruction.
-
-**Retourne** : `{"messages": [...]}` si des modifications ont eu lieu, `None` sinon.
-
----
-
-### `awrap_tool_call(request, handler) → ToolMessage | Command` *(async)*
-
-Enveloppe chaque appel d'outil en 3 étapes :
-
-1. **Désanonymise** les arguments `str` → l'outil reçoit les vraies valeurs
-2. **Exécute** l'outil via `handler(request)`
-3. **Reanonymise** la réponse de l'outil → le LLM ne voit pas de données personnelles
-
-```python
-# LLM appelle : send_email(to="<<PERSON_1>>", subject="Bonjour")
-#                        ↓  désanonymise args
-# Outil reçoit : send_email(to="Patrick", subject="Bonjour")
-# Outil retourne: "Email envoyé à Patrick."
-#                        ↓  reanonymise réponse
-# LLM voit     : "Email envoyé à <<PERSON_1>>."
-```
-
-Seuls les arguments de type `str` sont désanonymisés. Les types non-string sont passés tels quels.
+1. **Desanonymise** les arguments `str` → l'outil recoit les vraies valeurs
+2. **Execute** l'outil via `handler(request)`
+3. **Reanonymise** la reponse via `pipeline.anonymize()`
 
 ---
 
@@ -122,23 +77,23 @@ sequenceDiagram
 
     U->>M: Message utilisateur (texte brut)
     M->>M: abefore_model()<br/>anonymise HumanMessage via NER
-    M->>L: Message anonymisé (placeholders)
-    L->>M: Appel outil avec args anonymisés
-    M->>M: awrap_tool_call()<br/>désanonymise args
+    M->>L: Message anonymise (placeholders)
+    L->>M: Appel outil avec args anonymises
+    M->>M: awrap_tool_call()<br/>desanonymise args
     M->>T: Appel outil avec vraies valeurs
-    T->>M: Réponse outil (vraies valeurs)
-    M->>M: awrap_tool_call()<br/>reanonymise réponse
-    M->>L: Réponse outil anonymisée
-    L->>M: Réponse finale (placeholders)
-    M->>M: aafter_model()<br/>désanonymise pour l'utilisateur
-    M->>U: Réponse finale (texte clair)
+    T->>M: Reponse outil (vraies valeurs)
+    M->>M: awrap_tool_call()<br/>reanonymise reponse
+    M->>L: Reponse outil anonymisee
+    L->>M: Reponse finale (placeholders)
+    M->>M: aafter_model()<br/>desanonymise pour l'utilisateur
+    M->>U: Reponse finale (texte clair)
 ```
 
 ---
 
-## Dépendance LangChain
+## Dependance LangChain
 
-`PIIAnonymizationMiddleware` requiert que `langchain` soit installé. Si ce n'est pas le cas, une `ImportError` est levée lors de l'import :
+`PIIAnonymizationMiddleware` requiert que `langchain` soit installe. Si ce n'est pas le cas, une `ImportError` est levee :
 
 ```
 ImportError: You must install piighost[langchain] for use middleware
@@ -160,19 +115,31 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 @tool
 def get_info(person: str) -> str:
     """Retourne des informations sur une personne."""
-    return f"{person} est ingénieur logiciel à Paris."
+    return f"{person} est ingenieur logiciel a Paris."
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model, threshold=0.5)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(anonymizer=anonymizer, labels=["PERSON", "LOCATION"])
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
+)
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 agent = create_agent(

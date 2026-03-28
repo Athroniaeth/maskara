@@ -9,12 +9,12 @@
 
 ## Features
 
-- **4-stage pipeline**: Detect → Expand → Map → Replace — covers every occurrence of each entity, not just the first
-- **Bidirectional**: reliable deanonymization via reverse spans, plus fast string-based reanonymization
-- **Session caching**: `PlaceholderStore` protocol for cross-session persistence (SHA-256 keyed)
-- **LangChain middleware**: transparent hooks on `abefore_model`, `aafter_model`, and `awrap_tool_call` — zero changes to your agent code
-- **Protocol-based DI**: every pipeline stage is a swappable protocol — detector, occurrence finder, placeholder factory, span validator
-- **Immutable data models**: frozen dataclasses throughout (`Entity`, `Placeholder`, `Span`, `AnonymizationResult`)
+- **5-stage pipeline**: Detect → Resolve Spans → Link Entities → Resolve Entities → Anonymize covers every occurrence of each entity
+- **Bidirectional**: reliable deanonymization via span-based replacement, plus fast string-based reanonymization
+- **Conversation memory**: `ConversationMemory` accumulates entities across messages for consistent placeholders
+- **LangChain middleware**: transparent hooks on `abefore_model`, `aafter_model`, and `awrap_tool_call` zero changes to your agent code
+- **Protocol-based DI**: every pipeline stage is a swappable protocol detector, span resolver, entity linker, entity resolver, anonymizer, placeholder factory
+- **Immutable data models**: frozen dataclasses throughout (`Entity`, `Detection`, `Span`)
 
 ## Installation
 
@@ -49,47 +49,43 @@ This runs Ruff (format + lint) and PyReFly (type-check) through `uv run`.
 
 ## Quick start
 
-### Standalone anonymization
+### Standalone pipeline
 
 ```python
-from gliner2 import GLiNER2
-from piighost.anonymizer import Anonymizer, GlinerDetector
+import asyncio
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
-
-result = anonymizer.anonymize(
-    "Patrick habite à Paris. Patrick aime Paris.",
-    labels=["PERSON", "LOCATION"],
-)
-
-print(result.anonymized_text)
-# <<PERSON_1>> habite à <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
-
-original = anonymizer.deanonymize(result)
-print(original)
-# Patrick habite à Paris. Patrick aime Paris.
-```
-
-### With session caching
-
-```python
+from piighost.anonymizer import Anonymizer
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+from gliner2 import GLiNER2
+
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
 
-result = await pipeline.anonymize("Patrick habite à Paris.")
-# result.anonymized_text → '<<PERSON_1>> habite à <<LOCATION_1>>.'
+async def main():
+    anonymized, entities = await pipeline.anonymize(
+        "Patrick habite a Paris. Patrick aime Paris.",
+    )
+    print(anonymized)
+    # <<PERSON_1>> habite a <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
 
-pipeline.deanonymize_text("<<PERSON_1>> habite à <<LOCATION_1>>.")
-# → 'Patrick habite à Paris.'
+    original, _ = await pipeline.deanonymize(anonymized)
+    print(original)
+    # Patrick habite a Paris. Patrick aime Paris.
 
-pipeline.reanonymize_text("Résultat pour Patrick à Paris")
-# → 'Résultat pour <<PERSON_1>> à <<LOCATION_1>>'
+asyncio.run(main())
 ```
 
 ### With LangChain middleware
@@ -98,20 +94,28 @@ pipeline.reanonymize_text("Résultat pour Patrick à Paris")
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Send an email to a given address."""
     return f"Email successfully sent to {to}."
 
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
@@ -123,7 +127,7 @@ graph = create_agent(
 )
 ```
 
-The middleware intercepts every agent turn — the LLM only sees anonymized text, tools receive real values, and user-facing messages are deanonymized automatically.
+The middleware intercepts every agent turn the LLM only sees anonymized text, tools receive real values, and user-facing messages are deanonymized automatically.
 
 ## How it works
 
@@ -131,7 +135,7 @@ The middleware intercepts every agent turn — the LLM only sees anonymized text
 
 ```mermaid
 ---
-title: "piighost — Anonymizer.anonymize() flow"
+title: "piighost AnonymizationPipeline.anonymize() flow"
 ---
 flowchart LR
     classDef stage fill:#90CAF9,stroke:#1565C0,color:#000
@@ -139,53 +143,56 @@ flowchart LR
     classDef data fill:#A5D6A7,stroke:#2E7D32,color:#000
 
     INPUT(["`**Input text**
-    _'Patrick habite à Paris.
+    _'Patrick habite a Paris.
     Patrick aime Paris.'_`"]):::data
 
     DETECT["`**1. Detect**
-    _EntityDetector_`"]:::stage
-    EXPAND["`**2. Expand**
-    _OccurrenceFinder_`"]:::stage
-    MAP["`**3. Map**
-    _PlaceholderFactory_`"]:::stage
-    REPLACE["`**4. Replace**
-    _SpanReplacer_`"]:::stage
+    _AnyDetector_`"]:::stage
+    RESOLVE_SPANS["`**2. Resolve Spans**
+    _AnySpanConflictResolver_`"]:::stage
+    LINK["`**3. Link Entities**
+    _AnyEntityLinker_`"]:::stage
+    RESOLVE_ENTITIES["`**4. Resolve Entities**
+    _AnyEntityConflictResolver_`"]:::stage
+    ANONYMIZE["`**5. Anonymize**
+    _AnyAnonymizer_`"]:::stage
 
     OUTPUT(["`**Output**
-    _'<<PERSON_1>> habite à <<LOCATION_1>>.
+    _'<<PERSON_1>> habite a <<LOCATION_1>>.
     <<PERSON_1>> aime <<LOCATION_1>>.'_`"]):::data
 
     INPUT --> DETECT
-    DETECT -- "Entity(Patrick, PERSON)
-    Entity(Paris, LOCATION)" --> EXPAND
-    EXPAND -- "all positions of
-    each entity in text" --> MAP
-    MAP -- "Patrick → <<PERSON_1>>
-    Paris → <<LOCATION_1>>" --> REPLACE
-    REPLACE --> OUTPUT
+    DETECT -- "list[Detection]" --> RESOLVE_SPANS
+    RESOLVE_SPANS -- "deduplicated detections" --> LINK
+    LINK -- "list[Entity]" --> RESOLVE_ENTITIES
+    RESOLVE_ENTITIES -- "merged entities" --> ANONYMIZE
+    ANONYMIZE --> OUTPUT
 
     P_DETECT["`GlinerDetector
     _(GLiNER2 NER)_`"]:::protocol
-    P_EXPAND["`RegexOccurrenceFinder
+    P_RESOLVE_SPANS["`ConfidenceSpanConflictResolver
+    _(highest confidence wins)_`"]:::protocol
+    P_LINK["`ExactEntityLinker
     _(word-boundary regex)_`"]:::protocol
-    P_MAP["`CounterPlaceholderFactory
+    P_RESOLVE_ENTITIES["`MergeEntityConflictResolver
+    _(union-find merge)_`"]:::protocol
+    P_ANONYMIZE["`Anonymizer + CounterPlaceholderFactory
     _(<<LABEL_N>> tags)_`"]:::protocol
-    P_REPLACE["`SpanReplacer
-    _(char-position spans)_`"]:::protocol
 
     P_DETECT -. "implements" .-> DETECT
-    P_EXPAND -. "implements" .-> EXPAND
-    P_MAP -. "implements" .-> MAP
-    P_REPLACE -. "implements" .-> REPLACE
+    P_RESOLVE_SPANS -. "implements" .-> RESOLVE_SPANS
+    P_LINK -. "implements" .-> LINK
+    P_RESOLVE_ENTITIES -. "implements" .-> RESOLVE_ENTITIES
+    P_ANONYMIZE -. "implements" .-> ANONYMIZE
 ```
 
-Each stage uses a **protocol** (structural subtyping) — swap `GlinerDetector` for spaCy, a remote API, or a `FakeDetector` for tests. Same for every other stage.
+Each stage uses a **protocol** (structural subtyping) swap `GlinerDetector` for spaCy, a remote API, or an `ExactMatchDetector` for tests. Same for every other stage.
 
 ### Middleware integration
 
 ```mermaid
 ---
-title: "piighost — PIIAnonymizationMiddleware in an agent loop"
+title: "piighost PIIAnonymizationMiddleware in an agent loop"
 ---
 sequenceDiagram
     participant U as User
@@ -193,9 +200,9 @@ sequenceDiagram
     participant L as LLM
     participant T as Tool
 
-    U->>M: "Envoie un email à Patrick à Paris"
+    U->>M: "Envoie un email a Patrick a Paris"
     M->>M: abefore_model()<br/>NER detect + anonymize
-    M->>L: "Envoie un email à <<PERSON_1>> à <<LOCATION_1>>"
+    M->>L: "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
     L->>M: tool_call(send_email, to=<<PERSON_1>>)
     M->>M: awrap_tool_call()<br/>deanonymize args
     M->>T: send_email(to="Patrick")
@@ -227,5 +234,5 @@ uv run pytest tests/ -k "test_name"  # Run a single test
 ## Additional notes
 
 - The GLiNER2 model is downloaded from HuggingFace on first use (~500 MB)
-- All data models are frozen dataclasses — safe to share across threads
-- Tests use `FakeDetector` to avoid loading the real GLiNER2 model in CI
+- All data models are frozen dataclasses safe to share across threads
+- Tests use `ExactMatchDetector` to avoid loading the real GLiNER2 model in CI

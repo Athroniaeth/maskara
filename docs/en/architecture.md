@@ -4,7 +4,7 @@ icon: lucide/layers
 
 # Architecture
 
-PIIGhost is organized in distinct layers: a **stateless anonymizer** at the core, wrapped in a **session-aware pipeline**, adapted to LangChain via a **middleware**.
+PIIGhost is organized in distinct layers: a **stateless anonymizer** at the core, wrapped in a **pipeline** with caching and entity resolution, extended by a **conversation pipeline** with memory, adapted to LangChain via a **middleware**.
 
 ---
 
@@ -17,25 +17,32 @@ PIIGhost is organized in distinct layers: a **stateless anonymizer** at the core
 └────────────────────────┬────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────┐
-│                   AnonymizationPipeline                  │  ← Cache & session
-│  PlaceholderStore · bidirectional in-memory registry    │
+│            ConversationAnonymizationPipeline             │  ← Memory & string ops
+│  ConversationMemory · deanonymize_with_ent              │
+│  · anonymize_with_ent                                   │
 └────────────────────────┬────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────┐
-│                      Anonymizer                          │  ← 4-stage pipeline
-│  Detect → Expand → Map → Replace                        │
+│                   AnonymizationPipeline                  │  ← Cache & orchestration
+│  aiocache · detect_entities · anonymize · deanonymize   │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│               Component protocols                        │  ← 5-stage pipeline
+│  Detect → Resolve Spans → Link → Resolve Entities       │
+│  → Anonymize                                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 4-stage pipeline
+## 5-stage pipeline
 
-The core of PIIGhost is the `Anonymizer` class, which orchestrates 4 stages — each implemented by a swappable protocol.
+The core of PIIGhost is `AnonymizationPipeline`, which orchestrates 5 stages each implemented by a swappable protocol.
 
 ```mermaid
 ---
-title: "piighost — Anonymizer.anonymize() flow"
+title: "piighost AnonymizationPipeline.anonymize() flow"
 ---
 flowchart LR
     classDef stage fill:#90CAF9,stroke:#1565C0,color:#000
@@ -47,66 +54,66 @@ flowchart LR
     Patrick loves Paris.'_`"]):::data
 
     DETECT["`**1. Detect**
-    _EntityDetector_`"]:::stage
-    EXPAND["`**2. Expand**
-    _OccurrenceFinder_`"]:::stage
-    MAP["`**3. Map**
-    _PlaceholderFactory_`"]:::stage
-    REPLACE["`**4. Replace**
-    _SpanReplacer_`"]:::stage
+    _AnyDetector_`"]:::stage
+    RESOLVE_SPANS["`**2. Resolve Spans**
+    _AnySpanConflictResolver_`"]:::stage
+    LINK["`**3. Link Entities**
+    _AnyEntityLinker_`"]:::stage
+    RESOLVE_ENTITIES["`**4. Resolve Entities**
+    _AnyEntityConflictResolver_`"]:::stage
+    ANONYMIZE["`**5. Anonymize**
+    _AnyAnonymizer_`"]:::stage
 
     OUTPUT(["`**Output**
     _'<<PERSON_1>> lives in <<LOCATION_1>>.
     <<PERSON_1>> loves <<LOCATION_1>>.'_`"]):::data
 
     INPUT --> DETECT
-    DETECT -- "Entity(Patrick, PERSON)
-    Entity(Paris, LOCATION)" --> EXPAND
-    EXPAND -- "all positions
-    of each entity" --> MAP
-    MAP -- "Patrick → <<PERSON_1>>
-    Paris → <<LOCATION_1>>" --> REPLACE
-    REPLACE --> OUTPUT
+    DETECT -- "list[Detection]" --> RESOLVE_SPANS
+    RESOLVE_SPANS -- "deduplicated" --> LINK
+    LINK -- "list[Entity]" --> RESOLVE_ENTITIES
+    RESOLVE_ENTITIES -- "merged" --> ANONYMIZE
+    ANONYMIZE --> OUTPUT
 
     P_DETECT["`GlinerDetector
     _(GLiNER2 NER)_`"]:::protocol
-    P_EXPAND["`RegexOccurrenceFinder
+    P_RESOLVE_SPANS["`ConfidenceSpanConflictResolver
+    _(highest confidence wins)_`"]:::protocol
+    P_LINK["`ExactEntityLinker
     _(word-boundary regex)_`"]:::protocol
-    P_MAP["`CounterPlaceholderFactory
+    P_RESOLVE_ENTITIES["`MergeEntityConflictResolver
+    _(union-find merge)_`"]:::protocol
+    P_ANONYMIZE["`Anonymizer + CounterPlaceholderFactory
     _(<<LABEL_N>> tags)_`"]:::protocol
-    P_REPLACE["`SpanReplacer
-    _(char-position spans)_`"]:::protocol
 
     P_DETECT -. "implements" .-> DETECT
-    P_EXPAND -. "implements" .-> EXPAND
-    P_MAP -. "implements" .-> MAP
-    P_REPLACE -. "implements" .-> REPLACE
+    P_RESOLVE_SPANS -. "implements" .-> RESOLVE_SPANS
+    P_LINK -. "implements" .-> LINK
+    P_RESOLVE_ENTITIES -. "implements" .-> RESOLVE_ENTITIES
+    P_ANONYMIZE -. "implements" .-> ANONYMIZE
 ```
 
-### Stage 1 — Detect
+### Stage 1 Detect
 
-`EntityDetector` runs NER detection on the source text and returns a list of `Entity` objects (start position, end position, label, confidence score).
+`AnyDetector` runs async NER detection on the source text and returns a list of `Detection` objects (text, label, position, confidence).
 
-The provided implementation, `GlinerDetector`, wraps the **GLiNER2** model (`fastino/gliner2-multi-v1`).
+The provided implementations include `GlinerDetector` (wraps GLiNER2), `ExactMatchDetector` (word-boundary regex), `RegexDetector` (pattern-based), and `CompositeDetector` (chains multiple detectors).
 
-### Stage 2 — Expand
+### Stage 2 Resolve Spans
 
-`OccurrenceFinder` locates **all** occurrences of each unique entity in the source text — not just the one the NER model found.
+`AnySpanConflictResolver` handles overlapping detections by keeping the highest-confidence detection when spans overlap.
 
-`RegexOccurrenceFinder` uses a `\bENTITY\b` pattern (case-insensitive) to avoid partial matches (`"APatrick"` is not matched as `"Patrick"`).
+### Stage 3 Link Entities
 
-### Stage 3 — Map
+`AnyEntityLinker` expands and groups detections into `Entity` objects. `ExactEntityLinker` finds all occurrences of each detected text using word-boundary search and groups them by normalized text.
 
-`PlaceholderFactory` assigns a stable tag to each unique `(text, label)` pair.
+### Stage 4 Resolve Entities
 
-`CounterPlaceholderFactory` generates sequential tags: `<<PERSON_1>>`, `<<PERSON_2>>`, `<<LOCATION_1>>`, etc. The same original always returns the same placeholder within a single pass.
+`AnyEntityConflictResolver` merges entities that refer to the same PII. `MergeEntityConflictResolver` uses a union-find algorithm to merge entities sharing common detections. `FuzzyEntityConflictResolver` merges entities with similar canonical text using Jaro-Winkler similarity.
 
-### Stage 4 — Replace
+### Stage 5 Anonymize
 
-`SpanReplacer` applies substitutions by character position and computes **reverse spans** for deanonymization. Two modes:
-
-- **`apply(text, spans)`** — replaces left-to-right, tracks offsets, computes reverse spans
-- **`restore(result)`** — re-applies reverse spans to restore the original
+`AnyAnonymizer` uses a `AnyPlaceholderFactory` to generate tokens (`<<PERSON_1>>`, `<<LOCATION_1>>`) and performs span-based replacement from right to left.
 
 ---
 
@@ -116,7 +123,7 @@ The provided implementation, `GlinerDetector`, wraps the **GLiNER2** model (`fas
 
 ```mermaid
 ---
-title: "piighost — PIIAnonymizationMiddleware in the agent loop"
+title: "piighost PIIAnonymizationMiddleware in the agent loop"
 ---
 sequenceDiagram
     participant U as User
@@ -140,14 +147,11 @@ sequenceDiagram
 
 ### `abefore_model`
 
-Before each LLM call:
-
-- `HumanMessage` → **full NER** via `pipeline.anonymize()` (detects new entities)
-- `AIMessage` / `ToolMessage` → **string replacement** via `pipeline.reanonymize_text()` (covers values deanonymized on the previous turn)
+Before each LLM call: runs `pipeline.anonymize()` on all messages. This performs full NER detection on `HumanMessage` content and re-anonymizes `AIMessage` / `ToolMessage` content via string replacement.
 
 ### `aafter_model`
 
-After each LLM response: replaces all placeholder tags with original values across all messages, so the user always sees readable text.
+After each LLM response: deanonymizes all messages. First tries cache-based `pipeline.deanonymize()`, falls back to entity-based `pipeline.deanonymize_with_ent()` on `CacheMissError`.
 
 ### `awrap_tool_call`
 
@@ -159,23 +163,25 @@ Wraps each tool call:
 
 ---
 
-## Session layer — `AnonymizationPipeline`
+## Conversation layer `ConversationAnonymizationPipeline`
 
-`AnonymizationPipeline` adds two mechanisms on top of the stateless `Anonymizer`:
+`ConversationAnonymizationPipeline` extends `AnonymizationPipeline` with:
 
 | Mechanism | Description |
 |-----------|-------------|
-| **`PlaceholderStore`** (async) | Persistent cross-session cache, keyed by SHA-256 of the source text |
-| **`_results` registry** (sync) | In-memory list for fast synchronous deanonymization/reanonymization |
+| **`ConversationMemory`** | Accumulates entities across messages, deduplicating by `(text.lower(), label)` |
+| **`deanonymize_with_ent()`** | String replacement: tokens → original values (longest-first) |
+| **`anonymize_with_ent()`** | String replacement: original values → tokens (longest-first) |
 
 ```python
-# Cache hit: same text → result returned without NER call
-result1 = await pipeline.anonymize("Patrick lives in Paris.")
-result2 = await pipeline.anonymize("Patrick lives in Paris.")  # from cache
+# Entities persist across messages
+anonymized_1, _ = await conv_pipeline.anonymize("Patrick lives in Paris.")
+anonymized_2, _ = await conv_pipeline.anonymize("Tell me about Patrick.")
+# Both use <<PERSON_1>> for "Patrick"
 
-# Synchronous deanonymization on any derived string
-pipeline.deanonymize_text("Result for <<PERSON_1>>")
-# → "Result for Patrick"
+# String-based deanonymization on any text
+await conv_pipeline.deanonymize_with_ent("Hello <<PERSON_1>>")
+# → "Hello Patrick"
 ```
 
 ---
@@ -186,24 +192,23 @@ All models are **frozen dataclasses** (immutable, thread-safe):
 
 | Model | Key fields |
 |-------|------------|
-| `Entity` | `text`, `label`, `start`, `end`, `score` |
-| `Placeholder` | `original`, `label`, `replacement` |
-| `AnonymizationResult` | `original_text`, `anonymized_text`, `placeholders`, `reverse_spans` |
-| `Span` | `start`, `end`, `replacement` |
-| `ReplacementResult` | `text`, `reverse_spans` |
+| `Detection` | `text`, `label`, `position: Span`, `confidence` |
+| `Entity` | `detections: tuple[Detection, ...]`, `label` (property) |
+| `Span` | `start_pos`, `end_pos`, `overlaps()` method |
 
 ---
 
 ## Dependency injection
 
-Every stage uses a **protocol** (Python structural subtyping) as its injection point. No concrete class is imported directly by `Anonymizer` — only the protocols:
+Every stage uses a **protocol** (Python structural subtyping) as its injection point:
 
 ```python
-Anonymizer(
-    detector=GlinerDetector(...),               # EntityDetector
-    occurrence_finder=RegexOccurrenceFinder(),  # OccurrenceFinder
-    placeholder_factory=CounterPlaceholderFactory(),  # PlaceholderFactory
-    replacer=SpanReplacer(),                    # SpanReplacer
+AnonymizationPipeline(
+    detector=GlinerDetector(...),                    # AnyDetector
+    span_resolver=ConfidenceSpanConflictResolver(),  # AnySpanConflictResolver
+    entity_linker=ExactEntityLinker(),               # AnyEntityLinker
+    entity_resolver=MergeEntityConflictResolver(),   # AnyEntityConflictResolver
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),  # AnyAnonymizer
 )
 ```
 

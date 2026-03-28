@@ -15,6 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **placeholder-factory**: `CounterPlaceholderFactory` for stable `<<LABEL_N>>` tags
 - **span-replacer**: `SpanReplacer` with reverse spans for reliable deanonymization
 - **pipeline**: `AnonymizationPipeline` with `PlaceholderStore` protocol for cross-session caching (SHA-256 keyed)
-- **middleware**: `PIIAnonymizationMiddleware` for LangChain/LangGraph — hooks on `abefore_model`, `aafter_model`, `awrap_tool_call`
+- **middleware**: `PIIAnonymizationMiddleware` for LangChain/LangGraph hooks on `abefore_model`, `aafter_model`, `awrap_tool_call`
 - **pipeline**: `deanonymize_value` for per-argument placeholder resolution
 - **examples**: LangGraph + FastAPI example with React frontend and Aegra integration

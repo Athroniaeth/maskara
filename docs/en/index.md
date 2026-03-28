@@ -12,12 +12,12 @@ icon: lucide/shield
 
 ## Features
 
-- **4-stage pipeline**: Detect → Expand → Map → Replace — covers every occurrence of each entity, not just the first
-- **Bidirectional**: reliable deanonymization via reverse spans, plus fast string-based reanonymization
-- **Session caching**: `PlaceholderStore` protocol for cross-session persistence (SHA-256 keyed)
-- **LangChain middleware**: transparent hooks on `abefore_model`, `aafter_model`, and `awrap_tool_call` — zero changes to your agent code
-- **Protocol-based DI**: every pipeline stage is a swappable protocol — detector, occurrence finder, placeholder factory, span validator
-- **Immutable data models**: frozen dataclasses throughout (`Entity`, `Placeholder`, `Span`, `AnonymizationResult`)
+- **5-stage pipeline**: Detect → Resolve Spans → Link Entities → Resolve Entities → Anonymize covers every occurrence of each entity
+- **Bidirectional**: reliable deanonymization via span-based replacement, plus fast string-based reanonymization
+- **Conversation memory**: `ConversationMemory` accumulates entities across messages for consistent placeholders
+- **LangChain middleware**: transparent hooks on `abefore_model`, `aafter_model`, and `awrap_tool_call` zero changes to your agent code
+- **Protocol-based DI**: every pipeline stage is a swappable protocol detector, span resolver, entity linker, entity resolver, anonymizer, placeholder factory
+- **Immutable data models**: frozen dataclasses throughout (`Entity`, `Detection`, `Span`)
 
 ---
 
@@ -40,24 +40,36 @@ icon: lucide/shield
 ## Quick example
 
 ```python
+import asyncio
+
+from piighost.anonymizer import Anonymizer
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
+
 from gliner2 import GLiNER2
-from piighost.anonymizer import Anonymizer, GlinerDetector
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
-result = anonymizer.anonymize(
-    "Patrick lives in Paris. Patrick loves Paris.",
-    labels=["PERSON", "LOCATION"],
+pipeline = AnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
 
-print(result.anonymized_text)
-# <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
+async def main():
+    anonymized, entities = await pipeline.anonymize(
+        "Patrick lives in Paris. Patrick loves Paris.",
+    )
+    print(anonymized)
+    # <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
 
-original = anonymizer.deanonymize(result)
-print(original)
-# Patrick lives in Paris. Patrick loves Paris.
+asyncio.run(main())
 ```
 
 !!! note "Model download"

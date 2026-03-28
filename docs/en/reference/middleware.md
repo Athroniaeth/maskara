@@ -2,7 +2,7 @@
 icon: lucide/shield-check
 ---
 
-# Reference — Middleware
+# Reference Middleware
 
 Module: `piighost.middleware`
 
@@ -23,21 +23,21 @@ Extends `AgentMiddleware` from LangChain and intercepts the agent loop at **3 po
 ### Constructor
 
 ```python
-PIIAnonymizationMiddleware(pipeline: AnonymizationPipeline)
+PIIAnonymizationMiddleware(pipeline: ConversationAnonymizationPipeline)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `pipeline` | `AnonymizationPipeline` | Configured pipeline with anonymizer, labels and store |
+| `pipeline` | `ConversationAnonymizationPipeline` | Configured conversation pipeline with memory |
 
 ### Usage
 
 ```python
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from langchain.agents import create_agent
 
-middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
+middleware = PIIAnonymizationMiddleware(pipeline=conv_pipeline)
 
 agent = create_agent(
     model="openai:gpt-4o-mini",
@@ -50,15 +50,15 @@ agent = create_agent(
 
 ## Hooks in detail
 
-### `abefore_model(state, runtime) → dict | None` *(async)*
+### `abefore_model(state, runtime) -> dict | None` *(async)*
 
-Called before each LLM call. Anonymizes all messages in the conversation.
+Called before each LLM call. Anonymizes all messages in the conversation via `pipeline.anonymize()`.
 
 **Behavior by message type:**
 
-- `HumanMessage` → **full NER** via `pipeline.anonymize()` (detects new entities)
-- `AIMessage` → **string replacement** via `pipeline.reanonymize_text()`
-- `ToolMessage` → **string replacement** via `pipeline.reanonymize_text()`
+- `HumanMessage` → full NER detection and anonymization
+- `AIMessage` → anonymization (re-anonymizes any deanonymized values)
+- `ToolMessage` → anonymization (re-anonymizes tool responses)
 
 ```python
 # Before abefore_model:
@@ -72,9 +72,9 @@ Called before each LLM call. Anonymizes all messages in the conversation.
 
 ---
 
-### `aafter_model(state, runtime) → dict | None` *(async)*
+### `aafter_model(state, runtime) -> dict | None` *(async)*
 
-Called after each LLM response. Deanonymizes all messages so the user sees real values.
+Called after each LLM response. Deanonymizes all messages so the user sees real values. First tries `pipeline.deanonymize()` (cache-based), falls back to `pipeline.deanonymize_with_ent()` (entity-based) on `CacheMissError`.
 
 ```python
 # Before aafter_model:
@@ -84,19 +84,17 @@ Called after each LLM response. Deanonymizes all messages so the user sees real 
 # [AIMessage("Done! Email sent to Patrick.")]
 ```
 
-Message metadata (`id`, `name`, `tool_calls`) is preserved when reconstructing messages.
-
 **Returns**: `{"messages": [...]}` if modifications were made, `None` otherwise.
 
 ---
 
-### `awrap_tool_call(request, handler) → ToolMessage | Command` *(async)*
+### `awrap_tool_call(request, handler) -> ToolMessage | Command` *(async)*
 
 Wraps each tool call in 3 steps:
 
 1. **Deanonymizes** `str` arguments → the tool receives real values
 2. **Executes** the tool via `handler(request)`
-3. **Reanonymizes** the tool response → the LLM never sees personal data
+3. **Reanonymizes** the tool response via `pipeline.anonymize()` → the LLM never sees personal data
 
 ```python
 # LLM calls : send_email(to="<<PERSON_1>>", subject="Hello")
@@ -160,19 +158,31 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 @tool
 def get_info(person: str) -> str:
     """Returns information about a person."""
     return f"{person} is a software engineer in Paris."
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model, threshold=0.5)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(anonymizer=anonymizer, labels=["PERSON", "LOCATION"])
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
+)
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 agent = create_agent(

@@ -2,15 +2,15 @@
 icon: lucide/link
 ---
 
-# Intégration LangChain v1
+# Integration LangChain
 
-Cette page présente l'intégration complète de PIIGhost dans un agent LangGraph, basée sur l'exemple disponible dans [`examples/graph/`](https://github.com/Athroniaeth/piighost/tree/main/examples/graph).
+Cette page presente l'integration complete de PIIGhost dans un agent LangGraph, basee sur l'exemple disponible dans [`examples/graph/`](https://github.com/Athroniaeth/piighost/tree/main/examples/graph).
 
 ---
 
 ## Installation
 
-Pour utiliser le middleware LangChain, installez les dépendances supplémentaires :
+Pour utiliser le middleware LangChain, installez les dependances supplementaires :
 
 === "uv"
 
@@ -24,20 +24,21 @@ Pour utiliser le middleware LangChain, installez les dépendances supplémentair
     pip install piighost langchain langgraph langchain-openai
     ```
 
-!!! warning "Dépendance optionnelle"
-    `PIIAnonymizationMiddleware` importe `langchain` au moment de son instanciation. Si `langchain` n'est pas installé, une `ImportError` explicite est levée avec le message `"You must install piighost[langchain] for use middleware"`.
+!!! warning "Dependance optionnelle"
+    `PIIAnonymizationMiddleware` importe `langchain` au moment de son instanciation. Si `langchain` n'est pas installe, une `ImportError` explicite est levee avec le message `"You must install piighost[langchain] for use middleware"`.
 
 ---
 
-## Structure de l'intégration
+## Structure de l'integration
 
 ```
 GLiNER2 model
     └── GlinerDetector
-            └── Anonymizer
-                    └── AnonymizationPipeline
-                                └── PIIAnonymizationMiddleware
-                                            └── create_agent(middleware=[...])
+            └── ConversationAnonymizationPipeline
+                    ├── AnonymizationPipeline (base)
+                    ├── ConversationMemory
+                    └── PIIAnonymizationMiddleware
+                                └── create_agent(middleware=[...])
 ```
 
 ---
@@ -50,19 +51,25 @@ from gliner2 import GLiNER2
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.conversation_memory import ConversationMemory
+from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 load_dotenv()
 
 # ---------------------------------------------------------------------------
-# 1. Définir les outils de l'agent
+# 1. Definir les outils de l'agent
 # ---------------------------------------------------------------------------
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
-    """Envoie un email à l'adresse donnée.
+    """Envoie un email a l'adresse donnee.
 
     Args:
         to: Adresse email du destinataire.
@@ -72,20 +79,20 @@ def send_email(to: str, subject: str, body: str) -> str:
     Returns:
         Confirmation d'envoi.
     """
-    return f"Email envoyé à {to}."
+    return f"Email envoye a {to}."
 
 
 @tool
 def get_weather(country_or_city: str) -> str:
-    """Retourne la météo actuelle pour un lieu donné.
+    """Retourne la meteo actuelle pour un lieu donne.
 
     Args:
         country_or_city: Nom de la ville ou du pays.
 
     Returns:
-        Résumé météo.
+        Resume meteo.
     """
-    return f"Il fait 22°C et ensoleillé à {country_or_city}."
+    return f"Il fait 22C et ensoleille a {country_or_city}."
 
 
 # ---------------------------------------------------------------------------
@@ -93,17 +100,17 @@ def get_weather(country_or_city: str) -> str:
 # ---------------------------------------------------------------------------
 
 system_prompt = """\
-Tu es un assistant utile. Certaines entrées peuvent contenir des placeholders \
-anonymisés qui remplacent des valeurs réelles pour des raisons de confidentialité.
+Tu es un assistant utile. Certaines entrees peuvent contenir des placeholders \
+anonymises qui remplacent des valeurs reelles pour des raisons de confidentialite.
 
-Règles :
-1. Traite chaque placeholder comme s'il était la vraie valeur. Ne commente jamais \
-son format, ne dis pas que c'est un token, ne demande pas à l'utilisateur de le révéler.
-2. Les placeholders peuvent être passés directement aux outils. Cela préserve la \
-confidentialité de l'utilisateur tout en permettant aux outils de fonctionner.
-3. Si l'utilisateur demande un détail spécifique sur un placeholder \
-(ex: "quelle est la première lettre ?"), réponds brièvement : "Je ne peux pas \
-répondre à cette question car les données ont été anonymisées pour protéger vos \
+Regles :
+1. Traite chaque placeholder comme s'il etait la vraie valeur. Ne commente jamais \
+son format, ne dis pas que c'est un token, ne demande pas a l'utilisateur de le reveler.
+2. Les placeholders peuvent etre passes directement aux outils. Cela preserve la \
+confidentialite de l'utilisateur tout en permettant aux outils de fonctionner.
+3. Si l'utilisateur demande un detail specifique sur un placeholder \
+(ex: "quelle est la premiere lettre ?"), reponds brievement : "Je ne peux pas \
+repondre a cette question car les donnees ont ete anonymisees pour proteger vos \
 informations personnelles."
 """
 
@@ -111,19 +118,21 @@ informations personnelles."
 # 3. Initialiser la stack d'anonymisation
 # ---------------------------------------------------------------------------
 
-# Charger le modèle GLiNER2 (téléchargement HuggingFace ~500 Mo à la première exécution)
-extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+# Charger le modele GLiNER2 (telechargement HuggingFace ~500 Mo a la premiere execution)
+extractor = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
-detector = GlinerDetector(model=extractor, threshold=0.5, flat_ner=True)
-anonymizer = Anonymizer(detector=detector)
-pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+pipeline = ConversationAnonymizationPipeline(
+    detector=GlinerDetector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    memory=ConversationMemory(),
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 # ---------------------------------------------------------------------------
-# 4. Créer l'agent LangGraph avec le middleware
+# 4. Creer l'agent LangGraph avec le middleware
 # ---------------------------------------------------------------------------
 
 graph = create_agent(
@@ -143,12 +152,12 @@ Le `PIIAnonymizationMiddleware` intercepte chaque tour de l'agent en trois point
 ### `abefore_model` avant le LLM
 
 ```
-Utilisateur : "Envoie un email à Patrick à Paris"
+Utilisateur : "Envoie un email a Patrick a Paris"
       ↓
-Middleware  : détection NER sur HumanMessage
-            → "Envoie un email à <<PERSON_1>> à <<LOCATION_1>>"
+Middleware  : detection NER via pipeline.anonymize()
+            → "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
       ↓
-LLM voit   : "Envoie un email à <<PERSON_1>> à <<LOCATION_1>>"
+LLM voit   : "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
 ```
 
 ### `awrap_tool_call` autour des outils
@@ -156,28 +165,28 @@ LLM voit   : "Envoie un email à <<PERSON_1>> à <<LOCATION_1>>"
 ```
 LLM appelle  : send_email(to="<<PERSON_1>>", subject="...", body="...")
       ↓
-Middleware   : désanonymise les args
+Middleware   : desanonymise les args
              → send_email(to="Patrick", subject="...", body="...")
       ↓
-Outil reçoit : to="Patrick"  ← vraie valeur
+Outil recoit : to="Patrick"  ← vraie valeur
       ↓
-Outil retourne: "Email envoyé à Patrick."
+Outil retourne: "Email envoye a Patrick."
       ↓
-Middleware   : reanonymise la réponse
-             → "Email envoyé à <<PERSON_1>>."
+Middleware   : reanonymise la reponse
+             → "Email envoye a <<PERSON_1>>."
       ↓
-LLM voit     : "Email envoyé à <<PERSON_1>>."
+LLM voit     : "Email envoye a <<PERSON_1>>."
 ```
 
-### `aafter_model` après le LLM
+### `aafter_model` apres le LLM
 
 ```
-LLM répond   : "C'est fait ! Email envoyé à <<PERSON_1>>."
+LLM repond   : "C'est fait ! Email envoye a <<PERSON_1>>."
       ↓
-Middleware   : désanonymise tous les messages
-             → "C'est fait ! Email envoyé à Patrick."
+Middleware   : desanonymise tous les messages
+             → "C'est fait ! Email envoye a Patrick."
       ↓
-Utilisateur  : "C'est fait ! Email envoyé à Patrick."
+Utilisateur  : "C'est fait ! Email envoye a Patrick."
 ```
 
 ---
@@ -189,19 +198,19 @@ import asyncio
 
 async def main():
     response = await graph.ainvoke({
-        "messages": [{"role": "user", "content": "Envoie un email à Patrick à Paris"}]
+        "messages": [{"role": "user", "content": "Envoie un email a Patrick a Paris"}]
     })
     print(response["messages"][-1].content)
-    # C'est fait ! Email envoyé à Patrick.
+    # C'est fait ! Email envoye a Patrick.
 
 asyncio.run(main())
 ```
 
 ---
 
-## Avec Langfuse (observabilité)
+## Avec Langfuse (observabilite)
 
-L'exemple complet inclut l'intégration Langfuse pour tracer les appels LLM :
+L'exemple complet inclut l'integration Langfuse pour tracer les appels LLM :
 
 ```python
 from langfuse import get_client
@@ -219,13 +228,13 @@ graph = create_agent(
 )
 ```
 
-1. Les callbacks Langfuse s'ajoutent à `create_agent`. Toutes les interactions LLM sont tracées avec les textes **anonymisés** (le traçage ne voit jamais de données personnelles).
+1. Les callbacks Langfuse s'ajoutent a `create_agent`. Toutes les interactions LLM sont tracees avec les textes **anonymises** (le tracage ne voit jamais de donnees personnelles).
 
 ---
 
-## Déploiement avec Aegra
+## Deploiement avec Aegra
 
-L'exemple `examples/graph/` est conçu pour être déployé avec [Aegra](https://aegra.dev/) (alternative auto-hébergée à LangSmith).
+L'exemple `examples/graph/` est concu pour etre deploye avec [Aegra](https://aegra.dev/) (alternative auto-hebergee a LangSmith).
 
 Fichier `aegra.json` :
 
@@ -241,10 +250,10 @@ Fichier `aegra.json` :
 ```
 
 ```bash
-# Démarrer le serveur de développement (graph + FastAPI sur le port 8000)
+# Demarrer le serveur de developpement (graph + FastAPI sur le port 8000)
 uv run aegra dev
 
-# Stack complète avec PostgreSQL
+# Stack complete avec PostgreSQL
 docker compose up --build
 ```
 
@@ -263,10 +272,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Aegra (obligatoire)
 AEGRA_CONFIG=aegra.json
 
-# Base de données
+# Base de donnees
 DATABASE_URL=postgresql://user:pass@localhost:5432/piighost
 
-# Observabilité (optionnel)
+# Observabilite (optionnel)
 LANGFUSE_PUBLIC_KEY=...
 LANGFUSE_SECRET_KEY=...
 ```

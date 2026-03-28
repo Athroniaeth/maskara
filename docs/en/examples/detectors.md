@@ -24,8 +24,8 @@ PIIGhost ships with ready-to-use `RegexDetector` pattern sets in `examples/detec
 | `PHONE_INTERNATIONAL` | `+33 6 12 34 56 78` |
 | `OPENAI_API_KEY` | `sk-proj-abc123xyz456789ABCDEF` |
 | `AWS_ACCESS_KEY` | `AKIAIOSFODNN7EXAMPLE` |
-| `GITHUB_TOKEN` | `ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ…` |
-| `STRIPE_KEY` | `sk_live_ABCDEFGHIJKLMNOPQR…` |
+| `GITHUB_TOKEN` | `ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ...` |
+| `STRIPE_KEY` | `sk_live_ABCDEFGHIJKLMNOPQR...` |
 
 ### US-specific
 
@@ -65,13 +65,26 @@ PIIGhost ships with ready-to-use `RegexDetector` pattern sets in `examples/detec
 
 ```python
 from examples.detectors.common import create_detector
+
 from piighost.anonymizer import Anonymizer
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 detector = create_detector()
-anonymizer = Anonymizer(detector=detector)
 
-result = anonymizer.anonymize("Email me at alice@example.com, server 192.168.1.42.")
-print(result.anonymized_text)
+pipeline = AnonymizationPipeline(
+    detector=detector,
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+)
+
+anonymized, _ = await pipeline.anonymize("Email me at alice@example.com, server 192.168.1.42.")
+print(anonymized)
 # Email me at <<EMAIL_1>>, server <<IP_V4_1>>.
 ```
 
@@ -79,24 +92,29 @@ print(result.anonymized_text)
 
 ```python
 from examples.detectors.us import create_full_detector
-from piighost.anonymizer import Anonymizer
 
-# create_full_detector() merges common + US patterns via CompositeDetector
 detector = create_full_detector()
-anonymizer = Anonymizer(detector=detector)
+# create_full_detector() merges common + US patterns via CompositeDetector
 
-result = anonymizer.anonymize(
+pipeline = AnonymizationPipeline(
+    detector=detector,
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+)
+
+anonymized, _ = await pipeline.anonymize(
     "SSN 123-45-6789, email john@example.com, card 4532-1234-5678-9012."
 )
-print(result.anonymized_text)
+print(anonymized)
 # SSN <<US_SSN_1>>, email <<EMAIL_1>>, card <<CREDIT_CARD_1>>.
 ```
 
 ### Mix-and-match with `PATTERNS` dicts
 
 ```python
-from piighost.anonymizer import Anonymizer
-from piighost.anonymizer.detector import RegexDetector
+from piighost.detector import RegexDetector
 
 from examples.detectors.common import PATTERNS as COMMON
 from examples.detectors.europe import PATTERNS as EU
@@ -110,30 +128,35 @@ my_patterns = {
 }
 
 detector = RegexDetector(patterns=my_patterns)
-anonymizer = Anonymizer(detector=detector)
 ```
 
 ### Combine with GLiNER2 (NER + regex)
 
 ```python
 from gliner2 import GLiNER2
-from piighost.anonymizer import Anonymizer, GlinerDetector
-from piighost.anonymizer.detector import CompositeDetector
+
+from piighost.detector import GlinerDetector, CompositeDetector
 from examples.detectors.common import create_detector as create_regex
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 detector = CompositeDetector(
     detectors=[
-        GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5, flat_ner=True),
+        GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
         create_regex(),  # emails, IPs, URLs, API keys, etc.
     ]
 )
 
-anonymizer = Anonymizer(detector=detector)
+pipeline = AnonymizationPipeline(
+    detector=detector,
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+)
 
-result = anonymizer.anonymize("Patrick at alice@example.com, IP 10.0.0.1.")
-print(result.anonymized_text)
+anonymized, _ = await pipeline.anonymize("Patrick at alice@example.com, IP 10.0.0.1.")
+print(anonymized)
 # <<PERSON_1>> at <<EMAIL_1>>, IP <<IP_V4_1>>.
 ```
 
@@ -141,7 +164,7 @@ print(result.anonymized_text)
 
 ## Adding your own patterns
 
-The pattern sets are plain dictionaries — extend them or create your own:
+The pattern sets are plain dictionaries extend them or create your own:
 
 ```python
 from examples.detectors.common import PATTERNS as COMMON

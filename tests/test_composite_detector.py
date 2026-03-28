@@ -47,7 +47,7 @@ class TestBasicBehaviour:
         assert result[0].label == "PERSON"
 
     async def test_overlapping_detections_are_kept(self) -> None:
-        """CompositeDetector does NOT deduplicate — that's the span resolver's job."""
+        """CompositeDetector does NOT deduplicate that's the span resolver's job."""
         detector = CompositeDetector(
             detectors=[
                 ExactMatchDetector([("06 12", "PHONE_FRAGMENT")]),

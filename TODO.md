@@ -1,10 +1,10 @@
-# TODO — PIIGhost
+# TODO PIIGhost
 
 Fonctionnalités manquantes identifiées par analyse comparative avec [PIICloak](https://github.com/dimanjet/piicloak), [pii-guard](https://pypi.org/project/pii-guard/), et [pII-guard](https://github.com/rpgeeganage/pII-guard).
 
 ## Priorité haute
 
-- [x] **Détecteurs PII prêts à l'emploi** — `RegexDetector` préconfigurés dans `examples/detectors/` :
+- [x] **Détecteurs PII prêts à l'emploi** `RegexDetector` préconfigurés dans `examples/detectors/` :
   - [x] Email
   - [x] Numéro de téléphone (formats internationaux, US, FR, DE)
   - [x] Carte de crédit
@@ -16,29 +16,29 @@ Fonctionnalités manquantes identifiées par analyse comparative avec [PIICloak]
   - [x] Passeport (US)
   - [ ] ~~Permis de conduire~~
 
-- [ ] **Stratégies d'anonymisation supplémentaires** — Nouveaux `PlaceholderFactory` :
-  - [ ] Masquage partiel (`MaskPlaceholderFactory`) — ex: `****4567`, `j***@email.com`
-  - [x] Suppression pure (`RedactPlaceholderFactory`) — ex: `[REDACTED]`
-  - [ ] Génération de fausses données (`FakerPlaceholderFactory`) — utiliser Faker (déjà en dépendance) pour générer des noms, adresses, emails réalistes
+- [ ] **Stratégies d'anonymisation supplémentaires** Nouveaux `PlaceholderFactory` :
+  - [ ] Masquage partiel (`MaskPlaceholderFactory`) ex: `****4567`, `j***@email.com`
+  - [x] Suppression pure (`RedactPlaceholderFactory`) ex: `[REDACTED]`
+  - [ ] Génération de fausses données (`FakerPlaceholderFactory`) utiliser Faker (déjà en dépendance) pour générer des noms, adresses, emails réalistes
 
 ## Priorité moyenne
 
-- [ ] **Validateurs d'entités** — Protocole `EntityValidator` post-détection :
+- [ ] **Validateurs d'entités** Protocole `EntityValidator` post-détection :
   - [ ] Algorithme de Luhn (cartes de crédit)
   - [ ] Checksum IBAN
   - [ ] Format email (RFC 5322)
   - [ ] Plages IP valides
 
-- [ ] **API REST dédiée** — Endpoints indépendants du LLM :
-  - [ ] `POST /detect` — détection seule, retourne les entités trouvées
-  - [ ] `POST /anonymize` — anonymise un texte
-  - [ ] `POST /deanonymize` — deanonymise un texte à partir d'un session ID
-  - [ ] `GET /health` — healthcheck
+- [ ] **API REST dédiée** Endpoints indépendants du LLM :
+  - [ ] `POST /detect` détection seule, retourne les entités trouvées
+  - [ ] `POST /anonymize` anonymise un texte
+  - [ ] `POST /deanonymize` deanonymise un texte à partir d'un session ID
+  - [ ] `GET /health` healthcheck
 
 - [ ] **CLI standalone** :
-  - [ ] `piighost detect "texte"` — détection PII
-  - [ ] `piighost anonymize "texte"` — anonymisation
-  - [ ] `cat file.txt | piighost anonymize` — support stdin/pipe
+  - [ ] `piighost detect "texte"` détection PII
+  - [ ] `piighost anonymize "texte"` anonymisation
+  - [ ] `cat file.txt | piighost anonymize` support stdin/pipe
   - [ ] Options : `--strategy`, `--labels`, `--format json|text`
 
 ## Priorité basse

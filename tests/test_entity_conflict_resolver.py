@@ -200,7 +200,7 @@ class TestOutputOrdering:
 
 
 # ---------------------------------------------------------------------------
-# FuzzyEntityConflictResolver — have_conflict
+# FuzzyEntityConflictResolver have_conflict
 # ---------------------------------------------------------------------------
 
 
@@ -248,7 +248,7 @@ class TestFuzzyHaveConflict:
 
 
 # ---------------------------------------------------------------------------
-# FuzzyEntityConflictResolver — resolve
+# FuzzyEntityConflictResolver resolve
 # ---------------------------------------------------------------------------
 
 
@@ -275,7 +275,7 @@ class TestFuzzyResolve:
         assert len(result) == 2
 
     def test_transitive_fuzzy_merge(self) -> None:
-        # "Patrick" ~ "Patrik" ~ "Patri" — chain of similarity
+        # "Patrick" ~ "Patrik" ~ "Patri" chain of similarity
         entities = [
             Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
             Entity(detections=(_det("Patrik", "PERSON", 20, 26),)),

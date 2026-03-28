@@ -2,7 +2,7 @@
 icon: lucide/scan-text
 ---
 
-# Reference — Anonymizer
+# Reference Anonymizer
 
 Module: `piighost.anonymizer`
 
@@ -10,88 +10,99 @@ Module: `piighost.anonymizer`
 
 ## `Anonymizer`
 
-Orchestrator of the 4-stage anonymization pipeline. **Stateless** class — no internal state between calls.
+Performs span-based text replacement using a placeholder factory. **Stateless** class no internal state between calls.
 
 ### Constructor
 
 ```python
-Anonymizer(
-    detector: EntityDetector,
-    occurrence_finder: OccurrenceFinder | None = None,
-    placeholder_factory: PlaceholderFactory | None = None,
-    replacer: SpanReplacer | None = None,
-)
+Anonymizer(ph_factory: AnyPlaceholderFactory)
 ```
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `detector` | `EntityDetector` | — | NER backend (required) |
-| `occurrence_finder` | `OccurrenceFinder \| None` | `RegexOccurrenceFinder()` | Occurrence location strategy |
-| `placeholder_factory` | `PlaceholderFactory \| None` | `CounterPlaceholderFactory()` | Tag generation strategy |
-| `replacer` | `SpanReplacer \| None` | `SpanReplacer()` | Span replacement engine |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `ph_factory` | `AnyPlaceholderFactory` | Placeholder factory for token generation (required) |
 
 ### Methods
 
-#### `anonymize(text, labels) → AnonymizationResult`
+#### `anonymize(text, entities) -> str`
 
-Anonymizes `text` by detecting and replacing sensitive entities.
+Replaces each detection in `text` with its entity's token. Replacements are applied right to left so that earlier span positions remain valid.
 
 ```python
-result = anonymizer.anonymize(
-    "Patrick lives in Paris. Patrick loves Paris.",
-    labels=["PERSON", "LOCATION"],
-)
+from piighost.anonymizer import Anonymizer
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.models import Detection, Entity, Span
+
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
+entity = Entity(detections=(
+    Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),
+))
+
+result = anonymizer.anonymize("Patrick est gentil", [entity])
+# '<<PERSON_1>> est gentil'
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `text` | `str` | Source text |
-| `labels` | `Sequence[str]` | Entity types to detect (e.g. `["PERSON", "LOCATION"]`) |
+| `entities` | `list[Entity]` | Entities whose detections should be replaced |
 
-**Returns**: `AnonymizationResult`
+**Returns**: `str` the anonymized text
 
-#### `deanonymize(result) → str`
+#### `deanonymize(anonymized_text, entities) -> str`
 
-Restores the original text from an `AnonymizationResult` (based on precomputed reverse spans).
+Restores the original text by replacing tokens with original detection texts, using the original positions to handle entities with multiple spelling variants.
 
 ```python
-original = anonymizer.deanonymize(result)
+original = anonymizer.deanonymize("<<PERSON_1>> est gentil", [entity])
+# 'Patrick est gentil'
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `result` | `AnonymizationResult` | Result previously returned by `anonymize` |
+| `anonymized_text` | `str` | Text containing placeholder tokens |
+| `entities` | `list[Entity]` | Same entities used during anonymization |
 
-**Returns**: `str` — the original text
+**Returns**: `str` the restored original text
 
-**Raises**: `IrreversibleAnonymizationError` if the placeholder factory is not reversible.
+---
 
-#### `reversible` (property)
+## `AnyAnonymizer` (Protocol)
 
-Returns `True` if the placeholder factory supports deanonymization.
+Interface for all anonymizer implementations.
 
 ```python
-anonymizer = Anonymizer(detector=detector)
-anonymizer.reversible  # True (CounterPlaceholderFactory is the default)
-anonymizer.check_reversible()  # no-op
+class AnyAnonymizer(Protocol):
+    ph_factory: AnyPlaceholderFactory
 
-anonymizer = Anonymizer(detector=detector, placeholder_factory=RedactPlaceholderFactory())
-anonymizer.reversible  # False
-anonymizer.check_reversible()  # raises IrreversibleAnonymizationError
+    def anonymize(self, text: str, entities: list[Entity]) -> str: ...
+    def deanonymize(self, anonymized_text: str, entities: list[Entity]) -> str: ...
 ```
 
 ---
 
-## `GlinerDetector`
+## Detectors
 
-Implementation of `EntityDetector` using the **GLiNER2** model.
+Module: `piighost.detector`
 
-### Constructor
+### `AnyDetector` (Protocol)
+
+Interface for all entity detectors. All detectors are **async**.
 
 ```python
-@dataclass
+class AnyDetector(Protocol):
+    async def detect(self, text: str) -> list[Detection]: ...
+```
+
+### `GlinerDetector`
+
+Implementation using the **GLiNER2** model.
+
+```python
 GlinerDetector(
     model: GLiNER2,
+    labels: list[str],
     threshold: float = 0.5,
     flat_ner: bool = True,
 )
@@ -99,275 +110,183 @@ GlinerDetector(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model` | `GLiNER2` | — | GLiNER2 model instance (required) |
+| `model` | `GLiNER2` | | GLiNER2 model instance (required) |
+| `labels` | `list[str]` | | Entity types to detect (required) |
 | `threshold` | `float` | `0.5` | Minimum confidence score (0.0–1.0) |
 | `flat_ner` | `bool` | `True` | Flat NER mode (no nested entities) |
 
-### Usage
-
 ```python
 from gliner2 import GLiNER2
-from piighost.anonymizer import GlinerDetector
+from piighost.detector import GlinerDetector
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model, threshold=0.5, flat_ner=True)
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+detector = GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
 
-entities = detector.detect("Patrick lives in Paris", ["PERSON", "LOCATION"])
-# [Entity(text='Patrick', label='PERSON', start=0, end=7, score=0.97),
-#  Entity(text='Paris', label='LOCATION', start=17, end=22, score=0.99)]
+detections = await detector.detect("Patrick lives in Paris")
+# [Detection(text='Patrick', label='PERSON', position=Span(0, 7), confidence=0.97),
+#  Detection(text='Paris', label='LOCATION', position=Span(17, 22), confidence=0.99)]
+```
+
+### `ExactMatchDetector`
+
+Detects entities by exact word matching using word-boundary regex. Useful for tests.
+
+```python
+ExactMatchDetector(
+    bag_of_words: list[tuple[str, str]],
+    flags: re.RegexFlag = re.IGNORECASE,
+)
+```
+
+```python
+from piighost.detector import ExactMatchDetector
+
+detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
+detections = await detector.detect("Patrick habite a Paris")
+```
+
+### `RegexDetector`
+
+Pattern-based detection with one regex per label.
+
+```python
+RegexDetector(patterns: dict[str, str])
+```
+
+```python
+from piighost.detector import RegexDetector
+
+detector = RegexDetector(patterns={"FR_PHONE": r"\b(?:\+33|0)[1-9](?:[\s.\-]?\d{2}){4}\b"})
+detections = await detector.detect("Appelez le 06 12 34 56 78")
+```
+
+### `CompositeDetector`
+
+Chains multiple detectors and merges their results.
+
+```python
+from piighost.detector import CompositeDetector
+
+detector = CompositeDetector(detectors=[gliner_detector, regex_detector])
 ```
 
 ---
 
-## `EntityDetector` (Protocol)
+## Placeholder Factories
 
-Interface to implement for a custom detector.
+Module: `piighost.placeholder`
 
-```python
-class EntityDetector(Protocol):
-    def detect(self, text: str, labels: Sequence[str]) -> list[Entity]:
-        ...
-```
+### `AnyPlaceholderFactory` (Protocol)
 
-See [Extending PIIGhost](../extending.md#custom-entitydetector) for examples.
-
----
-
-## `OccurrenceFinder` (Protocol)
-
-Interface for finding all positions of a fragment in a text.
+Interface for all placeholder factories.
 
 ```python
-class OccurrenceFinder(Protocol):
-    def find_all(self, text: str, fragment: str) -> list[tuple[int, int]]:
-        ...
+class AnyPlaceholderFactory(Protocol):
+    def create(self, entities: list[Entity]) -> dict[Entity, str]: ...
 ```
-
-### `RegexOccurrenceFinder`
-
-Default implementation: uses `\bFRAGMENT\b` with `re.IGNORECASE`.
-
-```python
-RegexOccurrenceFinder(flags: re.RegexFlag = re.IGNORECASE)
-```
-
-```python
-finder = RegexOccurrenceFinder()
-finder.find_all("Hello Patrick, APatrick", "Patrick")
-# [(6, 13)]  — "APatrick" is NOT returned (no word-boundary)
-```
-
----
-
-## `PlaceholderFactory` (ABC)
-
-Abstract base class for all placeholder factories. Provides two polymorphic methods for reversibility checks — no `isinstance` needed.
-
-```python
-class PlaceholderFactory(ABC):
-    def get_or_create(self, original: str, label: str) -> Placeholder:
-        ...
-
-    def reset(self) -> None:
-        ...
-
-    @property
-    def reversible(self) -> bool:
-        """Returns False by default."""
-
-    def check_reversible(self) -> None:
-        """Raises IrreversibleAnonymizationError by default."""
-```
-
-Use `factory.reversible` to check at runtime, or `factory.check_reversible()` to raise if not supported.
-
-### `ReversiblePlaceholderFactory` (ABC)
-
-Base class for factories that produce **unique, distinguishable** replacement tags. Factories inheriting from this class guarantee that each `(original, label)` pair gets a distinct tag, making deanonymization possible.
-
-`CounterPlaceholderFactory` and `HashPlaceholderFactory` both inherit from `ReversiblePlaceholderFactory`.
-
-Overrides `reversible` to return `True` and `check_reversible()` to do nothing.
 
 ### `CounterPlaceholderFactory`
 
 Default implementation: generates sequential `<<LABEL_N>>` tags.
 
 ```python
-CounterPlaceholderFactory(template: str = "<<{label}_{index}>>")
-```
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.models import Detection, Entity, Span
 
-```python
 factory = CounterPlaceholderFactory()
-factory.get_or_create("Patrick", "PERSON").replacement  # '<<PERSON_1>>'
-factory.get_or_create("Marie", "PERSON").replacement    # '<<PERSON_2>>'
-factory.get_or_create("Patrick", "PERSON").replacement  # '<<PERSON_1>>' (cached)
-factory.reset()  # clears counters and cache
+person = Entity(detections=(Detection("Patrick", "PERSON", Span(0, 7), 0.9),))
+location = Entity(detections=(Detection("Paris", "LOCATION", Span(17, 22), 0.9),))
+
+tokens = factory.create([person, location])
+# {person: '<<PERSON_1>>', location: '<<LOCATION_1>>'}
 ```
 
 ### `HashPlaceholderFactory`
 
-Generates deterministic, opaque hash-based tags — the same strategy as LangChain's built-in PII redaction middleware.
+Generates deterministic, opaque hash-based tags.
 
 ```python
-HashPlaceholderFactory(
-    digest_length: int = 8,
-    template: str = "<{label}:{digest}>",
-)
+from piighost.placeholder import HashPlaceholderFactory
+
+factory = HashPlaceholderFactory(hash_length=8)
+tokens = factory.create([person])
+# {person: '<PERSON:a1b2c3d4>'}
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `digest_length` | `8` | Number of hex characters from the SHA-256 digest |
-| `template` | `"<{label}:{digest}>"` | Format string with `{label}` and `{digest}` |
-
-```python
-from piighost.anonymizer import HashPlaceholderFactory
-
-factory = HashPlaceholderFactory()
-factory.get_or_create("Patrick", "PERSON").replacement  # '<PERSON:3b4c5d6e>'
-factory.get_or_create("Patrick", "PERSON").replacement  # '<PERSON:3b4c5d6e>' (same hash)
-factory.get_or_create("Marie", "PERSON").replacement    # '<PERSON:9f2a1c7b>' (different)
-factory.reset()  # clears cache
-```
-
-The hash is computed from the original text only — the same entity always produces the same placeholder, regardless of encounter order.
-
-**Usage with `Anonymizer`:**
-
-```python
-anonymizer = Anonymizer(
-    detector=detector,
-    placeholder_factory=HashPlaceholderFactory(digest_length=12),
-)
-```
+| `hash_length` | `8` | Number of hex characters from the SHA-256 digest |
 
 ### `RedactPlaceholderFactory`
 
-Replaces **all** entities with the same opaque tag (`[REDACTED]`). No index, no label, no distinction between entities — maximum privacy, zero information leakage.
+All entities with the same label share the same `<LABEL>` token. No counter, no distinction between entities.
 
 ```python
-RedactPlaceholderFactory(tag: str = "[REDACTED]")
-```
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `tag` | `"[REDACTED]"` | The replacement string for all entities |
-
-```python
-from piighost.anonymizer import RedactPlaceholderFactory
+from piighost.placeholder import RedactPlaceholderFactory
 
 factory = RedactPlaceholderFactory()
-factory.get_or_create("Patrick", "PERSON").replacement   # '[REDACTED]'
-factory.get_or_create("Paris", "LOCATION").replacement    # '[REDACTED]'
-factory.get_or_create("alice@example.com", "EMAIL").replacement  # '[REDACTED]'
+tokens = factory.create([person, location])
+# {person: '<PERSON>', location: '<LOCATION>'}
 ```
 
-**Usage with `Anonymizer`:**
-
-```python
-anonymizer = Anonymizer(
-    detector=detector,
-    placeholder_factory=RedactPlaceholderFactory(),
-)
-result = anonymizer.anonymize("Patrick lives in Paris.")
-print(result.anonymized_text)
-# [REDACTED] lives in [REDACTED].
-```
-
-!!! warning "Not reversible"
-    `RedactPlaceholderFactory` does **not** inherit from `ReversiblePlaceholderFactory`. Calling `anonymizer.deanonymize(result)` will raise `IrreversibleAnonymizationError`. It cannot be used with `AnonymizationPipeline` (which requires deanonymization for tool calls).
-
----
-
-### Reversible vs irreversible
-
-PIIGhost distinguishes two categories of placeholder factories:
-
-| | Reversible | Irreversible |
-|---|---|---|
-| **Base class** | `ReversiblePlaceholderFactory` | `PlaceholderFactory` directly |
-| **`reversible`** | `True` | `False` |
-| **`check_reversible()`** | No-op | Raises `IrreversibleAnonymizationError` |
-| **Unique tags** | Each entity gets a distinct tag | All entities share the same tag |
-| **Deanonymization** | Supported | Raises `IrreversibleAnonymizationError` |
-| **Information leakage** | Reveals entity count and co-references | Zero leakage |
-| **Use with Pipeline** | Yes | No |
-| **Use with Middleware** | Yes | No |
-| **Implementations** | `CounterPlaceholderFactory`, `HashPlaceholderFactory` | `RedactPlaceholderFactory` |
-
-**When to use each:**
-
-- **Reversible** (default) — when you need bidirectional anonymization, e.g. in LLM agent conversations where tool calls must be deanonymized before execution.
-- **Irreversible** — when you only need to strip PII from text and never recover it, e.g. logging, analytics, data export, compliance redaction.
-
----
-
-## Exceptions
-
-### `IrreversibleAnonymizationError`
-
-Raised when attempting to deanonymize a result produced by a non-reversible factory.
-
-```python
-from piighost.anonymizer import IrreversibleAnonymizationError
-
-anonymizer = Anonymizer(
-    detector=detector,
-    placeholder_factory=RedactPlaceholderFactory(),
-)
-result = anonymizer.anonymize("Patrick lives in Paris.")
-
-try:
-    anonymizer.deanonymize(result)
-except IrreversibleAnonymizationError as e:
-    print(e)
-    # RedactPlaceholderFactory is not reversible. Deanonymization requires
-    # a ReversiblePlaceholderFactory (e.g. CounterPlaceholderFactory or HashPlaceholderFactory).
-```
+!!! warning "Deanonymization with RedactPlaceholderFactory"
+    Since multiple entities share the same token, deanonymization relies on original position order. This works correctly with the `Anonymizer.deanonymize()` method.
 
 ---
 
 ## Data models
 
+Module: `piighost.models`
+
+### `Detection`
+
+A single NER result from the text.
+
+```python
+@dataclass(frozen=True)
+class Detection:
+    text: str           # Surface form: "Patrick"
+    label: str          # Entity type: "PERSON"
+    position: Span      # Where it was found
+    confidence: float   # Score (0.0–1.0)
+```
+
 ### `Entity`
 
-Named entity detected by the NER model.
+Group of detections referring to the same PII.
 
 ```python
 @dataclass(frozen=True)
 class Entity:
-    text: str    # Surface form: "Patrick"
-    label: str   # Type: "PERSON"
-    start: int   # Inclusive start index
-    end: int     # Exclusive end index
-    score: float # Confidence score (0.0–1.0)
+    detections: tuple[Detection, ...]  # All detections for this entity
+    # label: str (property, from first detection)
 ```
 
-### `Placeholder`
+### `Span`
 
-Link between an original fragment and its replacement tag.
+Character position in source text.
 
 ```python
 @dataclass(frozen=True)
-class Placeholder:
-    original: str     # "Patrick"
-    label: str        # "PERSON"
-    replacement: str  # "<<PERSON_1>>"
-```
-
-### `AnonymizationResult`
-
-Full output of an anonymization pass.
-
-```python
-@dataclass(frozen=True)
-class AnonymizationResult:
-    original_text: str              # Source text
-    anonymized_text: str            # Text with placeholders
-    placeholders: tuple[Placeholder, ...]  # All created placeholders
-    reverse_spans: tuple            # Reverse spans for deanonymization
+class Span:
+    start_pos: int   # Inclusive start index
+    end_pos: int     # Exclusive end index
+    # overlaps(other: Span) -> bool
 ```
 
 !!! note "Immutability"
-    All models are **frozen dataclasses** (`frozen=True`) — they are thread-safe and hashable.
+    All models are **frozen dataclasses** (`frozen=True`) they are thread-safe and hashable.
+
+---
+
+## Exceptions
+
+Module: `piighost.exceptions`
+
+### `CacheMissError`
+
+Raised when a cache lookup finds no entry for the given key. Used by the middleware to fall back from `pipeline.deanonymize()` to `pipeline.deanonymize_with_ent()`.
+
+```python
+from piighost.exceptions import CacheMissError
+```

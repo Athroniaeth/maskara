@@ -4,6 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
+| 0.2.x   | ✅ Yes    |
 | 0.1.x   | ✅ Yes    |
 
 ## Reporting a Vulnerability
@@ -24,9 +25,9 @@ We aim to acknowledge reports within **48 hours** and provide an initial assessm
 
 PIIGhost handles potentially sensitive PII data. Key design decisions:
 
-- **Anonymization is local** — PII is detected and replaced before being sent to any LLM or external service
-- **SHA-256 keyed placeholder store** — placeholders are deterministically derived, not stored in plaintext
-- **No logging of raw PII** — the library itself does not log entity values
-- **Frozen dataclasses** — immutable data models prevent accidental mutation of sensitive data
+- **Anonymization is local** : PII is detected and replaced before being sent to any LLM or external service
+- **SHA-256 keyed placeholder store** : placeholders are deterministically derived, not stored in plaintext
+- **No logging of raw PII** : the library itself does not log entity values
+- **Frozen dataclasses** : immutable data models prevent accidental mutation of sensitive data
 
-> **Note**: PIIGhost anonymizes PII before LLM calls but does not encrypt data at rest. Ensure your `PlaceholderStore` backend is appropriately secured in production.
+> **Note**: PIIGhost anonymizes PII before LLM calls but does not encrypt data at rest. Ensure your cache backend is appropriately secured in production.

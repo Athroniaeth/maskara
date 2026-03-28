@@ -2,7 +2,7 @@
 icon: lucide/database
 ---
 
-# Référence Pipeline
+# Reference Pipeline
 
 Module : `piighost.pipeline`
 
@@ -10,125 +10,129 @@ Module : `piighost.pipeline`
 
 ## `AnonymizationPipeline`
 
-Pipeline d'anonymisation avec **état de session** et **cache persistant**. Encapsule un `Anonymizer` stateless avec :
-
-- Un `PlaceholderStore` (async) pour la persistance inter-sessions
-- Un registre en mémoire `_results` pour les opérations synchrones rapides
+Orchestre le pipeline complet d'anonymisation : detect → resolve spans → link entities → resolve entities → anonymize. Utilise aiocache pour le cache des resultats de detection et des mappings d'anonymisation.
 
 ### Constructeur
 
 ```python
 AnonymizationPipeline(
-    anonymizer: Anonymizer,
-    labels: Sequence[str],
-    store: PlaceholderStore | None = None,
+    detector: AnyDetector,
+    span_resolver: AnySpanConflictResolver,
+    entity_linker: AnyEntityLinker,
+    entity_resolver: AnyEntityConflictResolver,
+    anonymizer: AnyAnonymizer,
+    cache: BaseCache | None = None,
 )
 ```
 
-| Paramètre | Type | Défaut | Description |
+| Parametre | Type | Defaut | Description |
 |-----------|------|--------|-------------|
-| `anonymizer` | `Anonymizer` | | Moteur d'anonymisation stateless (requis) |
-| `labels` | `Sequence[str]` | | Types d'entités à détecter (requis) |
-| `store` | `PlaceholderStore \| None` | `InMemoryPlaceholderStore()` | Backend de persistance |
+| `detector` | `AnyDetector` | | Detecteur async d'entites (requis) |
+| `span_resolver` | `AnySpanConflictResolver` | | Gere les detections chevauchantes (requis) |
+| `entity_linker` | `AnyEntityLinker` | | Groupe les detections en entites (requis) |
+| `entity_resolver` | `AnyEntityConflictResolver` | | Fusionne les entites conflictuelles (requis) |
+| `anonymizer` | `AnyAnonymizer` | | Moteur de remplacement de texte (requis) |
+| `cache` | `BaseCache \| None` | `Cache(Cache.MEMORY)` | Instance aiocache |
 
-### Méthodes
+### Methodes
 
-#### `anonymize(text) → AnonymizationResult` *(async)*
+#### `detect_entities(text) -> list[Entity]` *(async)*
 
-Anonymise `text`, met le résultat en cache et l'enregistre dans le registre de session.
+Execute le pipeline de detection : detect → resolve spans → link → resolve entities.
 
-Si le texte exact a déjà été traité (cache hit), le résultat stocké est retourné sans appel au modèle NER.
+#### `anonymize(text) -> tuple[str, list[Entity]]` *(async)*
+
+Execute le pipeline complet et stocke le mapping en cache pour desanonymisation ulterieure.
 
 ```python
-result = await pipeline.anonymize("Patrick habite à Paris.")
-print(result.anonymized_text)
-# <<PERSON_1>> habite à <<LOCATION_1>>.
+anonymized, entities = await pipeline.anonymize("Patrick habite a Paris.")
+# <<PERSON_1>> habite a <<LOCATION_1>>.
 ```
 
-!!! note "Cache SHA-256"
-    La clé de cache est le hash SHA-256 du texte source. Les textes identiques retournent toujours le même résultat.
+#### `deanonymize(anonymized_text) -> tuple[str, list[Entity]]` *(async)*
 
-#### `deanonymize_text(text) → str`
+Desanonymise en utilisant le texte anonymise comme cle de recherche dans le cache.
 
-Remplace tous les tags placeholder connus dans `text` par leurs valeurs originales.
+**Leve** : `CacheMissError` si le texte n'a jamais ete produit par ce pipeline.
 
-Fonctionne par **remplacement de chaîne** (non basé sur les spans), ce qui permet de désanonymiser n'importe quelle chaîne dérivée d'un texte anonymisé y compris les arguments générés par le LLM.
+---
+
+## `ConversationAnonymizationPipeline`
+
+Module : `piighost.conversation_pipeline`
+
+Etend `AnonymizationPipeline` avec une memoire de conversation pour le suivi coherent des entites entre les messages.
+
+### Constructeur
 
 ```python
-pipeline.deanonymize_text("Bonjour, <<PERSON_1>> de <<LOCATION_1>> !")
-# "Bonjour, Patrick de Paris !"
+ConversationAnonymizationPipeline(
+    detector: AnyDetector,
+    span_resolver: AnySpanConflictResolver,
+    entity_linker: AnyEntityLinker,
+    entity_resolver: AnyEntityConflictResolver,
+    anonymizer: AnyAnonymizer,
+    memory: AnyConversationMemory | None = None,
+)
 ```
 
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `text` | `str` | Chaîne pouvant contenir des tags placeholder |
+### Methodes
 
-**Retourne** : `str`
+#### `anonymize(text) -> tuple[str, list[Entity]]` *(async)*
 
-#### `reanonymize_text(text) → str`
+Detecte les entites, les enregistre en memoire, puis anonymise en utilisant toutes les entites connues.
 
-Inverse de `deanonymize_text` : remplace chaque valeur originale connue par son tag.
+#### `deanonymize_with_ent(text) -> str` *(async)*
+
+Remplacement de chaine : tokens → valeurs originales (plus long d'abord). Fonctionne sur n'importe quel texte contenant des tokens.
+
+#### `anonymize_with_ent(text) -> str`
+
+Remplacement de chaine : valeurs originales → tokens (plus long d'abord).
+
+#### `resolved_entities` (propriete)
+
+Toutes les entites de la memoire, fusionnees par l'entity resolver.
+
+---
+
+## `ConversationMemory`
+
+Module : `piighost.conversation_memory`
+
+Memoire de conversation en memoire qui accumule les entites entre les messages, dedupliquees par `(text.lower(), label)`.
+
+### Protocole
 
 ```python
-pipeline.reanonymize_text("Résultat pour Patrick à Paris")
-# "Résultat pour <<PERSON_1>> à <<LOCATION_1>>"
-```
+class AnyConversationMemory(Protocol):
+    entities_by_hash: dict[str, list[Entity]]
 
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `text` | `str` | Chaîne pouvant contenir des valeurs originales |
+    @property
+    def all_entities(self) -> list[Entity]: ...
 
-**Retourne** : `str`
-
-#### `results` (propriété)
-
-Tous les résultats enregistrés lors de la session courante (lecture seule).
-
-```python
-pipeline.results  # tuple[AnonymizationResult, ...]
+    def record(self, text_hash: str, entities: list[Entity]) -> None: ...
 ```
 
 ---
 
-## `PlaceholderStore` (Protocole)
+## Cache
 
-Interface pour le backend de persistance des `AnonymizationResult`.
+Le pipeline utilise **aiocache** avec des backends configurables. Par defaut, `Cache(Cache.MEMORY)` est utilise (en memoire, non persistant).
 
-```python
-class PlaceholderStore(Protocol):
-    async def get(self, key: str) -> AnonymizationResult | None:
-        ...
+Cles de cache avec prefixes :
 
-    async def set(self, key: str, result: AnonymizationResult) -> None:
-        ...
-```
+- `detect:<hash>` resultats du detecteur
+- `anon:anonymized:<hash>` mappings d'anonymisation
 
-| Méthode | Description |
-|---------|-------------|
-| `get(key)` | Récupère un résultat par sa clé SHA-256, ou `None` si absent |
-| `set(key, result)` | Persiste un résultat |
-
-La clé est toujours le **hash SHA-256** du texte source original.
-
----
-
-## `InMemoryPlaceholderStore`
-
-Implémentation par défaut : stockage en mémoire, adapté aux tests et aux déploiements mono-processus.
+Pour un autre backend (Redis, Memcached), passez une instance `BaseCache` d'aiocache :
 
 ```python
-InMemoryPlaceholderStore()
-```
-
-Aucune configuration nécessaire. Non persistant les données sont perdues à l'arrêt du processus.
-
-```python
-from piighost.pipeline import InMemoryPlaceholderStore, AnonymizationPipeline
+from aiocache import Cache
 
 pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON"],
-    store=InMemoryPlaceholderStore(),  # équivalent au comportement par défaut
+    ...,
+    cache=Cache(Cache.REDIS, endpoint="localhost", port=6379),
 )
 ```
 
@@ -138,41 +142,31 @@ pipeline = AnonymizationPipeline(
 
 ```python
 import asyncio
-from piighost.anonymizer import Anonymizer, GlinerDetector
+from piighost.anonymizer import Anonymizer
+from piighost.detector import GlinerDetector
+from piighost.entity_linker import ExactEntityLinker
+from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
+from piighost.placeholder import CounterPlaceholderFactory
+from piighost.span_resolver import ConfidenceSpanConflictResolver
 from gliner2 import GLiNER2
 
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-detector = GlinerDetector(model=model)
-anonymizer = Anonymizer(detector=detector)
+model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
 
 pipeline = AnonymizationPipeline(
-    anonymizer=anonymizer,
-    labels=["PERSON", "LOCATION"],
+    detector=GlinerDetector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
+    span_resolver=ConfidenceSpanConflictResolver(),
+    entity_linker=ExactEntityLinker(),
+    entity_resolver=MergeEntityConflictResolver(),
+    anonymizer=Anonymizer(CounterPlaceholderFactory()),
 )
 
 async def main():
-    # Anonymisation async
-    r1 = await pipeline.anonymize("Patrick est à Lyon.")
-    print(r1.anonymized_text)  # <<PERSON_1>> est à <<LOCATION_1>>.
+    anonymized, entities = await pipeline.anonymize("Patrick est a Lyon.")
+    print(anonymized)  # <<PERSON_1>> est a <<LOCATION_1>>.
 
-    # Même texte → cache hit (pas de second appel NER)
-    r2 = await pipeline.anonymize("Patrick est à Lyon.")
-    assert r1 is r2  # même objet
-
-    # Désanonymisation synchrone
-    text = pipeline.deanonymize_text("Bonjour <<PERSON_1>>, bienvenue à <<LOCATION_1>>.")
-    print(text)  # Bonjour Patrick, bienvenue à Lyon.
-
-    # Reanonymisation synchrone
-    text2 = pipeline.reanonymize_text("Patrick a répondu depuis Lyon.")
-    print(text2)  # <<PERSON_1>> a répondu depuis <<LOCATION_1>>.
+    original, _ = await pipeline.deanonymize(anonymized)
+    print(original)  # Patrick est a Lyon.
 
 asyncio.run(main())
 ```
-
----
-
-## Store personnalisé
-
-Voir [Étendre PIIGhost PlaceholderStore](../extending.md#créer-un-placeholderstore-personnalisé) pour des exemples Redis et PostgreSQL.
