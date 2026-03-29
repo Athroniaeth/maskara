@@ -190,21 +190,30 @@ class TestMaskPlaceholderFactory:
 
     def test_custom_strategies_replace_defaults(self) -> None:
         """User-provided strategies fully replace the built-in defaults."""
-        reverse_mask = lambda text, _mc: text[::-1]
+
+        def reverse_mask(text, _mc):
+            return text[::-1]
+
         factory = MaskPlaceholderFactory(strategies={"PERSON": reverse_mask})
         e = _entity("Patrick", "PERSON")
         assert factory.create([e])[e] == "kcirtaP"
 
     def test_custom_strategy_label_case_insensitive(self) -> None:
         """Labels in strategies are normalized to lowercase."""
-        upper_mask = lambda text, _mc: text.upper()
+
+        def upper_mask(text, _mc):
+            return text.upper()
+
         factory = MaskPlaceholderFactory(strategies={"CUSTOM_LABEL": upper_mask})
         e = _entity("secret", "CUSTOM_LABEL")
         assert factory.create([e])[e] == "SECRET"
 
     def test_custom_strategy_unknown_label_falls_back(self) -> None:
         """Labels not in custom strategies fall back to mask_default."""
-        noop = lambda text, _mc: "NOOP"
+
+        def noop(text, _mc):
+            return "NOOP"
+
         factory = MaskPlaceholderFactory(strategies={"PERSON": noop})
         e = _entity("Paris", "LOCATION")
         assert factory.create([e])[e] == "P****"

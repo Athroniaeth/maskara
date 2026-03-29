@@ -74,13 +74,17 @@ class TestFakerPlaceholderFactory:
         assert isinstance(token, str) and token != "Patrick"
 
     def test_custom_strategies_replace_defaults(self) -> None:
-        custom_fn = lambda faker: "CUSTOM_FAKE"
+        def custom_fn(faker):
+            return "CUSTOM_FAKE"
+
         factory = FakerPlaceholderFactory(strategies={"PERSON": custom_fn})
         e = _entity("Patrick", "PERSON")
         assert factory.create([e])[e] == "CUSTOM_FAKE"
 
     def test_custom_strategy_unknown_label_falls_back(self) -> None:
-        custom_fn = lambda faker: "NOOP"
+        def custom_fn(faker):
+            return "NOOP"
+
         factory = FakerPlaceholderFactory(strategies={"PERSON": custom_fn})
         e = _entity("Paris", "LOCATION")
         assert factory.create([e])[e] == "<LOCATION>"
