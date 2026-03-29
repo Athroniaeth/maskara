@@ -40,8 +40,15 @@ logger = logging.getLogger(__name__)
 
 
 def _get_thread_id() -> str:
-    """Extract the thread id from the LangGraph runtime config."""
-    return get_config().get("configurable", {}).get("thread_id", "default")
+    """Extract the thread id from the LangGraph runtime config.
+
+    Falls back to ``"default"`` when called outside a runnable context
+    or on Python < 3.11 where ``get_config()`` is unavailable in async.
+    """
+    try:
+        return get_config().get("configurable", {}).get("thread_id", "default")
+    except RuntimeError:
+        return "default"
 
 
 class PIIAnonymizationMiddleware(AgentMiddleware):
