@@ -2,8 +2,8 @@
 
 Intercepts the agent loop at three points:
 
-* **abefore_model** anonymises *all* messages (NER on human messages,
-  string-replace on AI / tool messages) before the LLM sees them.
+* **abefore_model** anonymises *all* messages (full NER detection)
+  before the LLM sees them.
 * **aafter_model** deanonymises *all* messages so the user always sees
   real values in the conversation thread.
 * **awrap_tool_call** deanonymises tool-call arguments so tools receive
@@ -69,11 +69,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
     ) -> dict[str, Any] | None:
         """Anonymise every message before the LLM sees the conversation.
 
-        * ``HumanMessage`` full NER detection via ``pipeline.anonymize``.
-        * ``ToolMessage`` fast string replacement via
-          ``pipeline.anonymize_with_ent`` (re-anonymises real values
-          that tools returned).
-        * ``AIMessage`` skipped the LLM already produces tokens.
+        All message types (``HumanMessage``, ``AIMessage``,
+        ``ToolMessage``) go through full NER detection via
+        ``pipeline.anonymize``.  AI and tool messages are re-processed
+        because ``aafter_model`` deanonymises them after each turn.
 
         Args:
             state: The current agent state (contains ``messages``).
@@ -85,8 +84,8 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         """
         changed = False
         messages = state["messages"]
-
         pipeline = self._pipeline
+
         for idx, message in enumerate(messages):
             content = message.content
 
@@ -94,20 +93,19 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(content, str) or not content.strip():
                 continue
 
-            if isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
-                # Full NER detection for user input and tool can return new sensitive data..
-                result, ents = await pipeline.anonymize(content)
-
-                logger.debug(
-                    "[PII] msg %d (%s) content=%r → result=%r entities=%s",
-                    idx,
-                    type(message).__name__,
-                    content[:80],
-                    result[:80],
-                    [(e.detections[0].text, e.label, len(e.detections)) for e in ents],
-                )
-            else:
+            if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
+
+            result, ents = await pipeline.anonymize(content)
+
+            logger.debug(
+                "[PII] msg %d (%s) content=%r → result=%r entities=%s",
+                idx,
+                type(message).__name__,
+                content[:80],
+                result[:80],
+                [(e.detections[0].text, e.label, len(e.detections)) for e in ents],
+            )
 
             if result == content:
                 continue
@@ -133,7 +131,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             nothing changed.
         """
         changed = False
-        messages = list(state["messages"])
+        messages = state["messages"]
 
         for idx, message in enumerate(messages):
             content = message.content
@@ -145,21 +143,13 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
 
-            try:
-                restored, _ = await self._pipeline.deanonymize(content)
-            except CacheMissError:
-                restored = await self._pipeline.deanonymize_with_ent(content)
+            restored = await self._deanonymize(content)
 
             if restored == content:
                 continue
 
             messages[idx].content = restored
-
             changed = True
-
-        if changed:
-            nbr_messages = len(messages)
-            logging.debug(f"Deanonymised {nbr_messages} message(s)")
 
         return {"messages": messages} if changed else None
 
@@ -189,10 +179,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         for arg_name, arg_value in args.items():
             if isinstance(arg_value, str):
-                try:
-                    arg_value, _ = await self._pipeline.deanonymize(arg_value)
-                except CacheMissError:
-                    arg_value = await self._pipeline.deanonymize_with_ent(arg_value)
+                arg_value = await self._deanonymize(arg_value)
             patched_args[arg_name] = arg_value
 
         call["args"] = patched_args
@@ -207,3 +194,20 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             return response
 
         return response
+
+    # -----------------------------------------------------------------
+    # Private helpers
+    # -----------------------------------------------------------------
+
+    async def _deanonymize(self, text: str) -> str:
+        """Deanonymise text, falling back to entity-based replacement.
+
+        Tries cache-based deanonymisation first (exact original text).
+        Falls back to ``deanonymize_with_ent`` for text never seen by
+        the pipeline (e.g. LLM-generated responses containing tokens).
+        """
+        try:
+            result, _ = await self._pipeline.deanonymize(text)
+        except CacheMissError:
+            result = await self._pipeline.deanonymize_with_ent(text)
+        return result
