@@ -7,7 +7,6 @@ import pytest
 from piighost.anonymizer import Anonymizer
 from piighost.pipeline.thread import (
     ThreadAnonymizationPipeline,
-    ConversationMemory,
 )
 from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
@@ -24,7 +23,6 @@ pytestmark = pytest.mark.asyncio
 
 def _pipeline(
     words: list[tuple[str, str]],
-    memory: ConversationMemory | None = None,
     factory: AnyPlaceholderFactory | None = None,
     entity_resolver: AnyEntityConflictResolver | None = None,
 ) -> ThreadAnonymizationPipeline:
@@ -35,7 +33,6 @@ def _pipeline(
         entity_linker=ExactEntityLinker(),
         entity_resolver=entity_resolver or MergeEntityConflictResolver(),
         anonymizer=Anonymizer(factory or CounterPlaceholderFactory()),
-        memory=memory or ConversationMemory(),
     )
 
 
@@ -157,11 +154,10 @@ class TestCrossMessageConsistency:
         assert "<<LOCATION_1>>" in r2
 
     async def test_memory_records_entities(self) -> None:
-        memory = ConversationMemory()
-        pipeline = _pipeline([("Patrick", "PERSON")], memory=memory)
+        pipeline = _pipeline([("Patrick", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
-        assert len(memory.all_entities) == 1
-        assert memory.all_entities[0].label == "PERSON"
+        assert len(pipeline.get_memory().all_entities) == 1
+        assert pipeline.get_memory().all_entities[0].label == "PERSON"
 
 
 # ---------------------------------------------------------------------------
@@ -273,12 +269,11 @@ class TestCrossMessageEntityLinking:
 
     async def test_memory_accumulates_variants(self) -> None:
         """Memory entity gains new text variants across messages."""
-        memory = ConversationMemory()
-        pipeline = _pipeline([("France", "LOCATION")], memory=memory)
+        pipeline = _pipeline([("France", "LOCATION")])
         await pipeline.anonymize("J'habite en France")
         await pipeline.anonymize("donne moi la meteo en france")
 
-        entities = memory.all_entities
+        entities = pipeline.get_memory().all_entities
         assert len(entities) == 1
         texts = {d.text for d in entities[0].detections}
         assert "France" in texts
@@ -365,3 +360,57 @@ class TestCrossMessageEntityLinking:
         r3, _ = await pipeline.anonymize("Quel est la premiere lettre de patrick")
         assert "<<PERSON_1>>" in r3
         assert "<<PERSON_2>>" not in r3
+
+
+# ---------------------------------------------------------------------------
+# Thread isolation
+# ---------------------------------------------------------------------------
+
+
+class TestThreadIsolation:
+    """Memory and cache are isolated per thread_id."""
+
+    async def test_default_thread_id(self) -> None:
+        """Without passing thread_id, everything uses 'default'."""
+        pipeline = _pipeline([("Patrick", "PERSON")])
+        r, _ = await pipeline.anonymize("Bonjour Patrick")
+        assert "<<PERSON_1>>" in r
+        assert len(pipeline.get_memory().all_entities) == 1
+
+    async def test_different_threads_have_isolated_memory(self) -> None:
+        """Thread A sees Patrick; thread B does not."""
+        pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
+
+        await pipeline.anonymize("Bonjour Patrick", thread_id="thread-a")
+
+        assert pipeline.get_memory("thread-b").all_entities == []
+
+        r, _ = await pipeline.anonymize("Bonjour Marie", thread_id="thread-b")
+        assert "<<PERSON_1>>" in r  # Marie is PERSON_1 in thread-b
+
+    async def test_switching_threads_preserves_memory(self) -> None:
+        """Going back to thread A still finds Patrick."""
+        pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
+
+        await pipeline.anonymize("Bonjour Patrick", thread_id="thread-a")
+        await pipeline.anonymize("Bonjour Marie", thread_id="thread-b")
+
+        memory_a = pipeline.get_memory("thread-a")
+        assert len(memory_a.all_entities) == 1
+        assert memory_a.all_entities[0].detections[0].text == "Patrick"
+
+    async def test_cache_isolated_per_thread(self) -> None:
+        """Same anonymized text in two threads → deanonymize returns the right original."""
+        pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
+
+        ra, _ = await pipeline.anonymize("Bonjour Patrick", thread_id="thread-a")
+        assert "<<PERSON_1>>" in ra
+
+        rb, _ = await pipeline.anonymize("Bonjour Marie", thread_id="thread-b")
+        assert "<<PERSON_1>>" in rb
+
+        original_a, _ = await pipeline.deanonymize(ra, thread_id="thread-a")
+        assert original_a == "Bonjour Patrick"
+
+        original_b, _ = await pipeline.deanonymize(rb, thread_id="thread-b")
+        assert original_b == "Bonjour Marie"

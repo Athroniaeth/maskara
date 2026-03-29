@@ -234,7 +234,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import FuzzyEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
+from piighost.pipeline import ThreadAnonymizationPipeline
 
 entity_linker = ExactEntityLinker()  # Or your linker
 entity_resolver = FuzzyEntityConflictResolver()  # Fuzzy merging
@@ -244,15 +244,12 @@ ph_factory = UUIDPlaceholderFactory()  # Opaque UUID tags
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = SpacyDetector("en_core_web_sm")  # Your detector
-memory = ConversationMemory()
-
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=span_resolver,
     entity_linker=entity_linker,
     entity_resolver=entity_resolver,
     anonymizer=anonymizer,
-    memory=memory,
 )
 
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)

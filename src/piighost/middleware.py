@@ -30,6 +30,7 @@ from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from piighost.exceptions import CacheMissError
+from langgraph.config import get_config
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 from langgraph.types import Command
@@ -38,11 +39,16 @@ from langgraph.typing import ContextT
 logger = logging.getLogger(__name__)
 
 
+def _get_thread_id() -> str:
+    """Extract the thread id from the LangGraph runtime config."""
+    return get_config().get("configurable", {}).get("thread_id", "default")
+
+
 class PIIAnonymizationMiddleware(AgentMiddleware):
     """Anonymise PII transparently around the LLM / tool boundary.
 
     Args:
-        pipeline: A configured ``ConversationAnonymizationPipeline``
+        pipeline: A configured ``ThreadAnonymizationPipeline``
             (wraps the base pipeline with conversation memory).
 
     Example:
@@ -82,9 +88,11 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             An update dict replacing the ``messages`` key, or *None* if
             nothing changed.
         """
+        pipeline = self._pipeline
+        thread_id = _get_thread_id()
+
         changed = False
         messages = state["messages"]
-        pipeline = self._pipeline
 
         for idx, message in enumerate(messages):
             content = message.content
@@ -96,7 +104,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
 
-            result, ents = await pipeline.anonymize(content)
+            result, ents = await pipeline.anonymize(content, thread_id=thread_id)
 
             logger.debug(
                 "[PII] msg %d (%s) content=%r → result=%r entities=%s",
@@ -130,6 +138,8 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             An update dict replacing the ``messages`` key, or *None* if
             nothing changed.
         """
+        thread_id = _get_thread_id()
+
         changed = False
         messages = state["messages"]
 
@@ -143,7 +153,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
                 raise ValueError("This code only takes Langchain messages into account")
 
-            restored = await self._deanonymize(content)
+            restored = await self._deanonymize(content, thread_id=thread_id)
 
             if restored == content:
                 continue
@@ -172,6 +182,8 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         Returns:
             A ``ToolMessage`` (or ``Command``) with re-anonymised content.
         """
+        thread_id = _get_thread_id()
+
         # Deanonymise string arguments, provided by the LLM (which sees only anonymized entities)
         call = request.tool_call
         args = call["args"]
@@ -179,7 +191,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         for arg_name, arg_value in args.items():
             if isinstance(arg_value, str):
-                arg_value = await self._deanonymize(arg_value)
+                arg_value = await self._deanonymize(arg_value, thread_id=thread_id)
             patched_args[arg_name] = arg_value
 
         call["args"] = patched_args
@@ -189,7 +201,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
 
         # Re-anonymise the tool response.
         if isinstance(response, ToolMessage) and isinstance(response.content, str):
-            anonymized_content, _ = await self._pipeline.anonymize(response.content)
+            anonymized_content, _ = await self._pipeline.anonymize(
+                response.content, thread_id=thread_id
+            )
             response.content = anonymized_content
             return response
 
@@ -199,7 +213,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
     # Private helpers
     # -----------------------------------------------------------------
 
-    async def _deanonymize(self, text: str) -> str:
+    async def _deanonymize(self, text: str, thread_id: str = "default") -> str:
         """Deanonymise text, falling back to entity-based replacement.
 
         Tries cache-based deanonymisation first (exact original text).
@@ -207,7 +221,9 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         the pipeline (e.g. LLM-generated responses containing tokens).
         """
         try:
-            result, _ = await self._pipeline.deanonymize(text)
+            result, _ = await self._pipeline.deanonymize(text, thread_id=thread_id)
         except CacheMissError:
-            result = await self._pipeline.deanonymize_with_ent(text)
+            result = await self._pipeline.deanonymize_with_ent(
+                text, thread_id=thread_id
+            )
         return result

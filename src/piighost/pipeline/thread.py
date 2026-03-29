@@ -19,7 +19,7 @@ from typing import Protocol
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.linker.entity import AnyEntityLinker
-from piighost.models import Entity
+from piighost.models import Detection, Entity
 from piighost.pipeline.base import AnonymizationPipeline
 from piighost.resolver.entity import AnyEntityConflictResolver
 from piighost.resolver.span import AnySpanConflictResolver
@@ -138,8 +138,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
     in memory so that ``deanonymize_with_ent`` / ``anonymize_with_ent``
     can operate on *any* text via ``str.replace``.
 
-    The placeholder factory is retrieved from ``pipeline.ph_factory``
-    to guarantee that token generation is always consistent.
+    Memory and cache are isolated per ``thread_id`` passed to each
+    method.  Cache keys are prefixed with the thread id so that a
+    shared Redis backend keeps conversations separate.  The default
+    thread id is ``"default"``.
 
     Args:
         detector: The entity detector to use.
@@ -147,8 +149,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entity_linker: The entity linker to use.
         entity_resolver: The entity conflict resolver to use.
         anonymizer: The anonymizer to use for span-based replacement.
-        memory: Optional conversation memory.  Defaults to a fresh
-            ``ConversationMemory``.
     """
 
     def __init__(
@@ -158,7 +158,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entity_linker: AnyEntityLinker | None = None,
         entity_resolver: AnyEntityConflictResolver | None = None,
         span_resolver: AnySpanConflictResolver | None = None,
-        memory: AnyConversationMemory | None = None,
     ) -> None:
         super().__init__(
             detector,
@@ -168,14 +167,73 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
             anonymizer=anonymizer,
         )
 
-        self.memory: AnyConversationMemory = memory or ConversationMemory()
+        self._memories: dict[str, ConversationMemory] = {}
+        self._thread_id: str = "default"
 
-    @property
-    def resolved_entities(self) -> list[Entity]:
-        """All entities from memory, merged by the pipeline's entity resolver."""
-        return self._entity_resolver.resolve(self.memory.all_entities)
+    def get_memory(self, thread_id: str = "default") -> ConversationMemory:
+        """Return the memory for *thread_id* (created on first access)."""
+        if thread_id not in self._memories:
+            self._memories[thread_id] = ConversationMemory()
+        return self._memories[thread_id]
 
-    async def deanonymize(self, anonymized_text: str) -> tuple[str, list[Entity]]:
+    def get_resolved_entities(self, thread_id: str = "default") -> list[Entity]:
+        """All entities from the thread's memory, merged by the entity resolver."""
+        return self._entity_resolver.resolve(self.get_memory(thread_id).all_entities)
+
+    # ------------------------------------------------------------------
+    # Cache key helpers — prefix with thread_id for isolation
+    # ------------------------------------------------------------------
+
+    def _thread_key(self, key: str) -> str:
+        """Prefix a cache key with the active thread id."""
+        return f"{self._thread_id}:{key}"
+
+    async def _cached_detect(self, text: str) -> list[Detection]:
+        """Detect entities, using thread-scoped cache if available."""
+        if self._cache is None:
+            return await self._detector.detect(text)
+
+        cache_key = self._thread_key(f"detect:{hash_sha256(text)}")
+        cached = await self._cache.get(cache_key)
+
+        if cached is not None:
+            return self._deserialize_detections(cached)
+
+        detections = await self._detector.detect(text)
+        value = self._serialize_detections(detections)
+        await self._cache.set(cache_key, value)
+        return detections
+
+    async def _store_mapping(
+        self,
+        original: str,
+        anonymized: str,
+        entities: list[Entity],
+    ) -> None:
+        """Store anonymization mapping under a thread-scoped key."""
+        if self._cache is None:
+            return
+
+        serialized_entities = self._serialize_entities(entities)
+        key = self._thread_key(f"anon:anonymized:{hash_sha256(anonymized)}")
+
+        await self._cache.set(
+            key,
+            {
+                "original": original,
+                "entities": serialized_entities,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Anonymize / deanonymize
+    # ------------------------------------------------------------------
+
+    async def deanonymize(
+        self,
+        anonymized_text: str,
+        thread_id: str = "default",
+    ) -> tuple[str, list[Entity]]:
         """Return the cached original text directly.
 
         The base pipeline reconstructs the original via span-based
@@ -185,6 +243,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         Args:
             anonymized_text: The anonymized text to restore.
+            thread_id: Thread identifier for cache isolation.
 
         Returns:
             The original text and the entities used for anonymization.
@@ -195,7 +254,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         """
         from piighost.exceptions import CacheMissError
 
-        key = f"anon:anonymized:{hash_sha256(anonymized_text)}"
+        self._thread_id = thread_id
+        key = self._thread_key(f"anon:anonymized:{hash_sha256(anonymized_text)}")
         cached = await self._cache_get(key)
 
         if cached is None:
@@ -204,7 +264,11 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entities = self._deserialize_entities(cached["entities"])
         return cached["original"], entities
 
-    async def anonymize(self, text: str) -> tuple[str, list[Entity]]:
+    async def anonymize(
+        self,
+        text: str,
+        thread_id: str = "default",
+    ) -> tuple[str, list[Entity]]:
         """Run detection, record entities in memory, then anonymize.
 
         Uses ``all_entities`` from memory for token creation so that
@@ -212,23 +276,31 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         Args:
             text: The original text to anonymize.
+            thread_id: Thread identifier for memory and cache isolation.
 
         Returns:
             A tuple of (anonymized text, entities used for anonymization).
         """
+        self._thread_id = thread_id
+        memory = self.get_memory(thread_id)
+
         entities = await self.detect_entities(text)
         entities = self._entity_linker.link_entities(
             entities,
-            self.memory.all_entities,
+            memory.all_entities,
         )
-        self.memory.record(hash_sha256(text), entities)
-        result = self.anonymize_with_ent(text)
+        memory.record(hash_sha256(text), entities)
+        result = self.anonymize_with_ent(text, thread_id=thread_id)
 
         # Required for deanonymize method which looks up mappings via cache.
         await self._store_mapping(text, result, entities)
         return result, entities
 
-    async def deanonymize_with_ent(self, text: str) -> str:
+    async def deanonymize_with_ent(
+        self,
+        text: str,
+        thread_id: str = "default",
+    ) -> str:
         """Replace all known tokens with original values via ``str.replace``.
 
         Works on any text containing tokens, even text never anonymized
@@ -240,14 +312,18 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         Args:
             text: Text potentially containing placeholder tokens.
+            thread_id: Thread identifier for memory and cache isolation.
 
         Returns:
             Text with tokens replaced by original values.
         """
-        if not self.resolved_entities:
+        self._thread_id = thread_id
+        resolved = self.get_resolved_entities(thread_id)
+
+        if not resolved:
             return text
 
-        tokens = self.ph_factory.create(self.resolved_entities)
+        tokens = self.ph_factory.create(resolved)
 
         anonymized = text
         # Sort by token length descending (longest-first).
@@ -260,10 +336,14 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
             text = text.replace(token, canonical)
 
         # Store mapping so deanonymize() cache lookup works for this text.
-        await self._store_mapping(text, anonymized, self.resolved_entities)
+        await self._store_mapping(text, anonymized, resolved)
         return text
 
-    def anonymize_with_ent(self, text: str) -> str:
+    def anonymize_with_ent(
+        self,
+        text: str,
+        thread_id: str = "default",
+    ) -> str:
         """Replace all known original values with tokens via ``str.replace``.
 
         Replaces **all** spelling variants of each entity (not just the
@@ -272,14 +352,17 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         Args:
             text: Text potentially containing original PII values.
+            thread_id: Thread identifier for memory isolation.
 
         Returns:
             Text with original values replaced by tokens.
         """
-        if not self.resolved_entities:
+        resolved = self.get_resolved_entities(thread_id)
+
+        if not resolved:
             return text
 
-        tokens = self.ph_factory.create(self.resolved_entities)
+        tokens = self.ph_factory.create(resolved)
 
         # Collect all (detection_text, token) pairs for all variants.
         replacements: list[tuple[str, str]] = []

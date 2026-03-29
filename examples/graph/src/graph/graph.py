@@ -71,8 +71,6 @@ detector = Gliner2Detector(
     model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5, flat_ner=True
 )
 anonymizer = Anonymizer(CounterPlaceholderFactory())
-# TODO: each thread should get its own ThreadAnonymizationPipeline
-#  instance so that ConversationMemory does not leak across conversations.
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=ConfidenceSpanConflictResolver(),

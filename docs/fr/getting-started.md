@@ -98,7 +98,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
-from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline, ConversationMemory
+from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
 
 from gliner2 import GLiNER2
@@ -116,14 +116,12 @@ detector = Gliner2Detector(
     threshold=0.5,
     labels=["PERSON", "LOCATION"],
 )
-memory=ConversationMemory()
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=span_resolver,
     entity_linker=entity_linker,
     entity_resolver=entity_resolver,
     anonymizer=anonymizer,
-    memory=memory,
 )
 
 
@@ -170,7 +168,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
-from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline, ConversationMemory
+from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.middleware import PIIAnonymizationMiddleware
 
@@ -198,14 +196,12 @@ detector = Gliner2Detector(
     threshold=0.5,
     labels=["PERSON", "LOCATION"],
 )
-memory=ConversationMemory()
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=span_resolver,
     entity_linker=entity_linker,
     entity_resolver=entity_resolver,
     anonymizer=anonymizer,
-    memory=memory,
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 

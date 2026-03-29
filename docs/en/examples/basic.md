@@ -99,7 +99,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
-from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
+from piighost.pipeline import ThreadAnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
 
 entity_linker = ExactEntityLinker()
@@ -114,15 +114,12 @@ detector = Gliner2Detector(
     threshold=0.5,
     labels=["PERSON", "LOCATION"],
 )
-memory = ConversationMemory()
-
 conv_pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=span_resolver,
     entity_linker=entity_linker,
     entity_resolver=entity_resolver,
     anonymizer=anonymizer,
-    memory=memory,
 )
 
 

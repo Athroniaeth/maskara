@@ -16,7 +16,6 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
 from piighost.anonymizer import Anonymizer
-from piighost.pipeline.thread import ConversationMemory
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
 from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
@@ -67,7 +66,6 @@ def _build_pipeline() -> ThreadAnonymizationPipeline:
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
         anonymizer=Anonymizer(CounterPlaceholderFactory()),
-        memory=ConversationMemory(),
     )
 
 

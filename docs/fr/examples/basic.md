@@ -84,7 +84,6 @@ Pour les scenarios multi-messages (conversation), `ConversationAnonymizationPipe
 import asyncio
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
@@ -98,7 +97,6 @@ conv_pipeline = ConversationAnonymizationPipeline(
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
 )
 
 

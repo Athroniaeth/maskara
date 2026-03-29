@@ -52,7 +52,6 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
@@ -128,7 +127,6 @@ pipeline = ConversationAnonymizationPipeline(
     entity_linker=ExactEntityLinker(),
     entity_resolver=MergeEntityConflictResolver(),
     anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 

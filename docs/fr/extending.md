@@ -209,7 +209,6 @@ Tous les composants sont independants et peuvent etre combines librement :
 
 ```python
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
 from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import FuzzyEntityConflictResolver
@@ -222,7 +221,6 @@ pipeline = ConversationAnonymizationPipeline(
     entity_linker=ExactEntityLinker(),  # Ou votre linker
     entity_resolver=FuzzyEntityConflictResolver(),  # Fusion floue
     anonymizer=Anonymizer(UUIDPlaceholderFactory()),  # Tags UUID opaques
-    memory=ConversationMemory(),
 )
 
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
