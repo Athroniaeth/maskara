@@ -138,7 +138,7 @@ from gliner2 import GLiNER2
 from piighost.detector import Gliner2Detector, CompositeDetector
 from examples.detectors.common import create_detector as create_regex
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
 detector = CompositeDetector(
     detectors=[

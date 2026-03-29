@@ -68,19 +68,25 @@ from examples.detectors.common import create_detector
 
 from piighost.anonymizer import Anonymizer
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 detector = create_detector()
 
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
 pipeline = AnonymizationPipeline(
     detector=detector,
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, _ = await pipeline.anonymize("Email me at alice@example.com, server 192.168.1.42.")
@@ -96,12 +102,19 @@ from examples.detectors.us import create_full_detector
 detector = create_full_detector()
 # create_full_detector() merges common + US patterns via CompositeDetector
 
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
 pipeline = AnonymizationPipeline(
     detector=detector,
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, _ = await pipeline.anonymize(
@@ -135,10 +148,11 @@ detector = RegexDetector(patterns=my_patterns)
 ```python
 from gliner2 import GLiNER2
 
-from piighost.detector import Gliner2Detector, CompositeDetector
+from piighost.detector import CompositeDetector
+from piighost.detector.gliner2 import Gliner2Detector
 from examples.detectors.common import create_detector as create_regex
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
 
 detector = CompositeDetector(
     detectors=[
@@ -147,12 +161,19 @@ detector = CompositeDetector(
     ]
 )
 
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
 pipeline = AnonymizationPipeline(
     detector=detector,
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, _ = await pipeline.anonymize("Patrick at alice@example.com, IP 10.0.0.1.")

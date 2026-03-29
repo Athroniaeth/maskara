@@ -53,7 +53,7 @@ from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 # 1. Charger le modele NER
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
 # 2. Construire le pipeline
 pipeline = AnonymizationPipeline(
@@ -95,37 +95,57 @@ asyncio.run(main())
 import asyncio
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
+from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline, ConversationMemory
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
-conv_pipeline = ConversationAnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
+from gliner2 import GLiNER2
+
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
+memory=ConversationMemory()
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 
 
 async def conversation():
     # Premier message : detection NER + enregistrement des entites
-    anonymized, _ = await conv_pipeline.anonymize("Patrick habite a Paris.")
+    # la pipeline garde en mémoire que l'entrée et la sortie sont liées, 
+    # et que <<PERSON_1>> correspond à "Patrick" et <<LOCATION_1>> à "Paris"
+    anonymized, _ = await pipeline.anonymize("Patrick habite a Paris.")
     print(anonymized)
     # <<PERSON_1>> habite a <<LOCATION_1>>.
-
-    # Desanonymisation par remplacement de chaine (fonctionne sur tout texte avec tokens)
-    restored = await conv_pipeline.deanonymize_with_ent("Bonjour <<PERSON_1>> !")
+    
+    # Désanonymisation fonctionnant via la correspondance stockée dans le cache de la pipeline
+    restored = await pipeline.deanonymize("Bonjour <<PERSON_1>> !")
+    print(restored)
+    
+    # Désanonymisation par remplacement de texte, utilisant les anciennes détéctions stockées en mémoire
+    restored = await pipeline.deanonymize_with_ent("Bonjour <<PERSON_1>> !")
     print(restored)
     # Bonjour Patrick !
 
-    # Reanonymisation (valeurs originales → tokens)
-    reanon = conv_pipeline.anonymize_with_ent("Resultat pour Patrick a Paris")
+    # Reanonymisation par remplacement de texte, utilisant les anciennes détéctions stockées en mémoire
+    reanon = pipeline.anonymize_with_ent("Resultat pour Patrick a Paris")
     print(reanon)
     # Resultat pour <<PERSON_1>> a <<LOCATION_1>>
 
@@ -147,37 +167,63 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
-from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
+from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline, ConversationMemory
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.middleware import PIIAnonymizationMiddleware
+
+from gliner2 import GLiNER2
+
 
 
 @tool
 def send_email(to: str, subject: str, body: str) -> str:
     """Envoie un email a l'adresse donnee."""
-    return f"Email envoye a {to}."
+    return f"Email envoyé a {to}."
 
 
 # Construire le pipeline conversationnel
-pipeline = ConversationAnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
+memory=ConversationMemory()
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
-# Creer l'agent avec le middleware
+system_prompt = """\
+You are a helpful assistant. Some inputs may contain anonymized placeholders that replace real values for privacy reasons.
+
+Rules:
+1. Treat every placeholder as if it were the real value, never comment on its format, never say it is a token, never ask the user to reveal it.
+2. Placeholders can be passed directly to tools use them as-is as input arguments. This preserves the user's privacy while \
+still allowing tools to operate.
+3. If the user asks for a specific detail about a token (e.g. "what is the first letter?"), reply briefly: "I cannot answer that question as the data has been anonymized to protect your personal information." \
+Another example is if the user asks "Dans quel pays ce trouve la ville de {city} ?", you can answer "Je suis désolé, mais je ne peux pas répondre à cette question car les données ont été anonymisées pour protéger vos informations personnelles."
+"""
+
+# Créer l'agent avec le middleware
 agent = create_agent(
-    model="openai:gpt-4o-mini",
-    system_prompt="Tu es un assistant utile.",
+    model="openai:gpt-5.4",
+    system_prompt=system_prompt,
     tools=[send_email],
     middleware=[middleware],
 )
@@ -187,11 +233,11 @@ Le middleware intercepte automatiquement chaque tour de l'agent le LLM ne voit q
 
 ---
 
-## Commandes de developpement
+## Commandes de développement
 
 ```bash
-uv sync                      # Installer les dependances
-make lint                    # Format (ruff) + lint (ruff) + type-check (pyrefly)
-uv run pytest                # Lancer tous les tests
-uv run pytest tests/ -k "test_name"  # Lancer un test specifique
+uv sync  # Installer les dépendances
+make lint  # Format (ruff) + lint (ruff) + type-check (pyrefly)
+uv run pytest  # Lancer tous les tests
+uv run pytest tests/ -k "test_name"  # Lancer un test spécifique
 ```

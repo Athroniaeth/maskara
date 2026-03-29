@@ -40,7 +40,7 @@ from langchain.agents import create_agent
 middleware = PIIAnonymizationMiddleware(pipeline=conv_pipeline)
 
 agent = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     tools=[...],
     middleware=[middleware],
 )
@@ -132,7 +132,7 @@ def get_info(person: str) -> str:
     return f"{person} est ingenieur logiciel a Paris."
 
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
 pipeline = ConversationAnonymizationPipeline(
     detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
@@ -145,7 +145,7 @@ pipeline = ConversationAnonymizationPipeline(
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 agent = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt="Tu es un assistant utile. Traite les placeholders comme des vraies valeurs.",
     tools=[get_info],
     middleware=[middleware],

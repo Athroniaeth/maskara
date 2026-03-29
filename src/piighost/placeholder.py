@@ -40,8 +40,8 @@ class CounterPlaceholderFactory:
         >>> factory.create([e])[e]
         '<<PERSON_1>>'
     """
-    def __init__(self):
-        ...
+
+    def __init__(self): ...
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Create counter-based tokens for all entities.
@@ -123,8 +123,8 @@ class RedactPlaceholderFactory:
         >>> factory.create([e])[e]
         '<PERSON>'
     """
-    def __init__(self):
-        ...
+
+    def __init__(self): ...
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Create redact tokens for all entities.
@@ -188,9 +188,7 @@ def mask_default(text: str, mask_char: str = "*") -> str:
     return text[0] + mask_char * (len(text) - 1)
 
 
-def _build_default_strategies(
-    mask_char: str, visible_chars: int
-) -> dict[str, MaskFn]:
+def _build_default_strategies(mask_char: str, visible_chars: int) -> dict[str, MaskFn]:
     """Build the default label → mask function mapping.
 
     * Labels containing ``"email"`` → :func:`mask_email`

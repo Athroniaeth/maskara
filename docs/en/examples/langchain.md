@@ -15,7 +15,7 @@ To use the LangChain middleware, install the additional dependencies:
 === "uv"
 
     ```bash
-    uv add piighost langchain langgraph langchain-openai
+    uv add piighost[langchain] langchain-openai
     ```
 
 === "pip"
@@ -34,7 +34,7 @@ To use the LangChain middleware, install the additional dependencies:
 ```
 GLiNER2 model
     └── GlinerDetector
-            └── ConversationAnonymizationPipeline
+            └── ThreadAnonymizationPipeline
                     ├── AnonymizationPipeline (base)
                     ├── ConversationMemory
                     └── PIIAnonymizationMiddleware
@@ -52,14 +52,12 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 load_dotenv()
 
@@ -119,15 +117,29 @@ as the data has been anonymized to protect your personal information."
 # ---------------------------------------------------------------------------
 
 # Load the GLiNER2 model (HuggingFace download ~500 MB on first run)
-extractor = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+extractor = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
 
-pipeline = ConversationAnonymizationPipeline(
-    detector=Gliner2Detector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = Gliner2Detector(
+    model=extractor,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
+memory = ConversationMemory()
+
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
@@ -136,7 +148,7 @@ middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 # ---------------------------------------------------------------------------
 
 graph = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt=system_prompt,
     tools=[send_email, get_weather],
     middleware=[middleware],
@@ -220,7 +232,7 @@ langfuse = get_client()
 langfuse_handler = CallbackHandler()
 
 graph = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt=system_prompt,
     tools=[send_email, get_weather],
     middleware=[middleware],

@@ -17,7 +17,7 @@ PIIGhost is organized in distinct layers: a **stateless anonymizer** at the core
 └────────────────────────┬────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────┐
-│            ConversationAnonymizationPipeline             │  ← Memory & string ops
+│            ThreadAnonymizationPipeline             │  ← Memory & string ops
 │  ConversationMemory · deanonymize_with_ent              │
 │  · anonymize_with_ent                                   │
 └────────────────────────┬────────────────────────────────┘
@@ -163,9 +163,9 @@ Wraps each tool call:
 
 ---
 
-## Conversation layer `ConversationAnonymizationPipeline`
+## Conversation layer `ThreadAnonymizationPipeline`
 
-`ConversationAnonymizationPipeline` extends `AnonymizationPipeline` with:
+`ThreadAnonymizationPipeline` extends `AnonymizationPipeline` with:
 
 | Mechanism | Description |
 |-----------|-------------|
@@ -203,12 +203,18 @@ All models are **frozen dataclasses** (immutable, thread-safe):
 Every stage uses a **protocol** (Python structural subtyping) as its injection point:
 
 ```python
-AnonymizationPipeline(
-    detector=GlinerDetector(...),                    # AnyDetector
-    span_resolver=ConfidenceSpanConflictResolver(),  # AnySpanConflictResolver
-    entity_linker=ExactEntityLinker(),               # AnyEntityLinker
-    entity_resolver=MergeEntityConflictResolver(),   # AnyEntityConflictResolver
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),  # AnyAnonymizer
+detector = GlinerDetector(...)                    # AnyDetector
+span_resolver = ConfidenceSpanConflictResolver()  # AnySpanConflictResolver
+entity_linker = ExactEntityLinker()               # AnyEntityLinker
+entity_resolver = MergeEntityConflictResolver()   # AnyEntityConflictResolver
+anonymizer = Anonymizer(ph_factory=CounterPlaceholderFactory())  # AnyAnonymizer
+
+pipeline = AnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 ```
 

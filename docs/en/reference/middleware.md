@@ -23,24 +23,24 @@ Extends `AgentMiddleware` from LangChain and intercepts the agent loop at **3 po
 ### Constructor
 
 ```python
-PIIAnonymizationMiddleware(pipeline: ConversationAnonymizationPipeline)
+PIIAnonymizationMiddleware(pipeline: ThreadAnonymizationPipeline)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `pipeline` | `ConversationAnonymizationPipeline` | Configured conversation pipeline with memory |
+| `pipeline` | `ThreadAnonymizationPipeline` | Configured conversation pipeline with memory |
 
 ### Usage
 
 ```python
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
+from piighost.pipeline import ThreadAnonymizationPipeline
 from langchain.agents import create_agent
 
 middleware = PIIAnonymizationMiddleware(pipeline=conv_pipeline)
 
 agent = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     tools=[...],
     middleware=[middleware],
 )
@@ -145,7 +145,7 @@ ImportError: You must install piighost[langchain] for use middleware
 Installation:
 
 ```bash
-uv add piighost langchain langgraph
+uv add piighost[langchain]
 ```
 
 ---
@@ -159,14 +159,12 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
+from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 
 @tool
@@ -175,20 +173,34 @@ def get_info(person: str) -> str:
     return f"{person} is a software engineer in Paris."
 
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
 
-pipeline = ConversationAnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
+memory = ConversationMemory()
+
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 agent = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt="You are a helpful assistant. Treat placeholders as real values.",
     tools=[get_info],
     middleware=[middleware],

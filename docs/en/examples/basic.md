@@ -16,23 +16,35 @@ import asyncio
 from gliner2 import GLiNER2
 
 from piighost.anonymizer import Anonymizer
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 # Load the GLiNER2 model
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
+
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
 
 # Build the pipeline
 pipeline = AnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 
@@ -78,27 +90,39 @@ asyncio.run(main())
 
 ## Conversation pipeline with memory
 
-For multi-message scenarios (conversations), `ConversationAnonymizationPipeline` accumulates entities across messages and provides string-based deanonymization/reanonymization.
+For multi-message scenarios (conversations), `ThreadAnonymizationPipeline` accumulates entities across messages and provides string-based deanonymization/reanonymization.
 
 ```python
 import asyncio
 
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
+from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
-conv_pipeline = ConversationAnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
-    memory=ConversationMemory(),
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
+memory = ConversationMemory()
+
+conv_pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 
 
@@ -161,17 +185,25 @@ In tests, use `ExactMatchDetector` to avoid downloading the model:
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
 
 pipeline = AnonymizationPipeline(
-    detector=ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")]),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 # Deterministic detection without an NER model

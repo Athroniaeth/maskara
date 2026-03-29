@@ -117,18 +117,18 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
     def __init__(
         self,
         detector: AnyDetector,
-        span_resolver: AnySpanConflictResolver,
-        entity_linker: AnyEntityLinker,
-        entity_resolver: AnyEntityConflictResolver,
         anonymizer: AnyAnonymizer,
+        entity_linker: AnyEntityLinker | None = None,
+        entity_resolver: AnyEntityConflictResolver | None = None,
+        span_resolver: AnySpanConflictResolver | None = None,
         memory: AnyConversationMemory | None = None,
     ) -> None:
         super().__init__(
             detector,
-            span_resolver,
-            entity_linker,
-            entity_resolver,
-            anonymizer,
+            span_resolver=span_resolver,
+            entity_linker=entity_linker,
+            entity_resolver=entity_resolver,
+            anonymizer=anonymizer,
         )
 
         self.memory: AnyConversationMemory = memory or ConversationMemory()

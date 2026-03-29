@@ -79,16 +79,16 @@ pipeline.ph_factory  # AnyPlaceholderFactory
 
 ---
 
-## `ConversationAnonymizationPipeline`
+## `ThreadAnonymizationPipeline`
 
-Module: `piighost.conversation_pipeline`
+Module: `piighost.pipeline`
 
 Extends `AnonymizationPipeline` with conversation memory for consistent entity tracking across messages.
 
 ### Constructor
 
 ```python
-ConversationAnonymizationPipeline(
+ThreadAnonymizationPipeline(
     detector: AnyDetector,
     span_resolver: AnySpanConflictResolver,
     entity_linker: AnyEntityLinker,
@@ -144,7 +144,7 @@ conv_pipeline.resolved_entities  # list[Entity]
 
 ## `ConversationMemory`
 
-Module: `piighost.conversation_memory`
+Module: `piighost.pipeline`
 
 In-memory conversation memory that accumulates entities across messages, deduplicating by `(text.lower(), label)`.
 
@@ -199,22 +199,34 @@ pipeline = AnonymizationPipeline(
 ```python
 import asyncio
 from piighost.anonymizer import Anonymizer
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 from gliner2 import GLiNER2
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
+
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
 
 pipeline = AnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 

@@ -5,11 +5,17 @@ from aiocache import Cache
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.exceptions import CacheMissError
-from piighost.linker.entity import AnyEntityLinker
+from piighost.linker.entity import AnyEntityLinker, ExactEntityLinker
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import AnyPlaceholderFactory
-from piighost.resolver.entity import AnyEntityConflictResolver
-from piighost.resolver.span import AnySpanConflictResolver
+from piighost.resolver.entity import (
+    AnyEntityConflictResolver,
+    MergeEntityConflictResolver,
+)
+from piighost.resolver.span import (
+    AnySpanConflictResolver,
+    ConfidenceSpanConflictResolver,
+)
 from piighost.utils import hash_sha256
 
 try:
@@ -52,12 +58,16 @@ class AnonymizationPipeline:
     def __init__(
         self,
         detector: AnyDetector,
-        span_resolver: AnySpanConflictResolver,
-        entity_linker: AnyEntityLinker,
-        entity_resolver: AnyEntityConflictResolver,
         anonymizer: AnyAnonymizer,
+        span_resolver: AnySpanConflictResolver | None = None,
+        entity_linker: AnyEntityLinker | None = None,
+        entity_resolver: AnyEntityConflictResolver | None = None,
         cache: BaseCache | None = None,
     ) -> None:
+        span_resolver = span_resolver or ConfidenceSpanConflictResolver()
+        entity_linker = entity_linker or ExactEntityLinker()
+        entity_resolver = entity_resolver or MergeEntityConflictResolver()
+
         self._detector = detector
         self._span_resolver = span_resolver
         self._entity_linker = entity_linker

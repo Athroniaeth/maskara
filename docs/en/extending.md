@@ -231,20 +231,28 @@ All components are independent and can be freely combined:
 
 ```python
 from piighost.anonymizer import Anonymizer
-from piighost.conversation_memory import ConversationMemory
-from piighost.conversation_pipeline import ConversationAnonymizationPipeline
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import FuzzyEntityConflictResolver
+from piighost.resolver import FuzzyEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.span_resolver import ConfidenceSpanConflictResolver
+from piighost.pipeline import ThreadAnonymizationPipeline, ConversationMemory
 
-pipeline = ConversationAnonymizationPipeline(
-    detector=SpacyDetector("en_core_web_sm"),  # Your detector
-    span_resolver=ConfidenceSpanConflictResolver(),  # Or your resolver
-    entity_linker=ExactEntityLinker(),  # Or your linker
-    entity_resolver=FuzzyEntityConflictResolver(),  # Fuzzy merging
-    anonymizer=Anonymizer(UUIDPlaceholderFactory()),  # Opaque UUID tags
-    memory=ConversationMemory(),
+entity_linker = ExactEntityLinker()  # Or your linker
+entity_resolver = FuzzyEntityConflictResolver()  # Fuzzy merging
+span_resolver = ConfidenceSpanConflictResolver()  # Or your resolver
+
+ph_factory = UUIDPlaceholderFactory()  # Opaque UUID tags
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+detector = SpacyDetector("en_core_web_sm")  # Your detector
+memory = ConversationMemory()
+
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
+    memory=memory,
 )
 
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
@@ -261,20 +269,28 @@ import pytest
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 
 @pytest.mark.asyncio
 async def test_my_pipeline():
+    entity_linker = ExactEntityLinker()
+    entity_resolver = MergeEntityConflictResolver()
+    span_resolver = ConfidenceSpanConflictResolver()
+
+    ph_factory = CounterPlaceholderFactory()
+    anonymizer = Anonymizer(ph_factory=ph_factory)
+
+    detector = ExactMatchDetector([("Alice", "PERSON")])
+
     pipeline = AnonymizationPipeline(
-        detector=ExactMatchDetector([("Alice", "PERSON")]),
-        span_resolver=ConfidenceSpanConflictResolver(),
-        entity_linker=ExactEntityLinker(),
-        entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        detector=detector,
+        span_resolver=span_resolver,
+        entity_linker=entity_linker,
+        entity_resolver=entity_resolver,
+        anonymizer=anonymizer,
     )
 
     anonymized, entities = await pipeline.anonymize("Alice lives in Lyon.")

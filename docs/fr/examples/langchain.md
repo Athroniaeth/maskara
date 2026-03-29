@@ -15,7 +15,7 @@ Pour utiliser le middleware LangChain, installez les dependances supplementaires
 === "uv"
 
     ```bash
-    uv add piighost langchain langgraph langchain-openai
+    uv add piighost[langchain] langchain-openai
     ```
 
 === "pip"
@@ -120,7 +120,7 @@ informations personnelles."
 # ---------------------------------------------------------------------------
 
 # Charger le modele GLiNER2 (telechargement HuggingFace ~500 Mo a la premiere execution)
-extractor = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
 pipeline = ConversationAnonymizationPipeline(
     detector=Gliner2Detector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
@@ -137,7 +137,7 @@ middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 # ---------------------------------------------------------------------------
 
 graph = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt=system_prompt,
     tools=[send_email, get_weather],
     middleware=[middleware],
@@ -221,7 +221,7 @@ langfuse = get_client()
 langfuse_handler = CallbackHandler()
 
 graph = create_agent(
-    model="openai:gpt-4o-mini",
+    model="openai:gpt-5.4",
     system_prompt=system_prompt,
     tools=[send_email, get_weather],
     middleware=[middleware],

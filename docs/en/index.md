@@ -6,18 +6,19 @@ icon: lucide/shield
 
 **Transparent PII anonymization for LLM agents.**
 
-`piighost` is a Python library that automatically detects, anonymizes, and deanonymizes sensitive entities (names, locations, etc.) in AI agent conversations. It integrates via a LangChain middleware without modifying your existing agent code.
+`piighost` is a Python library that detects PII (personally identifiable information), extracts them, applies corrections, and automatically anonymizes and deanonymizes sensitive entities (names, locations, etc.). With modules for bidirectional anonymization in AI agent conversations, it integrates via a LangChain middleware without modifying your existing agent code.
 
 ---
 
 ## Features
 
-- **5-stage pipeline**: Detect → Resolve Spans → Link Entities → Resolve Entities → Anonymize covers every occurrence of each entity
-- **Bidirectional**: reliable deanonymization via span-based replacement, plus fast string-based reanonymization
-- **Conversation memory**: `ConversationMemory` accumulates entities across messages for consistent placeholders
-- **LangChain middleware**: transparent hooks on `abefore_model`, `aafter_model`, and `awrap_tool_call` zero changes to your agent code
-- **Protocol-based DI**: every pipeline stage is a swappable protocol detector, span resolver, entity linker, entity resolver, anonymizer, placeholder factory
-- **Immutable data models**: frozen dataclasses throughout (`Entity`, `Detection`, `Span`)
+- **Detection**: Detect PII with NER models, algorithms, and build your custom configuration with our detector composition component
+- **Span resolution**: Resolve overlapping or nested detected spans to guarantee clean, non-redundant entities, especially when using multiple detectors
+- **Entity linking**: Link different detections together, enabling typo tolerance and catching mentions that an NER model might miss
+- **Entity resolution**: Resolve linked entity conflicts (e.g., one detector links A and B, another links B and C) to guarantee coherent final entities
+- **Anonymization**: Anonymize detected entities with customizable placeholders (e.g., `<<PERSON_1>>`, `<<LOCATION_1>>`) to protect privacy while preserving text structure. A cache system remembers the applied anonymization and can reverse it for deanonymization
+- **Placeholder Factory**: Create custom placeholders for anonymization, with flexible naming strategies (counters, UUID, etc.) to fit your specific needs
+- **Middleware**: Easily integrate `piighost` into your LangChain agents for transparent anonymization before and after model calls, without modifying your existing agent code
 
 ---
 
@@ -43,30 +44,40 @@ icon: lucide/shield
 import asyncio
 
 from piighost.anonymizer import Anonymizer
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
-from piighost.entity_resolver import MergeEntityConflictResolver
+from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
-from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 from gliner2 import GLiNER2
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+span_resolver = ConfidenceSpanConflictResolver()
+
+ph_factory = CounterPlaceholderFactory()
+anonymizer = Anonymizer(ph_factory=ph_factory)
+
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
+detector = Gliner2Detector(
+    model=model,
+    threshold=0.5,
+    labels=["PERSON", "LOCATION"],
+)
 
 pipeline = AnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 
 async def main():
-    anonymized, entities = await pipeline.anonymize(
-        "Patrick lives in Paris. Patrick loves Paris.",
-    )
+    text = "Patrick lives in Paris. Patrick loves Paris."
+    anonymized, entities = await pipeline.anonymize(text)
     print(anonymized)
     # <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
 

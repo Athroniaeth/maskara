@@ -7,7 +7,6 @@ is mapped to a Faker provider method via a configurable strategies dict.
 
 import importlib.util
 from collections.abc import Callable
-from typing import Protocol
 
 from piighost.models import Entity
 

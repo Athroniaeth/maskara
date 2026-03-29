@@ -24,7 +24,7 @@ from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 # Charger le modele GLiNER2
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
 # Construire le pipeline
 pipeline = AnonymizationPipeline(

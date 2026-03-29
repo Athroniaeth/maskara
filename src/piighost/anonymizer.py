@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from piighost.models import Entity, Span
-from piighost.placeholder import AnyPlaceholderFactory
+from piighost.placeholder import AnyPlaceholderFactory, CounterPlaceholderFactory
 
 
 class AnyAnonymizer(Protocol):
@@ -61,8 +61,8 @@ class Anonymizer:
 
     ph_factory: AnyPlaceholderFactory
 
-    def __init__(self, ph_factory: AnyPlaceholderFactory) -> None:
-        self.ph_factory = ph_factory
+    def __init__(self, ph_factory: AnyPlaceholderFactory | None) -> None:
+        self.ph_factory = ph_factory or CounterPlaceholderFactory()
 
     def anonymize(self, text: str, entities: list[Entity]) -> str:
         """Replace each detection in the text with its entity's token.

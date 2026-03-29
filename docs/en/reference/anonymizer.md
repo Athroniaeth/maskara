@@ -39,8 +39,8 @@ entity = Entity(detections=(
     Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),
 ))
 
-result = anonymizer.anonymize("Patrick est gentil", [entity])
-# '<<PERSON_1>> est gentil'
+result = anonymizer.anonymize("Patrick is nice", [entity])
+# '<<PERSON_1>> is nice'
 ```
 
 | Parameter | Type | Description |
@@ -55,8 +55,8 @@ result = anonymizer.anonymize("Patrick est gentil", [entity])
 Restores the original text by replacing tokens with original detection texts, using the original positions to handle entities with multiple spelling variants.
 
 ```python
-original = anonymizer.deanonymize("<<PERSON_1>> est gentil", [entity])
-# 'Patrick est gentil'
+original = anonymizer.deanonymize("<<PERSON_1>> is nice", [entity])
+# 'Patrick is nice'
 ```
 
 | Parameter | Type | Description |
@@ -117,9 +117,9 @@ GlinerDetector(
 
 ```python
 from gliner2 import GLiNER2
-from piighost.detector import Gliner2Detector
+from piighost.detector.gliner2 import Gliner2Detector
 
-model = GLiNER2.from_pretrained("urchade/gliner_multi_pii-v1")
+model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
 detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
 
 detections = await detector.detect("Patrick lives in Paris")
@@ -142,7 +142,7 @@ ExactMatchDetector(
 from piighost.detector import ExactMatchDetector
 
 detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
-detections = await detector.detect("Patrick habite a Paris")
+detections = await detector.detect("Patrick lives in Paris")
 ```
 
 ### `RegexDetector`
@@ -157,7 +157,7 @@ RegexDetector(patterns: dict[str, str])
 from piighost.detector import RegexDetector
 
 detector = RegexDetector(patterns={"FR_PHONE": r"\b(?:\+33|0)[1-9](?:[\s.\-]?\d{2}){4}\b"})
-detections = await detector.detect("Appelez le 06 12 34 56 78")
+detections = await detector.detect("Call me at 06 12 34 56 78")
 ```
 
 ### `CompositeDetector`
