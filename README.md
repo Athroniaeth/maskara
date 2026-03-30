@@ -260,6 +260,11 @@ uv run pytest tests/ -k "test_name"  # Run a single test
 - **Package manager**: uv (not pip)
 - **Python**: 3.12+
 
+## Ecosystem
+
+- **[piighost-api](https://github.com/Athroniaeth/piighost-api)** — REST API server for PII anonymization inference. Loads a piighost pipeline once server-side and exposes anonymize/deanonymize via HTTP, so clients only need a lightweight HTTP client instead of embedding the NER model.
+- **[piighost-chat](https://github.com/Athroniaeth/piighost-chat)** — Demo chat app showcasing privacy-preserving AI conversations. Uses `PIIAnonymizationMiddleware` with LangChain to anonymize messages before the LLM and deanonymize responses transparently. Built with SvelteKit, Litestar, and Docker Compose.
+
 ## Additional notes
 
 - The GLiNER2 model is downloaded from HuggingFace on first use (~500 MB)
