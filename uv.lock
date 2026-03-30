@@ -1408,6 +1408,10 @@ gliner2 = [
 langchain = [
     { name = "langchain" },
 ]
+middleware = [
+    { name = "aiocache" },
+    { name = "langchain" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1435,12 +1439,14 @@ pipeline = [
 [package.metadata]
 requires-dist = [
     { name = "aiocache", marker = "extra == 'cache'", specifier = ">=0.12" },
+    { name = "aiocache", marker = "extra == 'middleware'", specifier = ">=0.12" },
     { name = "faker", marker = "extra == 'faker'", specifier = ">=40.11" },
     { name = "gliner2", marker = "extra == 'gliner2'", specifier = ">=1.2" },
     { name = "httpx", marker = "extra == 'client'", specifier = ">=0.28" },
     { name = "langchain", marker = "extra == 'langchain'", specifier = ">=1.2" },
+    { name = "langchain", marker = "extra == 'middleware'", specifier = ">=1.2" },
 ]
-provides-extras = ["gliner2", "langchain", "faker", "cache", "client"]
+provides-extras = ["gliner2", "langchain", "faker", "cache", "middleware", "client"]
 
 [package.metadata.requires-dev]
 dev = [

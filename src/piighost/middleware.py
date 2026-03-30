@@ -16,11 +16,10 @@ All caching, hashing, and text-level replacement logic is delegated to
 
 import importlib.util
 
-from piighost.pipeline.thread import ThreadAnonymizationPipeline
-
 if importlib.util.find_spec("langchain") is None:
     raise ImportError(
-        "You must install langchain to use PIIAnonymizationMiddleware, please install piighost[langchain] for use middleware"
+        "You must install langchain to use PIIAnonymizationMiddleware, "
+        "please install piighost[middleware]"
     )
 
 import logging
@@ -28,13 +27,14 @@ from typing import Any, Awaitable, Callable
 
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
-from piighost.exceptions import CacheMissError
 from langgraph.config import get_config
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from langgraph.typing import ContextT
+
+from piighost.exceptions import CacheMissError
+from piighost.pipeline.thread import ThreadAnonymizationPipeline
 
 logger = logging.getLogger(__name__)
 

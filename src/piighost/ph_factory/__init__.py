@@ -1,5 +1,8 @@
-from piighost.ph_factory.faker import FakerPlaceholderFactory
+import importlib.util
 
-__all__ = [
-    "FakerPlaceholderFactory",
-]
+if importlib.util.find_spec("faker") is not None:
+    from piighost.ph_factory.faker import FakerPlaceholderFactory
+
+    __all__ = ["FakerPlaceholderFactory"]
+else:
+    __all__ = []

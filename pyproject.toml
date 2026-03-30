@@ -55,6 +55,10 @@ faker = [
 cache = [
     "aiocache>=0.12",
 ]
+middleware = [
+    "langchain>=1.2",
+    "aiocache>=0.12",
+]
 client = [
     "httpx>=0.28",
 ]

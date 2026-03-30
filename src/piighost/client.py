@@ -131,7 +131,10 @@ class PIIGhostClient:
         """
         response = await self._client.post(
             "/v1/deanonymize/entities",
-            json={"text": text, "thread_id": thread_id,},
+            json={
+                "text": text,
+                "thread_id": thread_id,
+            },
         )
         response.raise_for_status()
         return response.json()["text"]

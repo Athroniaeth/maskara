@@ -1,6 +1,12 @@
+import importlib.util
 from typing import Tuple
 
-from aiocache import Cache
+if importlib.util.find_spec("aiocache") is None:
+    raise ImportError(
+        "AnonymizationPipeline requires aiocache for caching. Install with `uv add piighost[cache]`."
+    )
+
+from aiocache import BaseCache, Cache
 
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
@@ -17,13 +23,6 @@ from piighost.resolver.span import (
     ConfidenceSpanConflictResolver,
 )
 from piighost.utils import hash_sha256
-
-try:
-    from aiocache import BaseCache
-except ImportError:
-    raise ImportError(
-        "AnonymizationPipeline requires aiocache for caching. Install with `uv add piighost[pipeline]`."
-    )
 
 
 class AnonymizationPipeline:
