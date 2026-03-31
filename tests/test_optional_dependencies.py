@@ -21,6 +21,7 @@ EXTRA_TO_MODULES: dict[str, list[str]] = {
     "faker": ["faker"],
     "cache": ["aiocache"],
     "client": ["httpx"],
+    "spacy": ["spacy"],
 }
 
 

@@ -62,8 +62,11 @@ middleware = [
 client = [
     "httpx>=0.28",
 ]
+spacy = [
+    "spacy>=3.7",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy]",
 ]
 
 [build-system]
@@ -91,6 +94,9 @@ gliner2 = [
 ]
 langchain = [
     "langchain>=1.2.13",
+]
+spacy = [
+    "spacy>=3.7",
 ]
 pipeline = [
     "aiocache>=0.12.3",
