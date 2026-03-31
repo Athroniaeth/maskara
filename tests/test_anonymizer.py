@@ -1,6 +1,9 @@
 """Tests for ``Anonymizer``."""
 
+import pytest
+
 from piighost.anonymizer import Anonymizer
+from piighost.exceptions import DeanonymizationError
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import (
     CounterPlaceholderFactory,
@@ -182,3 +185,75 @@ class TestDeanonymize:
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
+
+    def test_roundtrip_token_shorter_than_text(self) -> None:
+        """Token (<<PER_1>> = 9 chars) shorter than original (Jean Dupont = 11 chars)."""
+        text = "Jean Dupont et Bob habitent à Lyon."
+        entities = [
+            Entity(detections=(_det("Jean Dupont", "PER", 0, 11),)),
+            Entity(detections=(_det("Bob", "PER", 15, 18),)),
+            Entity(detections=(_det("Lyon", "LOC", 30, 34),)),
+        ]
+        anon = Anonymizer(CounterPlaceholderFactory())
+        anonymized = anon.anonymize(text, entities)
+        restored = anon.deanonymize(anonymized, entities)
+        assert restored == text
+
+    def test_roundtrip_token_longer_than_text(self) -> None:
+        """Token (<<PERSON_1>> = 12 chars) longer than original (Bob = 3 chars)."""
+        #        0  3    8    13
+        text = "Bob aime Lyon, Bob y vit."
+        entities = [
+            Entity(
+                detections=(
+                    _det("Bob", "PERSON", 0, 3),
+                    _det("Bob", "PERSON", 15, 18),
+                )
+            ),
+            Entity(detections=(_det("Lyon", "LOCATION", 9, 13),)),
+        ]
+        anon = Anonymizer(CounterPlaceholderFactory())
+        anonymized = anon.anonymize(text, entities)
+        restored = anon.deanonymize(anonymized, entities)
+        assert restored == text
+
+    def test_roundtrip_token_same_length_as_text(self) -> None:
+        """Token and original text have the same length."""
+        #        0       7     12       19
+        text = "Patrice habite Gironde, Patrice aime ça."
+        entities = [
+            Entity(
+                detections=(
+                    _det("Patrice", "PERSON", 0, 7),
+                    _det("Patrice", "PERSON", 24, 31),
+                )
+            ),
+            Entity(detections=(_det("Gironde", "COUNTRY", 15, 22),)),
+        ]
+        # <<PERSON_1>> = 12 chars, "Patrice" = 7 chars — not same length
+        # Use RedactPlaceholderFactory: <PERSON> = 8 chars, still not 7
+        # Use HashPlaceholderFactory with length=7: <PERSON:xxxxxxx> still not 7
+        # Simplest: just pick text whose length matches <<LABEL_N>>
+        # <<PER_1>> = 9 chars, so use a 9-char name
+        text2 = "Charlotte et Marseille sont amis."
+        entities2 = [
+            Entity(detections=(_det("Charlotte", "PER", 0, 9),)),  # <<PER_1>> = 9
+            Entity(detections=(_det("Marseille", "LOC", 13, 22),)),  # <<LOC_1>> = 9
+        ]
+        anon = Anonymizer(CounterPlaceholderFactory())
+        anonymized = anon.anonymize(text2, entities2)
+        assert len("<<PER_1>>") == len("Charlotte")  # both 9
+        restored = anon.deanonymize(anonymized, entities2)
+        assert restored == text2
+
+    def test_deanonymize_missing_token_raises(self) -> None:
+        """DeanonymizationError is raised with partial_text when a token is missing."""
+        entities = [
+            Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
+            Entity(detections=(_det("Paris", "LOCATION", 17, 22),)),
+        ]
+        # Text that doesn't contain the expected tokens
+        anon = Anonymizer(CounterPlaceholderFactory())
+        with pytest.raises(DeanonymizationError) as exc_info:
+            anon.deanonymize("texte sans aucun placeholder", entities)
+        assert isinstance(exc_info.value.partial_text, str)

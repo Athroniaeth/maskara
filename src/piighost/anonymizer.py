@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from piighost.exceptions import DeanonymizationError
 from piighost.models import Entity, Span
 from piighost.placeholder import AnyPlaceholderFactory, CounterPlaceholderFactory
 
@@ -61,7 +62,7 @@ class Anonymizer:
 
     ph_factory: AnyPlaceholderFactory
 
-    def __init__(self, ph_factory: AnyPlaceholderFactory | None) -> None:
+    def __init__(self, ph_factory: AnyPlaceholderFactory | None = None) -> None:
         self.ph_factory = ph_factory or CounterPlaceholderFactory()
 
     def anonymize(self, text: str, entities: list[Entity]) -> str:
@@ -135,26 +136,25 @@ class Anonymizer:
                 )
 
         # Sort by original position ascending.
-        # Since tokens may have different lengths than originals,
-        # we process left to right and track the cumulative offset.
+        # We process left to right, searching for each token from
+        # where the previous replacement ended.
         restorations.sort(key=lambda r: r[0])
 
-        offset = 0
         result = anonymized_text
+        search_from = 0
 
         for original_pos, token, original_text in restorations:
-            # Find the token starting from where we expect it to be,
-            # accounting for the cumulative offset from previous replacements.
-            search_start = original_pos + offset
-            token_pos = result.find(token, search_start)
+            token_pos = result.find(token, search_from)
 
             if token_pos == -1:
-                continue
+                raise DeanonymizationError(
+                    f"Token {token!r} not found in text during deanonymization",
+                    partial_text=result,
+                )
 
             result = (
                 result[:token_pos] + original_text + result[token_pos + len(token) :]
             )
-            # Update offset: original text may be longer or shorter than token.
-            offset += len(original_text) - len(token)
+            search_from = token_pos + len(original_text)
 
         return result
