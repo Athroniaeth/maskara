@@ -62,6 +62,9 @@ middleware = [
 client = [
     "httpx>=0.28",
 ]
+all = [
+    "piighost[gliner2,langchain,faker,cache,client]",
+]
 
 [build-system]
 requires = ["hatchling"]
