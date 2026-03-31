@@ -59,34 +59,13 @@ import asyncio
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
-from piighost.linker.entity import ExactEntityLinker
-from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
 
 from gliner2 import GLiNER2
 
-entity_linker = ExactEntityLinker()
-entity_resolver = MergeEntityConflictResolver()
-span_resolver = ConfidenceSpanConflictResolver()
-
-ph_factory = CounterPlaceholderFactory()
-anonymizer = Anonymizer(ph_factory=ph_factory)
-
 model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
-detector = Gliner2Detector(
-    model=model,
-    threshold=0.5,
-    labels=["PERSON", "LOCATION"],
-)
-
-pipeline = AnonymizationPipeline(
-    detector=detector,
-    span_resolver=span_resolver,
-    entity_linker=entity_linker,
-    entity_resolver=entity_resolver,
-    anonymizer=anonymizer,
-)
+detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"])
+pipeline = AnonymizationPipeline(detector=detector, anonymizer=Anonymizer())
 
 
 async def main():
@@ -111,10 +90,7 @@ from langchain_core.tools import tool
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
-from piighost.linker.entity import ExactEntityLinker
-from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
 from piighost.middleware import PIIAnonymizationMiddleware
 
 from gliner2 import GLiNER2
@@ -126,26 +102,9 @@ def send_email(to: str, subject: str, body: str) -> str:
     return f"Email successfully sent to {to}."
 
 
-entity_linker = ExactEntityLinker()
-entity_resolver = MergeEntityConflictResolver()
-span_resolver = ConfidenceSpanConflictResolver()
-
-ph_factory = CounterPlaceholderFactory()
-anonymizer = Anonymizer(ph_factory=ph_factory)
-
 model = GLiNER2.from_pretrained("urchade/gliner_multi-v2.1")
-detector = Gliner2Detector(
-    model=model,
-    threshold=0.5,
-    labels=["PERSON", "LOCATION"],
-)
-pipeline = ThreadAnonymizationPipeline(
-    detector=detector,
-    span_resolver=span_resolver,
-    entity_linker=entity_linker,
-    entity_resolver=entity_resolver,
-    anonymizer=anonymizer,
-)
+detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"])
+pipeline = ThreadAnonymizationPipeline(detector=detector, anonymizer=Anonymizer())
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 
 graph = create_agent(
@@ -157,6 +116,20 @@ graph = create_agent(
 ```
 
 The middleware intercepts every agent turn the LLM only sees anonymized text, tools receive real values, and user-facing messages are deanonymized automatically.
+
+### Pipeline components
+
+The pipeline runs 5 stages. Only `detector` and `anonymizer` are required — the others have sensible defaults:
+
+| Stage | Default | Role | Without it |
+|-------|---------|------|------------|
+| **Detect** | *(required)* | Finds PII spans via NER | — |
+| **Resolve Spans** | `ConfidenceSpanConflictResolver` | Deduplicates overlapping detections (keeps highest confidence) | Overlapping spans from multiple detectors cause garbled replacements |
+| **Link Entities** | `ExactEntityLinker` | Finds all occurrences of each entity via word-boundary regex | Only NER-detected mentions are anonymized; other occurrences leak through |
+| **Resolve Entities** | `MergeEntityConflictResolver` | Merges entity groups that share a mention (union-find) | Same entity could get two different placeholders |
+| **Anonymize** | *(required)* | Replaces entities with placeholders (`<<PERSON_1>>`) | — |
+
+Each stage is a **protocol** — swap any default for your own implementation.
 
 ## How it works
 
