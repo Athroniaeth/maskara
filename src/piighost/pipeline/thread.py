@@ -21,6 +21,7 @@ from piighost.detector import AnyDetector
 from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity
 from piighost.pipeline.base import AnonymizationPipeline
+from piighost.placeholder import MaskPlaceholderFactory, RedactPlaceholderFactory
 from piighost.resolver.entity import AnyEntityConflictResolver
 from piighost.resolver.span import AnySpanConflictResolver
 from piighost.utils import hash_sha256
@@ -159,6 +160,15 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entity_resolver: AnyEntityConflictResolver | None = None,
         span_resolver: AnySpanConflictResolver | None = None,
     ) -> None:
+        factory = anonymizer.ph_factory
+        if isinstance(factory, (RedactPlaceholderFactory, MaskPlaceholderFactory)):
+            raise ValueError(
+                f"{type(factory).__name__} cannot be used with "
+                f"ThreadAnonymizationPipeline because it produces "
+                f"non-unique tokens that cannot be deanonymized. "
+                f"Use CounterPlaceholderFactory or HashPlaceholderFactory instead."
+            )
+
         super().__init__(
             detector,
             span_resolver=span_resolver,

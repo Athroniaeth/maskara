@@ -2,13 +2,15 @@
 
 Intercepts the agent loop at three points:
 
-* **abefore_model** anonymises *all* messages (full NER detection)
-  before the LLM sees them.
-* **aafter_model** deanonymises *all* messages so the user always sees
-  real values in the conversation thread.
-* **awrap_tool_call** deanonymises tool-call arguments so tools receive
-  real data, then re-anonymises the tool response before it goes back
-  to the LLM.
+* **abefore_model** anonymises ``HumanMessage`` and ``AIMessage``
+  content before the LLM sees them.  ``ToolMessage`` content is
+  skipped — it is already anonymised by ``awrap_tool_call``.
+* **aafter_model** deanonymises ``HumanMessage`` and ``AIMessage``
+  content so the user always sees real values in the conversation
+  thread.  ``ToolMessage`` content stays anonymised.
+* **awrap_tool_call** deanonymises tool-call arguments so tools
+  receive real data, then re-anonymises the tool response before it
+  goes back to the LLM.
 
 All caching, hashing, and text-level replacement logic is delegated to
 ``ThreadAnonymizationPipeline``.  This class is a thin LangChain adapter.
@@ -80,12 +82,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         state: AgentState,
         runtime: Runtime[ContextT],
     ) -> dict[str, Any] | None:
-        """Anonymise every message before the LLM sees the conversation.
+        """Anonymise ``HumanMessage`` and ``AIMessage`` content.
 
-        All message types (``HumanMessage``, ``AIMessage``,
-        ``ToolMessage``) go through full NER detection via
-        ``pipeline.anonymize``.  AI and tool messages are re-processed
-        because ``aafter_model`` deanonymises them after each turn.
+        ``ToolMessage`` is skipped — tools already operate on anonymised
+        tokens, so their responses already contain placeholders.
 
         Args:
             state: The current agent state (contains ``messages``).
@@ -102,14 +102,13 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         messages = state["messages"]
 
         for idx, message in enumerate(messages):
-            content = message.content
-
-            # This happens when the LLM uses a tool
-            if not isinstance(content, str) or not content.strip():
+            if not isinstance(message, (HumanMessage, AIMessage)):
                 continue
 
-            if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
-                raise ValueError("This code only takes Langchain messages into account")
+            content = message.content
+
+            if not isinstance(content, str) or not content.strip():
+                continue
 
             result, ents = await pipeline.anonymize(content, thread_id=thread_id)
 
@@ -135,7 +134,10 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         state: AgentState,
         runtime: Runtime[ContextT],
     ) -> dict[str, Any] | None:
-        """Deanonymise every message so the user sees real values.
+        """Deanonymise ``HumanMessage`` and ``AIMessage`` content.
+
+        ``ToolMessage`` is left anonymised — it is not shown to the user
+        and the LLM already expects tokens in tool responses.
 
         Args:
             state: The current agent state (contains ``messages``).
@@ -151,14 +153,13 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         messages = state["messages"]
 
         for idx, message in enumerate(messages):
-            content = message.content
-
-            # This happens when the LLM uses a tool
-            if not isinstance(content, str) or not content.strip():
+            if not isinstance(message, (HumanMessage, AIMessage)):
                 continue
 
-            if not isinstance(message, (HumanMessage, AIMessage, ToolMessage)):
-                raise ValueError("This code only takes Langchain messages into account")
+            content = message.content
+
+            if not isinstance(content, str) or not content.strip():
+                continue
 
             restored = await self._deanonymize(content, thread_id=thread_id)
 
@@ -171,7 +172,7 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         return {"messages": messages} if changed else None
 
     # -----------------------------------------------------------------
-    # awrap_tool_call deanonymise args → run tool → anonymise result
+    # awrap_tool_call — deanonymise args, run tool, re-anonymise result
     # -----------------------------------------------------------------
 
     async def awrap_tool_call(
@@ -191,7 +192,6 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
         """
         thread_id = _get_thread_id()
 
-        # Deanonymise string arguments, provided by the LLM (which sees only anonymized entities)
         call = request.tool_call
         args = call["args"]
         patched_args: dict[str, Any] = {}
@@ -202,17 +202,13 @@ class PIIAnonymizationMiddleware(AgentMiddleware):
             patched_args[arg_name] = arg_value
 
         call["args"] = patched_args
-
-        # Execute the tool.
         response = await handler(request)
 
-        # Re-anonymise the tool response.
         if isinstance(response, ToolMessage) and isinstance(response.content, str):
             anonymized_content, _ = await self._pipeline.anonymize(
                 response.content, thread_id=thread_id
             )
             response.content = anonymized_content
-            return response
 
         return response
 

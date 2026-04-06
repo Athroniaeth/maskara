@@ -6,6 +6,7 @@ Tests a 3-turn conversation to verify:
 - Tool arguments are deanonymized before execution
 - Tool responses are re-anonymized before the LLM sees them
 - The LLM NEVER sees real PII values
+- ToolMessages are not double-encoded by abefore_model
 """
 
 import pytest
@@ -21,7 +22,11 @@ from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import (
+    CounterPlaceholderFactory,
+    MaskPlaceholderFactory,
+    RedactPlaceholderFactory,
+)
 from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 pytestmark = pytest.mark.asyncio
@@ -248,3 +253,137 @@ class TestPipelineConversationFlow:
         # aafter_model: deanonymize for user display
         user_sees_3 = await pipeline.deanonymize_with_ent(llm_response_3)
         assert user_sees_3 == "Il fait 22C et ensoleille la ou vous habitez !"
+
+
+class TestToolCallNoDoubleEncoding:
+    """Verify that ToolMessages are not double-encoded by abefore_model.
+
+    Regression test for a bug where abefore_model re-anonymized an
+    already-anonymized ToolMessage, causing NER to detect the token
+    text (e.g. ``city_1``) as PII and producing ``<<<<city_1>>>>``.
+    This corrupted the entity memory and broke deanonymize_with_ent.
+    """
+
+    async def test_tool_response_deanonymized_after_tool_call(self) -> None:
+        """After a tool call, the final AI response must be fully deanonymized."""
+        _llm_received.clear()
+        _tool_calls_log.clear()
+
+        responses = iter(
+            [
+                # Turn 1a: tool call with placeholder arg
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "get_weather",
+                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "id": "call_1",
+                        }
+                    ],
+                ),
+                # Turn 1b: final response referencing the placeholder
+                AIMessage(
+                    content="La meteo a <<LOCATION_1>> est de 22C et ensoleillee."
+                ),
+            ]
+        )
+
+        pipeline = _build_pipeline()
+        middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
+
+        agent = create_agent(
+            model=SpyFakeChatModel(messages=responses),
+            tools=[get_weather],
+            middleware=[middleware],
+            checkpointer=InMemorySaver(),
+        )
+        config = {"configurable": {"thread_id": "test-tool-no-double"}}
+
+        result = await agent.ainvoke(
+            {"messages": [HumanMessage(content="Donne moi la meteo en France")]},
+            config,
+        )
+
+        # Tool received real value
+        assert _tool_calls_log[0]["country_or_city"] == "France"
+
+        # Final AI response is fully deanonymized (not "LOCATION_1")
+        last = result["messages"][-1].content
+        assert "France" in last, f"Expected 'France' in final response: {last}"
+        assert "LOCATION_1" not in last, f"Token leaked in response: {last}"
+
+        # LLM never saw real PII
+        for idx, call_messages in enumerate(_llm_received):
+            for content in call_messages:
+                assert "France" not in content, (
+                    f"LLM call {idx} saw real PII 'France' in: {content}"
+                )
+
+    async def test_pipeline_no_double_encoding(self) -> None:
+        """Simulate the middleware flow: re-anonymizing a ToolMessage must not corrupt entities."""
+        pipeline = _build_pipeline()
+
+        # abefore_model: anonymize user message
+        anon, _ = await pipeline.anonymize("Donne moi la meteo en France")
+        assert "<<LOCATION_1>>" in anon
+
+        # awrap_tool_call: deanonymize arg → execute → re-anonymize response
+        tool_arg = await pipeline.deanonymize_with_ent("<<LOCATION_1>>")
+        assert tool_arg == "France"
+
+        tool_result = f"Il fait beau en {tool_arg}"
+        tool_anon, _ = await pipeline.anonymize(tool_result)
+        assert tool_anon == "Il fait beau en <<LOCATION_1>>"
+
+        # KEY: abefore_model must NOT re-process the ToolMessage.
+        # If it did, anonymize("Il fait beau en <<LOCATION_1>>") would
+        # detect "LOCATION_1" as PII and produce <<<<LOCATION_1>>>>.
+        reanon, ents = await pipeline.anonymize("Il fait beau en <<LOCATION_1>>")
+
+        # This documents the bug: NER detects the token text as an entity
+        # and double-encodes it. The middleware fix skips ToolMessages
+        # in abefore_model to avoid this.
+        if reanon != "Il fait beau en <<LOCATION_1>>":
+            # If this branch runs, it proves why skipping ToolMessages matters
+            assert "<<" in reanon and ">>" in reanon
+
+        # After the potential corruption above, deanonymize_with_ent on
+        # the LLM response must still produce the correct real value.
+        # Reset pipeline to test clean path (skip ToolMessage re-anonymization).
+        clean_pipeline = _build_pipeline()
+        await clean_pipeline.anonymize("Donne moi la meteo en France")
+
+        # awrap_tool_call only
+        await clean_pipeline.deanonymize_with_ent("<<LOCATION_1>>")
+        tool_result_clean, _ = await clean_pipeline.anonymize(f"Il fait beau en France")
+
+        # Do NOT re-anonymize the ToolMessage (middleware fix)
+        # Directly deanonymize the LLM response
+        llm_response = "La meteo a <<LOCATION_1>> est de 22C et ensoleillee."
+        user_sees = await clean_pipeline.deanonymize_with_ent(llm_response)
+        assert user_sees == "La meteo a France est de 22C et ensoleillee."
+
+
+class TestNonReversibleFactoryRejected:
+    """ThreadAnonymizationPipeline must reject non-reversible placeholder factories."""
+
+    def test_redact_factory_raises(self) -> None:
+        with pytest.raises(ValueError, match="RedactPlaceholderFactory"):
+            ThreadAnonymizationPipeline(
+                detector=ExactMatchDetector([("x", "PERSON")]),
+                anonymizer=Anonymizer(RedactPlaceholderFactory()),
+            )
+
+    def test_mask_factory_raises(self) -> None:
+        with pytest.raises(ValueError, match="MaskPlaceholderFactory"):
+            ThreadAnonymizationPipeline(
+                detector=ExactMatchDetector([("x", "PERSON")]),
+                anonymizer=Anonymizer(MaskPlaceholderFactory()),
+            )
+
+    def test_counter_factory_accepted(self) -> None:
+        ThreadAnonymizationPipeline(
+            detector=ExactMatchDetector([("x", "PERSON")]),
+            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        )
