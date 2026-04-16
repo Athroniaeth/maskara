@@ -198,6 +198,34 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         """Prefix a cache key with the active thread id."""
         return f"{self._thread_id}:{key}"
 
+    async def override_detections(
+        self,
+        text: str,
+        detections: list[Detection],
+        thread_id: str = "default",
+    ) -> None:
+        """Override cached detection results for user corrections.
+
+        Overwrites the detection cache entry for the given text so that
+        subsequent calls to ``anonymize()`` use the corrected detections
+        instead of re-running the detector.
+
+        Args:
+            text: The original text whose detections should be overridden.
+            detections: The corrected list of detections.
+            thread_id: Thread identifier for cache isolation.
+
+        Raises:
+            RuntimeError: If no cache backend is configured.
+        """
+        if self._cache is None:
+            raise RuntimeError("Cannot override detections without a cache backend")
+
+        self._thread_id = thread_id
+        cache_key = self._thread_key(f"detect:{hash_sha256(text)}")
+        value = self._serialize_detections(detections)
+        await self._cache.set(cache_key, value)
+
     async def _cached_detect(self, text: str) -> list[Detection]:
         """Detect entities, using thread-scoped cache if available."""
         if self._cache is None:

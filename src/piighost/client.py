@@ -61,6 +61,66 @@ class PIIGhostClient:
         response.raise_for_status()
         return response.json()
 
+    async def detect(
+        self,
+        text: str,
+        thread_id: str = "default",
+    ) -> list[Entity]:
+        """Run detection only via the remote pipeline.
+
+        Returns detected entities without anonymizing the text or
+        recording entities in conversation memory.
+
+        Args:
+            text: The text to analyze.
+            thread_id: Thread identifier for conversation isolation.
+
+        Returns:
+            A list of detected entities.
+        """
+        response = await self._client.post(
+            "/v1/detect",
+            json={"text": text, "thread_id": thread_id},
+        )
+        response.raise_for_status()
+        data = response.json()
+        return _deserialize_entities(data.get("entities", []))
+
+    async def override_detections(
+        self,
+        text: str,
+        detections: list[Detection],
+        thread_id: str = "default",
+    ) -> None:
+        """Override cached detections for user corrections.
+
+        Overwrites the detection cache entry for the given text so that
+        subsequent calls to ``anonymize()`` use the corrected detections.
+
+        Args:
+            text: The original text whose detections should be overridden.
+            detections: The corrected list of detections.
+            thread_id: Thread identifier for conversation isolation.
+        """
+        response = await self._client.put(
+            "/v1/detect",
+            json={
+                "text": text,
+                "thread_id": thread_id,
+                "detections": [
+                    {
+                        "text": d.text,
+                        "label": d.label,
+                        "start_pos": d.position.start_pos,
+                        "end_pos": d.position.end_pos,
+                        "confidence": d.confidence,
+                    }
+                    for d in detections
+                ],
+            },
+        )
+        response.raise_for_status()
+
     async def anonymize(
         self,
         text: str,
