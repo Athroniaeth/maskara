@@ -1607,6 +1607,7 @@ all = [
     { name = "gliner2" },
     { name = "httpx" },
     { name = "langchain" },
+    { name = "langchain-core" },
     { name = "spacy" },
     { name = "torch" },
     { name = "transformers" },
@@ -1625,6 +1626,9 @@ gliner2 = [
 ]
 langchain = [
     { name = "langchain" },
+]
+llm = [
+    { name = "langchain-core" },
 ]
 middleware = [
     { name = "aiocache" },
@@ -1657,6 +1661,9 @@ gliner2 = [
 langchain = [
     { name = "langchain" },
 ]
+llm = [
+    { name = "langchain-core" },
+]
 pipeline = [
     { name = "aiocache" },
 ]
@@ -1677,12 +1684,13 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'client'", specifier = ">=0.28" },
     { name = "langchain", marker = "extra == 'langchain'", specifier = ">=1.2" },
     { name = "langchain", marker = "extra == 'middleware'", specifier = ">=1.2" },
-    { name = "piighost", extras = ["gliner2", "langchain", "faker", "cache", "client", "spacy", "transformers"], marker = "extra == 'all'" },
+    { name = "langchain-core", marker = "extra == 'llm'", specifier = ">=0.3" },
+    { name = "piighost", extras = ["gliner2", "langchain", "faker", "cache", "client", "spacy", "transformers", "llm"], marker = "extra == 'all'" },
     { name = "spacy", marker = "extra == 'spacy'", specifier = ">=3.7" },
     { name = "torch", marker = "extra == 'transformers'", specifier = ">=2.0" },
     { name = "transformers", marker = "extra == 'transformers'", specifier = ">=4.40" },
 ]
-provides-extras = ["gliner2", "langchain", "faker", "cache", "middleware", "client", "spacy", "transformers", "all"]
+provides-extras = ["gliner2", "langchain", "faker", "cache", "middleware", "client", "spacy", "transformers", "llm", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1697,6 +1705,7 @@ dev = [
 faker = [{ name = "faker", specifier = ">=40.11.0" }]
 gliner2 = [{ name = "gliner2", specifier = ">=1.2.4" }]
 langchain = [{ name = "langchain", specifier = ">=1.2.13" }]
+llm = [{ name = "langchain-core", specifier = ">=0.3" }]
 pipeline = [{ name = "aiocache", specifier = ">=0.12.3" }]
 spacy = [{ name = "spacy", specifier = ">=3.7" }]
 transformers = [

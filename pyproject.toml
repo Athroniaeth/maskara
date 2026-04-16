@@ -69,8 +69,11 @@ transformers = [
     "transformers>=4.40",
     "torch>=2.0",
 ]
+llm = [
+    "langchain-core>=0.3",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm]",
 ]
 
 [build-system]
@@ -108,6 +111,9 @@ transformers = [
 ]
 pipeline = [
     "aiocache>=0.12.3",
+]
+llm = [
+    "langchain-core>=0.3",
 ]
 
 [tool.pytest.ini_options]
