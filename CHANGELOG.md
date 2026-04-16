@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.0 (2026-04-16)
+
+### Feat
+
+- add ChunkedDetector for long texts exceeding NER model context windows
+- add LLMDetector for entity extraction via structured output
+- add BaseNERDetector ABC with internal/external label mapping
+- add base classes with min_text_length and confidence_threshold filtering
+
 ## 0.5.1 (2026-04-07)
 
 ### Fix
