@@ -80,6 +80,32 @@ haystack-lancedb = [
     "piighost[haystack]",
     "lancedb-haystack>=0.1",
 ]
+haystack-embeddings-local = [
+    "piighost[haystack]",
+    "sentence-transformers>=3.3",
+]
+haystack-embeddings-mistral = [
+    "piighost[haystack]",
+    "mistral-haystack>=0.1",
+]
+langchain-lancedb = [
+    "piighost[langchain]",
+    "langchain-community>=0.3",
+    "lancedb>=0.15",
+]
+langchain-kreuzberg = [
+    "piighost[langchain]",
+    "langchain-kreuzberg>=0.1",
+]
+langchain-embeddings-local = [
+    "piighost[langchain]",
+    "langchain-huggingface>=0.2",
+    "sentence-transformers>=3.3",
+]
+langchain-embeddings-mistral = [
+    "piighost[langchain]",
+    "langchain-mistralai>=0.2",
+]
 all = [
     "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,haystack]",
 ]
