@@ -10,6 +10,7 @@ from typing import Any, Sequence
 from langchain_core.documents import Document
 from langchain_core.documents.transformers import BaseDocumentTransformer
 
+from piighost.classifier.base import AnyClassifier, ClassificationSchema
 from piighost.models import Entity
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
 from piighost.placeholder import AnyPlaceholderFactory, CounterPlaceholderFactory
@@ -129,3 +130,56 @@ class PIIGhostDocumentAnonymizer(BaseDocumentTransformer):
         doc.metadata[self._meta_key] = _serialize_mapping(
             entities, self._pipeline.ph_factory
         )
+
+
+class PIIGhostDocumentClassifier(BaseDocumentTransformer):
+    """Classify Documents and write structured labels to metadata[meta_key].
+
+    Runs BEFORE the anonymizer so the classifier sees real text.
+    """
+
+    def __init__(
+        self,
+        classifier: AnyClassifier,
+        schemas: dict[str, ClassificationSchema],
+        meta_key: str = "labels",
+        strict: bool = False,
+    ) -> None:
+        self._classifier = classifier
+        self._schemas = schemas
+        self._meta_key = meta_key
+        self._strict = strict
+
+    async def atransform_documents(
+        self, documents: Sequence[Document], **kwargs: Any
+    ) -> Sequence[Document]:
+        for doc in documents:
+            await self._process(doc)
+        return list(documents)
+
+    def transform_documents(
+        self, documents: Sequence[Document], **kwargs: Any
+    ) -> Sequence[Document]:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.atransform_documents(documents, **kwargs))  # type: ignore[return-value]
+        raise RuntimeError(
+            "PIIGhostDocumentClassifier.transform_documents() was called from "
+            "inside a running event loop. Use atransform_documents() instead."
+        )
+
+    async def _process(self, doc: Document) -> None:
+        content = doc.page_content
+        if content is None or not content.strip():
+            logger.warning("Skipping classifier on empty content")
+            return
+        try:
+            labels = await self._classifier.classify(content, self._schemas)
+        except Exception as exc:
+            if self._strict:
+                raise
+            logger.error("classification failed: %s", exc)
+            doc.metadata["classifier_error"] = f"classify_failed:{type(exc).__name__}"
+            return
+        doc.metadata[self._meta_key] = labels
