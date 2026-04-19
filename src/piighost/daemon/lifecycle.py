@@ -29,6 +29,19 @@ def _is_alive(hs: DaemonHandshake) -> bool:
         return False
 
 
+def _is_alive_with_retry(hs: DaemonHandshake, *, retries: int = 3, delay: float = 0.4) -> bool:
+    """Like _is_alive but retries on transient HTTP failures before declaring stale.
+
+    Prevents a second lock-holder from killing a live daemon whose port is
+    momentarily slow to respond (common on Windows under concurrent load).
+    """
+    for _ in range(retries):
+        if _is_alive(hs):
+            return True
+        time.sleep(delay)
+    return False
+
+
 def ensure_daemon(vault_dir: Path, *, timeout_sec: float = 15.0) -> DaemonHandshake:
     """Return a running daemon handshake, spawning if necessary.
 
@@ -41,7 +54,7 @@ def ensure_daemon(vault_dir: Path, *, timeout_sec: float = 15.0) -> DaemonHandsh
     lock_path = vault_dir / "daemon.lock"
     with portalocker.Lock(str(lock_path), timeout=timeout_sec):
         hs = read_handshake(vault_dir)
-        if hs and _is_alive(hs):
+        if hs and _is_alive_with_retry(hs):
             return hs
         if hs:
             _cleanup_stale(vault_dir, hs)
