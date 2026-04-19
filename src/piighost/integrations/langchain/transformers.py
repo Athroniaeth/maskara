@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_core.documents.transformers import BaseDocumentTransformer
 
 from piighost.classifier.base import AnyClassifier, ClassificationSchema
+from piighost.exceptions import RehydrationError
 from piighost.models import Entity
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
 from piighost.placeholder import AnyPlaceholderFactory, CounterPlaceholderFactory
@@ -183,9 +184,6 @@ class PIIGhostDocumentClassifier(BaseDocumentTransformer):
             doc.metadata["classifier_error"] = f"classify_failed:{type(exc).__name__}"
             return
         doc.metadata[self._meta_key] = labels
-
-
-from piighost.exceptions import RehydrationError  # noqa: E402
 
 
 class PIIGhostRehydrator(BaseDocumentTransformer):
