@@ -72,8 +72,16 @@ transformers = [
 llm = [
     "langchain-core>=0.3",
 ]
+haystack = [
+    "haystack-ai>=2.8",
+    "aiocache>=0.12",
+]
+haystack-lancedb = [
+    "piighost[haystack]",
+    "lancedb-haystack>=0.1",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,haystack]",
 ]
 
 [build-system]
