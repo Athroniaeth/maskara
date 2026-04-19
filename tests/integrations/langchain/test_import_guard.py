@@ -25,7 +25,7 @@ def test_import_raises_when_langchain_absent(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_import_succeeds_when_langchain_present() -> None:
-    pytest.importorskip("langchain_core")
+    pytest.importorskip("langchain")
     sys.modules.pop("piighost.integrations.langchain", None)
     mod = __import__("piighost.integrations.langchain", fromlist=["*"])
     assert mod is not None
