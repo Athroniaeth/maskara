@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install project
+        run: uv sync --all-extras
+      - name: Unit tests (non-slow, no GPU, stub detector)
+        run: uv run pytest -q -m "not slow"
+      - name: Smoke test
+        run: uv run pytest tests/daemon/test_cross_platform_smoke.py -v
