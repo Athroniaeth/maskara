@@ -24,3 +24,19 @@ class RehydrationError(DeanonymizationError):
     a deanonymization step, just driven from Document.meta rather than
     from the pipeline cache.
     """
+
+
+class VaultNotFound(Exception):
+    """No `.piighost/` found in cwd or any ancestor directory."""
+
+
+class VaultSchemaMismatch(Exception):
+    """Vault database schema version does not match the current code."""
+
+
+class PIISafetyViolation(Exception):
+    """An operation would violate a PII-safety invariant (e.g. unknown rehydrate token in strict mode)."""
+
+
+class DaemonUnreachable(Exception):
+    """Daemon is configured but not reachable; CLI may auto-spawn."""
