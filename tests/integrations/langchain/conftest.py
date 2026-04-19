@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from piighost.anonymizer import Anonymizer
 from piighost.classifier.base import AnyClassifier, ClassificationSchema
 from piighost.detector.base import AnyDetector
-from piighost.models import Detection, Entity, Span
+from piighost.models import Detection, Span
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
 from piighost.placeholder import HashPlaceholderFactory
 
@@ -25,7 +23,7 @@ class _StubDetector:
             Detection(
                 text="Alice",
                 label="PERSON",
-                position=Span(start_pos=idx, end_pos=idx + 5),
+                position=Span(start_pos=idx, end_pos=idx + len("Alice")),
                 confidence=1.0,
             )
         ]
@@ -47,7 +45,7 @@ class _StubClassifier:
 
 @pytest.fixture
 def pipeline() -> ThreadAnonymizationPipeline:
-    detector: AnyDetector = _StubDetector()  # type: ignore[assignment]
+    detector: AnyDetector = _StubDetector()  # type: ignore[assignment]  # _StubDetector satisfies AnyDetector structurally
     return ThreadAnonymizationPipeline(
         detector=detector,
         anonymizer=Anonymizer(HashPlaceholderFactory()),
@@ -56,7 +54,7 @@ def pipeline() -> ThreadAnonymizationPipeline:
 
 @pytest.fixture
 def stub_classifier() -> AnyClassifier:
-    return _StubClassifier({"gdpr_category": ["none"]})  # type: ignore[return-value]
+    return _StubClassifier({"gdpr_category": ["none"]})  # type: ignore[return-value]  # _StubClassifier satisfies AnyClassifier structurally
 
 
 @pytest.fixture
