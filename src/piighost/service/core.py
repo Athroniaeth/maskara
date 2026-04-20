@@ -228,6 +228,38 @@ class PIIGhostService:
             duration_ms=duration_ms,
         )
 
+    async def query(self, text: str, *, k: int = 5) -> "QueryResult":
+        from piighost.indexer.retriever import reciprocal_rank_fusion
+        from piighost.service.models import QueryHit, QueryResult
+
+        anon_result = await self.anonymize(text)
+        anon_query = anon_result.anonymized
+
+        bm25_hits = self._bm25.search(anon_query, k=k * 2)
+        query_vecs = await self._embedder.embed([anon_query])
+        vec_hits_raw = self._chunk_store.vector_search(query_vecs[0], k=k * 2)
+        vector_hits = [(r["chunk_id"], r.get("_distance", 0.0)) for r in vec_hits_raw]
+
+        fused = reciprocal_rank_fusion(bm25_hits, vector_hits, rrf_k=60)[:k]
+
+        all_records = {r["chunk_id"]: r for r in self._chunk_store.all_records()}
+        hits: list[QueryHit] = []
+        for rank, (chunk_id, score) in enumerate(fused):
+            rec = all_records.get(chunk_id)
+            if rec is None:
+                continue
+            hits.append(
+                QueryHit(
+                    doc_id=rec["doc_id"],
+                    file_path=rec["file_path"],
+                    chunk=rec["chunk"],
+                    score=score,
+                    rank=rank,
+                )
+            )
+
+        return QueryResult(query=text, hits=hits, k=k)
+
     # ---- vault ops ----
 
     async def vault_list(
