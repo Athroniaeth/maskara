@@ -50,3 +50,24 @@ class VaultStatsModel(BaseModel):
 class VaultPage(BaseModel):
     entries: list[VaultEntryModel]
     next_cursor: str | None = None
+
+
+class IndexReport(BaseModel):
+    indexed: int
+    skipped: int
+    errors: list[str] = Field(default_factory=list)
+    duration_ms: int
+
+
+class QueryHit(BaseModel):
+    doc_id: str
+    file_path: str
+    chunk: str
+    score: float
+    rank: int
+
+
+class QueryResult(BaseModel):
+    query: str
+    hits: list[QueryHit]
+    k: int
