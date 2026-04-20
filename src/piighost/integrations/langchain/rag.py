@@ -79,9 +79,16 @@ class PIIGhostRAG:
     standard pipeline.
     """
 
-    def __init__(self, svc: PIIGhostService, *, project: str = "default") -> None:
+    def __init__(
+        self,
+        svc: PIIGhostService,
+        *,
+        project: str = "default",
+        cache: "Any | None" = None,
+    ) -> None:
         self._svc = svc
         self._project = project
+        self._cache = cache
 
     async def ingest(
         self,
@@ -137,6 +144,27 @@ class PIIGhostRAG:
         top_n: int = 20,
     ) -> str:
         anon = await self._svc.anonymize(text, project=self._project)
+
+        cache_key: str | None = None
+        if self._cache is not None and llm is not None:
+            from piighost.integrations.langchain.cache import (
+                RagCache,
+                _llm_id,
+                _prompt_fingerprint,
+            )
+
+            cache_key = RagCache.make_key(
+                project=self._project,
+                anonymized_query=anon.anonymized,
+                k=k,
+                filter_repr=repr(filter),
+                prompt_hash=_prompt_fingerprint(prompt),
+                llm_id=_llm_id(llm),
+            )
+            hit = await self._cache.get(cache_key)
+            if hit is not None:
+                return hit
+
         result = await self._svc.query(
             anon.anonymized,
             project=self._project,
@@ -163,6 +191,8 @@ class PIIGhostRAG:
         rehydrated = await self._svc.rehydrate(
             answer_text, project=self._project, strict=False
         )
+        if cache_key is not None:
+            await self._cache.set(cache_key, rehydrated.text)
         return rehydrated.text
 
     async def astream(
