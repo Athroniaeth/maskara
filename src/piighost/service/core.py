@@ -262,9 +262,11 @@ class PIIGhostService:
         existing = self._vault.get_indexed_file_by_path(str(path.resolve()))
         if existing is None:
             return False
-        self._chunk_store.delete_doc(existing.doc_id)
+        # Delete vault records first so a crash before LanceDB cleanup leaves the
+        # file eligible for re-indexing on the next index_path call.
         self._vault.delete_doc_entities(existing.doc_id)
         self._vault.delete_indexed_file(existing.doc_id)
+        self._chunk_store.delete_doc(existing.doc_id)
         all_records = self._chunk_store.all_records()
         if all_records:
             self._bm25.rebuild(all_records)

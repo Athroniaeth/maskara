@@ -43,3 +43,22 @@ def test_remove_doc_removes_chunks(indexed_svc):
     asyncio.run(svc.remove_doc(f))
     assert svc._chunk_store.all_records() == []
     asyncio.run(svc.close())
+
+
+def test_remove_doc_removes_doc_entities(indexed_svc):
+    svc, f = indexed_svc
+    # Verify entities were linked during indexing
+    from piighost.indexer.identity import content_hash
+    doc_id = content_hash(f)
+    rows_before = svc._vault._conn.execute(
+        "SELECT COUNT(*) FROM doc_entities WHERE doc_id = ?", (doc_id,)
+    ).fetchone()[0]
+    assert rows_before >= 1, "stub detector should have linked at least 1 entity"
+
+    asyncio.run(svc.remove_doc(f))
+
+    rows_after = svc._vault._conn.execute(
+        "SELECT COUNT(*) FROM doc_entities WHERE doc_id = ?", (doc_id,)
+    ).fetchone()[0]
+    assert rows_after == 0
+    asyncio.run(svc.close())
