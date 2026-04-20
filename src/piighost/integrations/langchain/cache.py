@@ -28,6 +28,8 @@ class RagCache:
         filter_repr: str,
         prompt_hash: str,
         llm_id: str,
+        rerank: bool,
+        top_n: int,
     ) -> str:
         payload = json.dumps(
             {
@@ -37,6 +39,8 @@ class RagCache:
                 "f": filter_repr,
                 "pr": prompt_hash,
                 "llm": llm_id,
+                "r": rerank,
+                "t": top_n,
             },
             sort_keys=True,
         )

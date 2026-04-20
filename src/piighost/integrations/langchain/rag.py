@@ -160,6 +160,8 @@ class PIIGhostRAG:
                 filter_repr=repr(filter),
                 prompt_hash=_prompt_fingerprint(prompt),
                 llm_id=_llm_id(llm),
+                rerank=rerank,
+                top_n=top_n,
             )
             hit = await self._cache.get(cache_key)
             if hit is not None:

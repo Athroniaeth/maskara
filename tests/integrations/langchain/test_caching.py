@@ -70,3 +70,15 @@ def test_cache_none_means_no_caching(svc, tmp_path):
     asyncio.run(rag.query("Who is Alice?", llm=llm))
     asyncio.run(rag.query("Who is Alice?", llm=llm))
     assert llm.call_count == 2
+
+
+def test_top_n_invalidates_cache(svc, tmp_path):
+    rag = PIIGhostRAG(svc, project="p", cache=RagCache(ttl=60))
+    doc = tmp_path / "doc.txt"
+    doc.write_text("Alice works in Paris")
+    asyncio.run(rag.ingest(doc))
+
+    llm = _CountingLLM("answer")
+    asyncio.run(rag.query("Who is Alice?", llm=llm, top_n=20))
+    asyncio.run(rag.query("Who is Alice?", llm=llm, top_n=10))
+    assert llm.call_count == 2
