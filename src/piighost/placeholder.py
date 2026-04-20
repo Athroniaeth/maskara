@@ -66,12 +66,17 @@ class CounterPlaceholderFactory:
 class HashPlaceholderFactory:
     """Factory that generates tokens like ``<PERSON:a1b2c3d4>``.
 
-    Uses SHA-256 of the canonical text + label to produce a deterministic,
-    opaque token. Same entity always produces the same hash.
+    Uses SHA-256 of ``salt + canonical_text + label`` to produce a
+    deterministic, opaque token. Same entity + same salt always produces
+    the same hash. Different salts produce different hashes for
+    project-level isolation.
 
     Args:
         hash_length: Number of hex characters to use from the hash.
             Defaults to 8.
+        salt: Optional project-scoped prefix mixed into the digest.
+            Empty string (the default) preserves legacy pre-Sprint-5
+            token values for backward compatibility.
 
     Example:
         >>> from piighost.models import Detection, Entity, Span
@@ -83,9 +88,11 @@ class HashPlaceholderFactory:
     """
 
     _hash_length: int
+    _salt: str
 
-    def __init__(self, hash_length: int = 8) -> None:
+    def __init__(self, hash_length: int = 8, salt: str = "") -> None:
         self._hash_length = hash_length
+        self._salt = salt
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Create hash-based tokens for all entities.
@@ -101,7 +108,10 @@ class HashPlaceholderFactory:
         for entity in entities:
             canonical_text = entity.detections[0].text.lower()
             label = entity.label
-            raw = f"{canonical_text}:{label}"
+            if self._salt:
+                raw = f"{self._salt}:{canonical_text}:{label}"
+            else:
+                raw = f"{canonical_text}:{label}"
             digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
             result[entity] = f"<{label}:{digest}>"
 
