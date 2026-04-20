@@ -14,7 +14,7 @@ pytest.importorskip("rank_bm25")
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.slow]
 
-from langchain.retrievers import EnsembleRetriever  # noqa: E402
+from langchain_community.retrievers import EnsembleRetriever  # noqa: E402
 from langchain_community.retrievers import BM25Retriever  # noqa: E402
 from langchain_core.documents import Document  # noqa: E402
 
