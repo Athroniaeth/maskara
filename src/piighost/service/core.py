@@ -258,6 +258,20 @@ class PIIGhostService:
             duration_ms=duration_ms,
         )
 
+    async def remove_doc(self, path: Path) -> bool:
+        existing = self._vault.get_indexed_file_by_path(str(path.resolve()))
+        if existing is None:
+            return False
+        self._chunk_store.delete_doc(existing.doc_id)
+        self._vault.delete_doc_entities(existing.doc_id)
+        self._vault.delete_indexed_file(existing.doc_id)
+        all_records = self._chunk_store.all_records()
+        if all_records:
+            self._bm25.rebuild(all_records)
+        else:
+            self._bm25.clear()
+        return True
+
     async def query(self, text: str, *, k: int = 5) -> "QueryResult":
         from piighost.indexer.retriever import reciprocal_rank_fusion
         from piighost.service.models import QueryHit, QueryResult
