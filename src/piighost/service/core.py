@@ -290,6 +290,12 @@ class PIIGhostService:
         s = self._vault.stats()
         return VaultStatsModel(total=s.total, by_label=s.by_label)
 
+    async def vault_search(
+        self, query: str, *, reveal: bool = False, limit: int = 100
+    ) -> list[VaultEntryModel]:
+        entries = self._vault.search_entities(query, limit=limit)
+        return [self._to_entry_model(e, reveal=reveal) for e in entries]
+
     # ---- lifecycle ----
 
     async def flush(self) -> None:

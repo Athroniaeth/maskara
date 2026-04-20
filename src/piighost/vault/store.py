@@ -128,6 +128,16 @@ class Vault:
         }
         return VaultStats(total=total, by_label=by_label)
 
+    def search_entities(self, query: str, *, limit: int = 100) -> list[VaultEntry]:
+        if not query:
+            return []
+        rows = self._conn.execute(
+            "SELECT * FROM entities WHERE original LIKE ? "
+            "ORDER BY occurrence_count DESC LIMIT ?",
+            (f"%{query}%", limit),
+        ).fetchall()
+        return [self._row_to_entry(r) for r in rows]
+
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> VaultEntry:
         return VaultEntry(
