@@ -11,6 +11,7 @@ from typing import Protocol
 
 from piighost.anonymizer import Anonymizer
 from piighost.exceptions import PIISafetyViolation
+from piighost.indexer.filters import QueryFilter
 from piighost.models import Detection, Entity
 from piighost.pipeline.base import AnonymizationPipeline
 from piighost.placeholder import HashPlaceholderFactory
@@ -307,16 +308,22 @@ class _ProjectService:
             files=entries,
         )
 
-    async def query(self, text: str, *, k: int = 5) -> "QueryResult":
+    async def query(
+        self,
+        text: str,
+        *,
+        k: int = 5,
+        filter: "QueryFilter | None" = None,
+    ) -> "QueryResult":
         from piighost.indexer.retriever import reciprocal_rank_fusion
         from piighost.service.models import QueryHit, QueryResult
 
         anon_result = await self.anonymize(text)
         anon_query = anon_result.anonymized
 
-        bm25_hits = self._bm25.search(anon_query, k=k * 2)
+        bm25_hits = self._bm25.search(anon_query, k=k * 2, filter=filter)
         query_vecs = await self._embedder.embed([anon_query])
-        vec_hits_raw = self._chunk_store.vector_search(query_vecs[0], k=k * 2)
+        vec_hits_raw = self._chunk_store.vector_search(query_vecs[0], k=k * 2, filter=filter)
         vector_hits = [(r["chunk_id"], r.get("_distance", 0.0)) for r in vec_hits_raw]
 
         fused = reciprocal_rank_fusion(bm25_hits, vector_hits, rrf_k=60)[:k]
@@ -501,9 +508,16 @@ class PIIGhostService:
         svc = await self._get_project(project)
         return await svc.remove_doc(path)
 
-    async def query(self, text: str, *, k: int = 5, project: str = "default"):
+    async def query(
+        self,
+        text: str,
+        *,
+        k: int = 5,
+        project: str = "default",
+        filter: "QueryFilter | None" = None,
+    ):
         svc = await self._get_project(project)
-        return await svc.query(text, k=k)
+        return await svc.query(text, k=k, filter=filter)
 
     async def index_status(self, *, limit: int = 100, offset: int = 0, project: str = "default"):
         svc = await self._get_project(project)
