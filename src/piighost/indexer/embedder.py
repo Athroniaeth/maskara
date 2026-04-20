@@ -65,5 +65,7 @@ def build_embedder(cfg: EmbedderSection) -> AnyEmbedder:
     if cfg.backend == "local":
         return LocalEmbedder(cfg.local_model)
     if cfg.backend == "mistral":
+        if not os.environ.get("MISTRAL_API_KEY"):
+            raise RuntimeError("MISTRAL_API_KEY not set for mistral embedder")
         return MistralEmbedder(cfg.mistral_model)
     raise ValueError(f"Unknown embedder backend: {cfg.backend!r}")
