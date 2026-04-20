@@ -1,7 +1,6 @@
 import asyncio
 import importlib.util
 import pytest
-from pathlib import Path
 
 
 def test_vault_list_uses_service_masking(tmp_path, monkeypatch):
