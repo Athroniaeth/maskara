@@ -51,6 +51,17 @@ make lint
 
 This runs Ruff (format + lint) and PyReFly (type-check) through `uv run`.
 
+### Claude Desktop (MCPB bundle)
+
+One-click install for Claude Desktop users:
+
+1. Download the latest bundle from the [GitHub Releases page](https://github.com/Athroniaeth/piighost/releases/latest):
+   - **`piighost-core.mcpb`** — anonymization + vault tools only (~50 MB first-run install).
+   - **`piighost-full.mcpb`** — includes document indexing and hybrid retrieval (~1.5 GB first-run install, heavy deps: torch, sentence-transformers).
+2. Double-click the file — Claude Desktop will prompt for install confirmation and ask you to choose a vault directory.
+3. On first tool call, UV installs the required Python packages. Subsequent launches are instant (packages are cached).
+4. See [docs/mcpb-install.md](docs/mcpb-install.md) for troubleshooting.
+
 ## Quick start
 
 ### Standalone pipeline
