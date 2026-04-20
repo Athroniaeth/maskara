@@ -14,6 +14,7 @@ from piighost.cli.commands import rehydrate as rehydrate_cmd
 from piighost.cli.commands import rm as rm_cmd
 from piighost.cli.commands import serve as serve_cmd
 from piighost.cli.commands.daemon import daemon_app
+from piighost.cli.commands.projects import app as projects_app
 from piighost.cli.commands.vault import vault_app
 
 app = typer.Typer(
@@ -33,3 +34,4 @@ app.command("rm")(rm_cmd.run)
 app.command("index-status")(index_status_cmd.run)
 app.add_typer(vault_app, name="vault")
 app.add_typer(daemon_app, name="daemon")
+app.add_typer(projects_app, name="projects")

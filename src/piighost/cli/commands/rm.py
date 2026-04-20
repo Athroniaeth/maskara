@@ -16,6 +16,7 @@ from piighost.service import PIIGhostService
 def run(
     path: Path = typer.Argument(..., help="File to remove from the index"),
     vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -30,18 +31,18 @@ def run(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        result = client.call("remove_doc", {"path": str(path.resolve())})
+        result = client.call("remove_doc", {"path": str(path.resolve()), "project": project})
         emit_json_line(result)
         return
 
-    asyncio.run(_remove(vault_dir, path))
+    asyncio.run(_remove(vault_dir, path, project))
 
 
-async def _remove(vault_dir: Path, path: Path) -> None:
+async def _remove(vault_dir: Path, path: Path, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        removed = await svc.remove_doc(path.resolve())
+        removed = await svc.remove_doc(path.resolve(), project=project)
         emit_json_line({"removed": removed})
     finally:
         await svc.close()

@@ -17,6 +17,7 @@ def run(
     vault: Path | None = typer.Option(None, "--vault"),
     limit: int = typer.Option(100, "--limit"),
     offset: int = typer.Option(0, "--offset"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -31,18 +32,18 @@ def run(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        result = client.call("index_status", {"limit": limit, "offset": offset})
+        result = client.call("index_status", {"limit": limit, "offset": offset, "project": project})
         emit_json_line(result)
         return
 
-    asyncio.run(_status(vault_dir, limit, offset))
+    asyncio.run(_status(vault_dir, limit, offset, project))
 
 
-async def _status(vault_dir: Path, limit: int, offset: int) -> None:
+async def _status(vault_dir: Path, limit: int, offset: int, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        status = await svc.index_status(limit=limit, offset=offset)
+        status = await svc.index_status(limit=limit, offset=offset, project=project)
         emit_json_line(status.model_dump())
     finally:
         await svc.close()

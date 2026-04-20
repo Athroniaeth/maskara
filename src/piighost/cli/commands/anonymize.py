@@ -18,6 +18,7 @@ from piighost.vault.discovery import find_vault_dir
 def run(
     target: str = typer.Argument(..., help="File path or '-' for stdin"),
     vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = find_vault_dir(
@@ -37,14 +38,14 @@ def run(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        result = client.call("anonymize", {"text": text, "doc_id": doc_id})
+        result = client.call("anonymize", {"text": text, "doc_id": doc_id, "project": project})
         emit_json_line(result)
         return
 
-    asyncio.run(_run(vault_dir, doc_id, text))
+    asyncio.run(_run(vault_dir, doc_id, text, project))
 
 
-async def _run(vault_dir: Path, doc_id: str, text: str) -> None:
+async def _run(vault_dir: Path, doc_id: str, text: str, project: str = "default") -> None:
     from piighost.service import PIIGhostService, ServiceConfig
 
     cfg_path = vault_dir / "config.toml"
@@ -53,7 +54,7 @@ async def _run(vault_dir: Path, doc_id: str, text: str) -> None:
     )
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        result = await svc.anonymize(text, doc_id=doc_id)
+        result = await svc.anonymize(text, doc_id=doc_id, project=project)
         emit_json_line(result.model_dump())
     finally:
         await svc.close()

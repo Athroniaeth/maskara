@@ -19,6 +19,7 @@ def run(
     target: str = typer.Argument(..., help="File path or '-' for stdin"),
     vault: Path | None = typer.Option(None, "--vault"),
     lenient: bool = typer.Option(False, "--lenient"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = find_vault_dir(
@@ -41,7 +42,7 @@ def run(
     if client is not None:
         try:
             result = client.call(
-                "rehydrate", {"text": text, "strict": strict}
+                "rehydrate", {"text": text, "strict": strict, "project": project}
             )
         except RuntimeError as exc:
             if str(exc) == "PIISafetyViolation":
@@ -57,7 +58,7 @@ def run(
         return
 
     try:
-        asyncio.run(_run(vault_dir, text, strict=strict))
+        asyncio.run(_run(vault_dir, text, strict=strict, project=project))
     except PIISafetyViolation as exc:
         emit_error_line(
             error="PIISafetyViolation",
@@ -68,7 +69,7 @@ def run(
         raise typer.Exit(code=int(ExitCode.PII_SAFETY_VIOLATION))
 
 
-async def _run(vault_dir: Path, text: str, *, strict: bool) -> None:
+async def _run(vault_dir: Path, text: str, *, strict: bool, project: str = "default") -> None:
     from piighost.service import PIIGhostService, ServiceConfig
 
     cfg_path = vault_dir / "config.toml"
@@ -77,7 +78,7 @@ async def _run(vault_dir: Path, text: str, *, strict: bool) -> None:
     )
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        result = await svc.rehydrate(text, strict=strict)
+        result = await svc.rehydrate(text, strict=strict, project=project)
         emit_json_line(result.model_dump())
     finally:
         await svc.close()

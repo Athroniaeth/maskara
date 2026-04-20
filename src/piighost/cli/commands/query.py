@@ -17,6 +17,7 @@ def run(
     text: str = typer.Argument(..., help="Query text"),
     vault: Path | None = typer.Option(None, "--vault"),
     k: int = typer.Option(5, "--k", "-k"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -31,18 +32,18 @@ def run(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        result = client.call("query", {"text": text, "k": k})
+        result = client.call("query", {"text": text, "k": k, "project": project})
         emit_json_line(result)
         return
 
-    asyncio.run(_query(vault_dir, text, k))
+    asyncio.run(_query(vault_dir, text, k, project))
 
 
-async def _query(vault_dir: Path, text: str, k: int) -> None:
+async def _query(vault_dir: Path, text: str, k: int, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        result = await svc.query(text, k=k)
+        result = await svc.query(text, k=k, project=project)
         emit_json_line(result.model_dump())
     finally:
         await svc.close()

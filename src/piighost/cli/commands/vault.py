@@ -36,6 +36,7 @@ def list_cmd(
     limit: int = typer.Option(100, "--limit"),
     reveal: bool = typer.Option(False, "--reveal"),
     vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -52,20 +53,20 @@ def list_cmd(
     if client is not None:
         page = client.call(
             "vault_list",
-            {"label": label, "limit": limit, "reveal": reveal},
+            {"label": label, "limit": limit, "reveal": reveal, "project": project},
         )
         for entry in page.get("entries", []):
             emit_json_line(entry)
         return
 
-    asyncio.run(_list(vault_dir, label, limit, reveal))
+    asyncio.run(_list(vault_dir, label, limit, reveal, project))
 
 
-async def _list(vault_dir: Path, label: str | None, limit: int, reveal: bool) -> None:
+async def _list(vault_dir: Path, label: str | None, limit: int, reveal: bool, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        page = await svc.vault_list(label=label, limit=limit, reveal=reveal)
+        page = await svc.vault_list(label=label, limit=limit, reveal=reveal, project=project)
         for entry in page.entries:
             emit_json_line(entry.model_dump())
     finally:
@@ -77,6 +78,7 @@ def show_cmd(
     token: str,
     reveal: bool = typer.Option(False, "--reveal"),
     vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -92,7 +94,7 @@ def show_cmd(
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
         entry = client.call(
-            "vault_show", {"token": token, "reveal": reveal}
+            "vault_show", {"token": token, "reveal": reveal, "project": project}
         )
         if entry is None:
             emit_error_line(
@@ -105,14 +107,14 @@ def show_cmd(
         emit_json_line(entry)
         return
 
-    asyncio.run(_show(vault_dir, token, reveal))
+    asyncio.run(_show(vault_dir, token, reveal, project))
 
 
-async def _show(vault_dir: Path, token: str, reveal: bool) -> None:
+async def _show(vault_dir: Path, token: str, reveal: bool, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        entry = await svc.vault_show(token, reveal=reveal)
+        entry = await svc.vault_show(token, reveal=reveal, project=project)
         if entry is None:
             emit_error_line(
                 error="TokenNotFound",
@@ -127,43 +129,9 @@ async def _show(vault_dir: Path, token: str, reveal: bool) -> None:
 
 
 @vault_app.command("stats")
-def stats_cmd(vault: Path | None = typer.Option(None, "--vault")) -> None:
-    try:
-        vault_dir = _resolve_vault(vault)
-    except VaultNotFound as exc:
-        emit_error_line(
-            error="VaultNotFound",
-            message=str(exc),
-            hint="Run `piighost init`",
-            exit_code=ExitCode.USER_ERROR,
-        )
-        raise typer.Exit(code=int(ExitCode.USER_ERROR))
-
-    client = DaemonClient.from_vault(vault_dir)
-    if client is not None:
-        stats = client.call("vault_stats")
-        emit_json_line(stats)
-        return
-
-    asyncio.run(_stats(vault_dir))
-
-
-async def _stats(vault_dir: Path) -> None:
-    config = _load_cfg(vault_dir)
-    svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
-    try:
-        s = await svc.vault_stats()
-        emit_json_line(s.model_dump())
-    finally:
-        await svc.close()
-
-
-@vault_app.command("search")
-def search_cmd(
-    query: str = typer.Argument(..., help="Search term"),
-    reveal: bool = typer.Option(False, "--reveal"),
-    limit: int = typer.Option(100, "--limit"),
+def stats_cmd(
     vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -178,19 +146,57 @@ def search_cmd(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        results = client.call("vault_search", {"query": query, "reveal": reveal, "limit": limit})
+        stats = client.call("vault_stats", {"project": project})
+        emit_json_line(stats)
+        return
+
+    asyncio.run(_stats(vault_dir, project))
+
+
+async def _stats(vault_dir: Path, project: str = "default") -> None:
+    config = _load_cfg(vault_dir)
+    svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
+    try:
+        s = await svc.vault_stats(project=project)
+        emit_json_line(s.model_dump())
+    finally:
+        await svc.close()
+
+
+@vault_app.command("search")
+def search_cmd(
+    query: str = typer.Argument(..., help="Search term"),
+    reveal: bool = typer.Option(False, "--reveal"),
+    limit: int = typer.Option(100, "--limit"),
+    vault: Path | None = typer.Option(None, "--vault"),
+    project: str = typer.Option("default", "--project", help="Project name (defaults to 'default')"),
+) -> None:
+    try:
+        vault_dir = _resolve_vault(vault)
+    except VaultNotFound as exc:
+        emit_error_line(
+            error="VaultNotFound",
+            message=str(exc),
+            hint="Run `piighost init`",
+            exit_code=ExitCode.USER_ERROR,
+        )
+        raise typer.Exit(code=int(ExitCode.USER_ERROR))
+
+    client = DaemonClient.from_vault(vault_dir)
+    if client is not None:
+        results = client.call("vault_search", {"query": query, "reveal": reveal, "limit": limit, "project": project})
         for entry in results:
             emit_json_line(entry)
         return
 
-    asyncio.run(_search(vault_dir, query, reveal, limit))
+    asyncio.run(_search(vault_dir, query, reveal, limit, project))
 
 
-async def _search(vault_dir: Path, query: str, reveal: bool, limit: int) -> None:
+async def _search(vault_dir: Path, query: str, reveal: bool, limit: int, project: str = "default") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        entries = await svc.vault_search(query, reveal=reveal, limit=limit)
+        entries = await svc.vault_search(query, reveal=reveal, limit=limit, project=project)
         for e in entries:
             emit_json_line(e.model_dump())
     finally:

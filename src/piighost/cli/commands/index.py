@@ -18,6 +18,7 @@ def run(
     vault: Path | None = typer.Option(None, "--vault"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive"),
     force: bool = typer.Option(False, "--force/--no-force", help="Re-index even if unchanged"),
+    project: str = typer.Option("", "--project", help="Project name (empty = derive from path)"),
 ) -> None:
     try:
         vault_dir = _resolve_vault(vault)
@@ -32,18 +33,18 @@ def run(
 
     client = DaemonClient.from_vault(vault_dir)
     if client is not None:
-        result = client.call("index_path", {"path": str(path.resolve()), "recursive": recursive, "force": force})
+        result = client.call("index_path", {"path": str(path.resolve()), "recursive": recursive, "force": force, "project": project})
         emit_json_line(result)
         return
 
-    asyncio.run(_index(vault_dir, path, recursive, force))
+    asyncio.run(_index(vault_dir, path, recursive, force, project))
 
 
-async def _index(vault_dir: Path, path: Path, recursive: bool, force: bool) -> None:
+async def _index(vault_dir: Path, path: Path, recursive: bool, force: bool, project: str = "") -> None:
     config = _load_cfg(vault_dir)
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     try:
-        report = await svc.index_path(path.resolve(), recursive=recursive, force=force)
+        report = await svc.index_path(path.resolve(), recursive=recursive, force=force, project=project)
         emit_json_line(report.model_dump())
     finally:
         await svc.close()
