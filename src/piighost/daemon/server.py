@@ -108,4 +108,17 @@ async def _dispatch(
         return r.model_dump() if r else None
     if method == "vault_stats":
         return (await svc.vault_stats()).model_dump()
+    if method == "vault_search":
+        entries = await svc.vault_search(
+            params["query"], reveal=params.get("reveal", False), limit=params.get("limit", 100)
+        )
+        return [e.model_dump() for e in entries]
+    if method == "index_path":
+        report = await svc.index_path(
+            Path(params["path"]), recursive=params.get("recursive", True)
+        )
+        return report.model_dump()
+    if method == "query":
+        result = await svc.query(params["text"], k=params.get("k", 5))
+        return result.model_dump()
     raise ValueError(f"Unknown method: {method}")
