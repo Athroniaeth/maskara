@@ -1,0 +1,46 @@
+{
+  "manifest_version": "0.4",
+  "name": "piighost-core",
+  "display_name": "piighost (Core)",
+  "version": "0.8.0",
+  "description": "GDPR PII anonymization and vault — core tools (no indexing)",
+  "long_description": "piighost provides GDPR-compliant PII anonymization, rehydration, and vault operations as MCP tools. This core bundle includes the anonymization pipeline and vault management without the heavier document indexing and retrieval tools.",
+  "author": {
+    "name": "Athroniaeth"
+  },
+  "homepage": "https://github.com/Athroniaeth/piighost",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Athroniaeth/piighost.git"
+  },
+  "support": "https://github.com/Athroniaeth/piighost/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "src/server.py"],
+      "env": {
+        "PIIGHOST_VAULT_DIR": "${user_config.vault_dir}"
+      }
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  },
+  "user_config": {
+    "vault_dir": {
+      "type": "directory",
+      "title": "Vault Directory",
+      "description": "Location of your PII vault (persisted across sessions)",
+      "required": true,
+      "default": "${HOME}/.piighost/vault"
+    }
+  },
+  "keywords": ["pii", "anonymization", "gdpr", "privacy", "vault"],
+  "license": "MIT"
+}
