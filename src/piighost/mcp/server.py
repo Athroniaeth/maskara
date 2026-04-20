@@ -45,8 +45,25 @@ async def build_mcp(vault_dir: Path) -> tuple[FastMCP, PIIGhostService]:
             return report.model_dump()
 
         @mcp.tool(description="Hybrid BM25+vector search over indexed documents")
-        async def query(text: str, k: int = 5, project: str = "default") -> dict:
-            result = await svc.query(text, k=k, project=project)
+        async def query(
+            text: str,
+            k: int = 5,
+            project: str = "default",
+            filter_prefix: str = "",
+            filter_doc_ids: list[str] | None = None,
+            rerank: bool = False,
+            top_n: int = 20,
+        ) -> dict:
+            from piighost.indexer.filters import QueryFilter
+            qfilter = None
+            if filter_prefix or filter_doc_ids:
+                qfilter = QueryFilter(
+                    file_path_prefix=filter_prefix or None,
+                    doc_ids=tuple(filter_doc_ids or ()),
+                )
+            result = await svc.query(
+                text, k=k, project=project, filter=qfilter, rerank=rerank, top_n=top_n
+            )
             return result.model_dump()
 
     @mcp.tool(description="Full-text search in the PII vault by original value")
