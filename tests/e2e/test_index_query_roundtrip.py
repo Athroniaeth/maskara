@@ -57,7 +57,7 @@ def test_roundtrip_index_query_rehydrate(svc, docs):
 
         # Rehydration must work without unknown tokens
         rehydrated = asyncio.run(svc.rehydrate(hit.chunk))
-        assert rehydrated.unknown_tokens == [] or len(rehydrated.text) > 0
+        assert rehydrated.unknown_tokens == []
 
 
 def test_token_identity_bm25_retrieval(svc, tmp_path):
@@ -82,10 +82,10 @@ def test_token_identity_bm25_retrieval(svc, tmp_path):
     # Anonymize the query -- "Alice" should get the same token as in the doc
     anon = asyncio.run(svc.anonymize("What does Alice work on?"))
     anon_query = anon.anonymized
-    # The token for Alice must appear verbatim in BM25 index
-    bm25_hits = svc._bm25.search(anon_query, k=5)
-    assert len(bm25_hits) >= 1, (
-        f"BM25 found no hits for anonymized query '{anon_query}'. "
+    # The same token must appear in the indexed doc and the query → public query surface returns hits
+    result = asyncio.run(svc.query(anon_query, k=5))
+    assert len(result.hits) >= 1, (
+        f"query() found no hits for anonymized query '{anon_query}'. "
         "HashPlaceholderFactory must produce identical tokens for the same entity."
     )
 
@@ -94,8 +94,8 @@ def test_pii_zero_leak_to_mistral(tmp_path, monkeypatch):
     """No raw PII values must appear in Mistral embedding requests."""
     captured_bodies: list[str] = []
 
-    class _CapturingTransport(httpx.BaseTransport):
-        def handle_request(self, request: httpx.Request) -> httpx.Response:
+    class _CapturingTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
             captured_bodies.append(request.content.decode("utf-8", errors="replace"))
             payload = {"data": [{"embedding": [0.1] * 8, "index": 0}], "usage": {"prompt_tokens": 1}}
             return httpx.Response(200, json=payload)
@@ -120,12 +120,10 @@ def test_pii_zero_leak_to_mistral(tmp_path, monkeypatch):
     monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
     monkeypatch.setattr(emb_mod, "MistralEmbedder", _PatchedMistralEmbedder)
 
-    from piighost.service.config import ServiceConfig
-    from piighost.service.config import EmbedderSection
+    from piighost.service.config import EmbedderSection, ServiceConfig
 
     vault_dir = tmp_path / "leak_vault"
-    config = ServiceConfig()
-    config.embedder.backend = "mistral"
+    config = ServiceConfig(embedder=EmbedderSection(backend="mistral"))
 
     leak_svc = asyncio.run(PIIGhostService.create(vault_dir=vault_dir, config=config))
 
@@ -137,6 +135,10 @@ def test_pii_zero_leak_to_mistral(tmp_path, monkeypatch):
     )
     asyncio.run(leak_svc.index_path(doc_dir))
 
+    assert captured_bodies, (
+        "No embed calls were captured — kreuzberg may have failed to extract the document. "
+        "Cannot prove PII did not leak."
+    )
     pii_values = ["Alice", "Paris"]
     for body in captured_bodies:
         for pii in pii_values:

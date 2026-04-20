@@ -352,8 +352,11 @@ class _StubDetector:
 
         out: list[Detection] = []
         for needle, label in (("Alice", "PERSON"), ("Paris", "LOC")):
-            idx = text.find(needle)
-            if idx >= 0:
+            start = 0
+            while True:
+                idx = text.find(needle, start)
+                if idx < 0:
+                    break
                 out.append(
                     Detection(
                         text=needle,
@@ -362,4 +365,5 @@ class _StubDetector:
                         confidence=0.99,
                     )
                 )
+                start = idx + len(needle)
         return out
