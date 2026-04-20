@@ -22,7 +22,7 @@ def run(
     except VaultNotFound as exc:
         emit_error_line(
             error="VaultNotFound",
-            message=str(exc),
+            message=type(exc).__name__,
             hint="Run `piighost init`",
             exit_code=ExitCode.USER_ERROR,
         )

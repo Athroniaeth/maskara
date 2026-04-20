@@ -132,4 +132,4 @@ async def _dispatch(
     if method == "query":
         result = await svc.query(params["text"], k=params.get("k", 5))
         return result.model_dump()
-    raise ValueError(f"Unknown method: {method}")
+    raise ValueError("Unknown method")
