@@ -33,15 +33,17 @@ def test_remove_doc_returns_false_when_not_found(indexed_svc):
 def test_remove_doc_removes_from_indexed_files(indexed_svc):
     svc, f = indexed_svc
     asyncio.run(svc.remove_doc(f))
-    assert svc._vault.get_indexed_file_by_path(str(f)) is None
+    inner = asyncio.run(svc._get_project("default"))
+    assert inner._vault.get_indexed_file_by_path(str(f)) is None
     asyncio.run(svc.close())
 
 
 def test_remove_doc_removes_chunks(indexed_svc):
     svc, f = indexed_svc
-    assert len(svc._chunk_store.all_records()) >= 1
+    inner = asyncio.run(svc._get_project("default"))
+    assert len(inner._chunk_store.all_records()) >= 1
     asyncio.run(svc.remove_doc(f))
-    assert svc._chunk_store.all_records() == []
+    assert inner._chunk_store.all_records() == []
     asyncio.run(svc.close())
 
 
@@ -50,14 +52,15 @@ def test_remove_doc_removes_doc_entities(indexed_svc):
     # Verify entities were linked during indexing
     from piighost.indexer.identity import content_hash
     doc_id = content_hash(f)
-    rows_before = svc._vault._conn.execute(
+    inner = asyncio.run(svc._get_project("default"))
+    rows_before = inner._vault._conn.execute(
         "SELECT COUNT(*) FROM doc_entities WHERE doc_id = ?", (doc_id,)
     ).fetchone()[0]
     assert rows_before >= 1, "stub detector should have linked at least 1 entity"
 
     asyncio.run(svc.remove_doc(f))
 
-    rows_after = svc._vault._conn.execute(
+    rows_after = inner._vault._conn.execute(
         "SELECT COUNT(*) FROM doc_entities WHERE doc_id = ?", (doc_id,)
     ).fetchone()[0]
     assert rows_after == 0

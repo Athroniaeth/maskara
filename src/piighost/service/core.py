@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Protocol
 
@@ -35,19 +36,21 @@ class _Detector(Protocol):
     async def detect(self, text: str) -> list[Detection]: ...
 
 
-class PIIGhostService:
-    """Stateful service. One instance per vault directory."""
+class _ProjectService:
+    """Stateful service. One instance per project directory."""
 
     def __init__(
         self,
-        vault_dir: Path,
+        project_dir: Path,
+        project_name: str,
         config: ServiceConfig,
         vault: Vault,
         audit: AuditLogger,
         detector: _Detector,
         ph_factory: HashPlaceholderFactory,
     ) -> None:
-        self._vault_dir = vault_dir
+        self._project_dir = project_dir
+        self._project_name = project_name
         self._config = config
         self._vault = vault
         self._audit = audit
@@ -63,30 +66,34 @@ class PIIGhostService:
         from piighost.indexer.retriever import BM25Index
 
         self._embedder = build_embedder(config.embedder)
-        self._chunk_store = ChunkStore(vault_dir / ".piighost" / "lance")
-        self._bm25 = BM25Index(vault_dir / ".piighost" / "bm25.pkl")
+        self._chunk_store = ChunkStore(self._project_dir / ".piighost" / "lance")
+        self._bm25 = BM25Index(self._project_dir / ".piighost" / "bm25.pkl")
         self._bm25.load()
 
     @classmethod
     async def create(
         cls,
         *,
-        vault_dir: Path,
+        project_dir: Path,
+        project_name: str,
         config: ServiceConfig | None = None,
         detector: _Detector | None = None,
-    ) -> "PIIGhostService":
+        placeholder_salt: str = "",
+    ) -> "_ProjectService":
         config = config or ServiceConfig.default()
-        vault = Vault.open(vault_dir / "vault.db")
-        audit = AuditLogger(vault_dir / "audit.log")
+        project_dir.mkdir(parents=True, exist_ok=True)
+        vault = Vault.open(project_dir / "vault.db")
+        audit = AuditLogger(project_dir / "audit.log")
         if detector is None:
             detector = await _build_default_detector(config)
         return cls(
-            vault_dir=vault_dir,
+            project_dir=project_dir,
+            project_name=project_name,
             config=config,
             vault=vault,
             audit=audit,
             detector=detector,
-            ph_factory=HashPlaceholderFactory(),
+            ph_factory=HashPlaceholderFactory(salt=placeholder_salt),
         )
 
     # ---- core ops ----
@@ -396,6 +403,136 @@ class PIIGhostService:
             last_seen_at=v.last_seen_at,
             occurrence_count=v.occurrence_count,
         )
+
+
+from piighost.service.migration import migrate_to_v3
+from piighost.vault.project_registry import ProjectRegistry, ProjectInfo
+
+
+class PIIGhostService:
+    """Multiplexer over per-project :class:`_ProjectService` instances."""
+
+    LRU_SIZE = 8
+
+    def __init__(
+        self,
+        vault_dir: Path,
+        config: ServiceConfig,
+        registry: ProjectRegistry,
+    ) -> None:
+        self._vault_dir = vault_dir
+        self._config = config
+        self._registry = registry
+        self._cache: "OrderedDict[str, _ProjectService]" = OrderedDict()
+        self._detector_override: _Detector | None = None
+
+    @classmethod
+    async def create(
+        cls,
+        *,
+        vault_dir: Path,
+        config: ServiceConfig | None = None,
+        detector: _Detector | None = None,
+    ) -> "PIIGhostService":
+        config = config or ServiceConfig.default()
+        migrate_to_v3(vault_dir)
+        registry = ProjectRegistry.open(vault_dir / "projects.db")
+        svc = cls(vault_dir=vault_dir, config=config, registry=registry)
+        svc._detector_override = detector
+        return svc
+
+    async def _get_project(
+        self, name: str, *, auto_create: bool = False
+    ) -> "_ProjectService":
+        if name in self._cache:
+            self._cache.move_to_end(name)
+            self._registry.touch(name)
+            return self._cache[name]
+
+        info = self._registry.get(name)
+        if info is None:
+            if not auto_create:
+                from piighost.exceptions import ProjectNotFound
+                raise ProjectNotFound(name)
+            info = self._registry.create(name)
+
+        project_dir = self._vault_dir / "projects" / name
+        svc = await _ProjectService.create(
+            project_dir=project_dir,
+            project_name=name,
+            config=self._config,
+            detector=self._detector_override,
+            placeholder_salt=info.placeholder_salt,
+        )
+        self._cache[name] = svc
+        while len(self._cache) > self.LRU_SIZE:
+            _evicted_name, evicted_svc = self._cache.popitem(last=False)
+            await evicted_svc.close()
+        self._registry.touch(name)
+        return svc
+
+    async def anonymize(self, text: str, *, doc_id: str | None = None):
+        svc = await self._get_project("default", auto_create=True)
+        return await svc.anonymize(text, doc_id=doc_id)
+
+    async def rehydrate(self, text: str, *, strict: bool | None = None):
+        svc = await self._get_project("default")
+        return await svc.rehydrate(text, strict=strict)
+
+    async def detect(self, text: str):
+        svc = await self._get_project("default")
+        return await svc.detect(text)
+
+    async def index_path(self, path: Path, *, recursive: bool = True, force: bool = False):
+        svc = await self._get_project("default", auto_create=True)
+        return await svc.index_path(path, recursive=recursive, force=force)
+
+    async def remove_doc(self, path: Path) -> bool:
+        svc = await self._get_project("default")
+        return await svc.remove_doc(path)
+
+    async def query(self, text: str, *, k: int = 5):
+        svc = await self._get_project("default")
+        return await svc.query(text, k=k)
+
+    async def index_status(self, *, limit: int = 100, offset: int = 0):
+        svc = await self._get_project("default")
+        return await svc.index_status(limit=limit, offset=offset)
+
+    async def vault_list(
+        self,
+        *,
+        label: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        reveal: bool = False,
+    ):
+        svc = await self._get_project("default")
+        return await svc.vault_list(
+            label=label, limit=limit, offset=offset, reveal=reveal
+        )
+
+    async def vault_show(self, token: str, *, reveal: bool = False):
+        svc = await self._get_project("default")
+        return await svc.vault_show(token, reveal=reveal)
+
+    async def vault_stats(self):
+        svc = await self._get_project("default")
+        return await svc.vault_stats()
+
+    async def vault_search(self, query: str, *, reveal: bool = False, limit: int = 100):
+        svc = await self._get_project("default")
+        return await svc.vault_search(query, reveal=reveal, limit=limit)
+
+    async def flush(self) -> None:
+        for svc in self._cache.values():
+            await svc.flush()
+
+    async def close(self) -> None:
+        for svc in self._cache.values():
+            await svc.close()
+        self._cache.clear()
+        self._registry.close()
 
 
 async def _build_default_detector(config: ServiceConfig) -> _Detector:
