@@ -23,6 +23,7 @@ from piighost.integrations.haystack.presets import (
     PRESET_LANGUAGE,
     PRESET_SENSITIVITY,
 )
+from piighost.integrations.haystack.rag import PIIGhostRetriever  # noqa: F401
 
 __all__ = [
     "PIIGhostDocumentAnonymizer",
@@ -33,4 +34,5 @@ __all__ = [
     "PRESET_LANGUAGE",
     "PRESET_SENSITIVITY",
     "lancedb_meta_fields",
+    "PIIGhostRetriever",
 ]
