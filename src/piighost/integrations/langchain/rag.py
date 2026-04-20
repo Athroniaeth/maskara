@@ -9,9 +9,13 @@ from piighost.service.core import PIIGhostService
 from piighost.service.models import IndexReport
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from langchain_core.language_models import BaseLanguageModel
     from langchain_core.retrievers import BaseRetriever
     from langchain_core.runnables import Runnable
+
+    from piighost.indexer.filters import QueryFilter
 
 
 def _build_retriever_class():
@@ -128,9 +132,19 @@ class PIIGhostRAG:
         k: int = 5,
         llm: "BaseLanguageModel | None" = None,
         prompt: Any | None = None,
+        filter: "QueryFilter | None" = None,
+        rerank: bool = False,
+        top_n: int = 20,
     ) -> str:
         anon = await self._svc.anonymize(text, project=self._project)
-        result = await self._svc.query(anon.anonymized, project=self._project, k=k)
+        result = await self._svc.query(
+            anon.anonymized,
+            project=self._project,
+            k=k,
+            filter=filter,
+            rerank=rerank,
+            top_n=top_n,
+        )
         context = "\n\n".join(hit.chunk for hit in result.hits)
 
         if llm is None:
@@ -150,6 +164,45 @@ class PIIGhostRAG:
             answer_text, project=self._project, strict=False
         )
         return rehydrated.text
+
+    async def astream(
+        self,
+        text: str,
+        *,
+        llm: "BaseLanguageModel",
+        k: int = 5,
+        prompt: Any | None = None,
+        filter: "QueryFilter | None" = None,
+        rerank: bool = False,
+        top_n: int = 20,
+    ) -> "AsyncIterator[str]":
+        from piighost.integrations.langchain.streaming import StreamingRehydrator
+
+        anon = await self._svc.anonymize(text, project=self._project)
+        result = await self._svc.query(
+            anon.anonymized,
+            project=self._project,
+            k=k,
+            filter=filter,
+            rerank=rerank,
+            top_n=top_n,
+        )
+        context = "\n\n".join(hit.chunk for hit in result.hits)
+
+        if prompt is not None:
+            messages = prompt.format_messages(context=context, question=anon.anonymized)
+        else:
+            messages = _build_prompt(context=context, question=anon.anonymized)
+
+        rehydrator = StreamingRehydrator(self._svc, self._project)
+        async for chunk in llm.astream(messages):
+            text_chunk = chunk.content if hasattr(chunk, "content") else str(chunk)
+            emitted = await rehydrator.feed(text_chunk)
+            if emitted:
+                yield emitted
+        final = await rehydrator.finalize()
+        if final:
+            yield final
 
     def as_chain(
         self,
