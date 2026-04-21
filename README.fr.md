@@ -63,12 +63,12 @@ Scénarios concrets où `piighost` trouve naturellement sa place :
 
 ## Faiblesses
 
-Il n'existe pas de pipeline d'anonymisation parfaite. Il n'y a que des pipelines adaptées à une situation, et chaque mécanisme de `piighost` échange une classe d'erreurs contre une autre. Identifier les compromis en jeu pour votre cas d'usage fait partie du travail d'intégration.
+Il n'existe pas de pipeline d'anonymisation parfaite. Il n'y a que des pipelines adaptées à une situation, et chaque mécanisme de `piighost` corrige certains comportements indésirables au prix d'en introduire d'autres. Identifier les compromis en jeu pour votre cas d'usage fait partie du travail d'intégration.
 
 - **La liaison d'entités amplifie les erreurs du NER.** Après qu'un modèle NER a détecté un nom, `ExactEntityLinker` balaie le reste du texte (et de la conversation) pour rattraper les occurrences manquées. Si la détection initiale est fausse, le linker propage cette erreur à toutes les correspondances. Exemple : `Rose` est correctement détecté comme prénom dans un premier message ; plus loin, le mot `rose` au sens de la fleur est capturé par la même entité et anonymisé comme une personne. Le linker n'a aucun contexte global. Atténuation : utilisez `ExactMatchDetector` ou un `RegexDetector` ciblé quand vous avez besoin d'un contrôle déterministe, ou désactivez la liaison inter-messages en instanciant un thread frais par message.
 - **La résolution floue peut sur-fusionner.** `FuzzyEntityConflictResolver` utilise la similarité Jaro-Winkler pour lier les fautes d'orthographe (`Patric` vers `Patrick`). Sur des noms courts ou proches (`Marin` vs `Martin`, `Lee` vs `Leo`), ce même mécanisme fusionne des personnes distinctes sous un seul placeholder. Atténuation : relevez le seuil de similarité, ou repliez-vous sur `MergeEntityConflictResolver` (correspondance exacte uniquement).
 
-Avant de déployer, vérifiez quelles étapes de la pipeline vous sont réellement utiles : chaque détecteur, linker ou resolver que vous retirez élimine une classe d'erreurs au prix d'une autre. Voir [Architecture](docs/fr/architecture.md) et [Étendre PIIGhost](docs/fr/extending.md) pour les points d'extension.
+Avant de déployer, vérifiez quelles étapes de la pipeline vous sont réellement utiles : chaque détecteur, linker ou resolver que vous retirez supprime les comportements indésirables qu'il causait, mais réactive ceux qu'il corrigeait. Voir [Architecture](docs/fr/architecture.md) et [Étendre PIIGhost](docs/fr/extending.md) pour les points d'extension.
 
 ## Installation
 
