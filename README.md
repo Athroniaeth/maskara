@@ -8,7 +8,29 @@
 [![Deps: uv](https://img.shields.io/badge/deps-managed%20with%20uv-3E4DD8.svg)](https://docs.astral.sh/uv/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-4B32C3.svg)](https://docs.astral.sh/ruff/)
 
+[README EN](README.fr.md) - [README FR](README.fr.md)
+
 `piighost` is a Python library that detects PII (personally identifiable information), extracts them, applies corrections, and automatically anonymizes and deanonymizes sensitive entities (names, locations, etc.). With modules for bidirectional anonymization in AI agent conversations, it integrates via a LangChain middleware without modifying your existing agent code.
+
+## Objectives
+
+Companies using third-party hosted LLMs (GPT, Claude, Gemini) risk transmitting their users' sensitive data to those
+providers. Relying solely on providers with inference servers located in Europe (Mistral AI, OVHcloud, Scaleway) offers
+a legal guarantee, but not a technical one. You could switch from proprietary models to self-hosted open-source
+alternatives, but that requires the infrastructure and accepting a step back from the state of the art.
+
+`piighost` answers this trade-off: anonymize PII before they reach the LLM, keep using the most capable models, and
+restore real values to the end user, without the LLM or the hosting provider ever seeing them.
+
+Existing solutions (Presidio, spaCy extensions, regex) cover detection and anonymization, but they:
+
+- do not link different occurrences of the same entity together
+- do not handle overlapping spans or conflicts between multiple NER models
+- do not tolerate entity variants (case differences, typos, partial mentions), leading to inconsistent placeholders or data leaks
+- leave the developer responsible for orchestrating the conversational case: placeholder persistence across messages, tool call anonymization/deanonymization, etc.
+
+`piighost` builds a layer on top of NER models to handle this entire cycle via a **bidirectional LangChain middleware**
+and **per-thread conversation memory**.
 
 ## Features
 
