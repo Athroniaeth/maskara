@@ -41,3 +41,17 @@ def test_dockerfile_no_apt_without_clean(dockerfile_text: str) -> None:
 
 def test_dockerfile_declares_healthcheck(dockerfile_text: str) -> None:
     assert "HEALTHCHECK" in dockerfile_text
+
+
+def test_dockerfile_has_full_target(dockerfile_text: str) -> None:
+    assert "AS full" in dockerfile_text
+
+
+def test_full_uses_chainguard_python(dockerfile_text: str) -> None:
+    assert "cgr.dev/chainguard/python" in dockerfile_text
+
+
+def test_full_installs_index_and_gliner_extras(dockerfile_text: str) -> None:
+    # The full target must pull the optional groups that end-users expect
+    assert "[index," in dockerfile_text or "[gliner2," in dockerfile_text
+    assert "sentence-transformers" in dockerfile_text

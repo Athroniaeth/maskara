@@ -66,3 +66,47 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["mcp"]
+
+# =============================================================================
+# Stage 3: full — chainguard python with PyTorch + GLiNER + LanceDB
+# =============================================================================
+# TODO: pin to real digest before publish — fetch via `docker buildx imagetools inspect cgr.dev/chainguard/python:latest-dev`
+FROM cgr.dev/chainguard/python:latest-dev@sha256:0000000000000000000000000000000000000000000000000000000000000000 AS full
+
+USER root
+
+WORKDIR /build
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
+
+RUN pip install --no-cache-dir "uv>=0.4" && \
+    uv venv /opt/piighost && \
+    . /opt/piighost/bin/activate && \
+    uv pip install --python /opt/piighost/bin/python \
+        -e ".[index,gliner2,mcp,client,langchain,haystack,haystack-lancedb,haystack-embeddings-local,faker,transformers]" \
+        --no-cache-dir && \
+    uv pip install --python /opt/piighost/bin/python "sentence-transformers>=3" && \
+    # Strip PyTorch test files and docs to shave ~400 MB
+    find /opt/piighost -name '*.pyc' -delete && \
+    find /opt/piighost -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true && \
+    find /opt/piighost -type d -name 'tests' -exec rm -rf {} + 2>/dev/null || true
+
+COPY --chown=10001:10001 docker/entrypoint.sh /entrypoint.sh
+RUN chmod 0555 /entrypoint.sh && \
+    install -d -o 10001 -g 10001 /var/lib/piighost
+
+ENV PATH=/opt/piighost/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PIIGHOST_DATA_DIR=/var/lib/piighost \
+    PIIGHOST_IMAGE_VARIANT=full \
+    HF_HOME=/var/lib/piighost/.cache/huggingface
+
+USER 10001
+
+WORKDIR /var/lib/piighost
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-m", "piighost.cli.main", "healthcheck"]
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["mcp"]
