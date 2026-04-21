@@ -78,3 +78,33 @@ class TestFolderStatusResource:
             assert data["state"] in {"ready", "indexing", "error", "empty"}
         finally:
             await svc.close()
+
+
+@pytest.mark.asyncio
+class TestSessionAuditTools:
+    async def test_append_then_read(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("HACIENDA_DATA_DIR", str(tmp_path))
+        mcp, svc = await build_mcp(vault_dir=tmp_path / "vault")
+        try:
+            append = await mcp.get_tool("session_audit_append")
+            read = await mcp.get_tool("session_audit_read")
+            await append.run({
+                "session_id": "s1",
+                "event": "anonymize",
+                "payload": {"n": 3},
+            })
+            await append.run({
+                "session_id": "s1",
+                "event": "rehydrate",
+                "payload": {"n": 3},
+            })
+            result = await read.run({"session_id": "s1"})
+            events = result.structured_content
+            # FastMCP may wrap list returns under a "result" key — handle both.
+            if isinstance(events, dict) and "result" in events:
+                events = events["result"]
+            assert len(events) == 2
+            assert events[0]["event"] == "anonymize"
+            assert events[1]["event"] == "rehydrate"
+        finally:
+            await svc.close()

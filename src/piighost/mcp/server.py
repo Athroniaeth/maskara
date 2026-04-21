@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -156,6 +157,34 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
     async def resolve_project_for_folder(folder: str) -> dict:
         project = project_name_for_folder(Path(folder))
         return {"folder": folder, "project": project}
+
+    from piighost.mcp.audit import SessionAudit
+
+    def _audit_for(session_id: str) -> SessionAudit:
+        root = Path(os.environ.get("HACIENDA_DATA_DIR", Path.home() / ".hacienda"))
+        return SessionAudit(root=root, session_id=session_id)
+
+    @mcp.tool(
+        description=(
+            "Append an event to the current Cowork session's audit log. "
+            "Payload MUST use placeholders/tokens only, never raw PII. "
+            "Called by hacienda skills after each anonymize/rehydrate round-trip."
+        )
+    )
+    async def session_audit_append(
+        session_id: str, event: str, payload: dict
+    ) -> dict:
+        _audit_for(session_id).append(event, payload)
+        return {"ok": True}
+
+    @mcp.tool(
+        description=(
+            "Read the current Cowork session's redaction audit log. "
+            "Returns a list of {timestamp, event, payload} records in write order."
+        )
+    )
+    async def session_audit_read(session_id: str) -> list[dict]:
+        return _audit_for(session_id).read()
 
     @mcp.resource("piighost://vault/stats")
     async def vault_stats_resource() -> str:
