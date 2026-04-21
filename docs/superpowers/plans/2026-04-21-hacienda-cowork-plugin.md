@@ -12,13 +12,16 @@
 
 **Target repo layout:** `C:\Users\NMarchitecte\Documents\hacienda\` (new, separate repo).
 
-**Cowork contract notes (verified against the Claude Code plugins reference):**
-- **Skills are passive markdown.** `skills/<name>/SKILL.md` frontmatter accepts only `name` and `description`. No `allowed-tools`, no Python, no executables. Skills describe procedure; tool availability comes from `.mcp.json` at the session level and from commands/agents.
-- **Commands can invoke tools** via `allowed-tools` in their frontmatter.
-- **Agents inherit session tools.** Agent frontmatter schema: required `name`, `description`, `model`; optional `effort`, `maxTurns`, `disallowedTools`, `isolation`. There is **no `tools:` allowlist** — use `disallowedTools` to subtract dangerous tools.
-- **Hook paths** use `${CLAUDE_PLUGIN_ROOT}` (the documented env var). Not `CLAUDE_PLUGIN_DIR`.
-- **Executable code lives in** `hooks/` and `scripts/` — never in `skills/`. Convention per docs: `${CLAUDE_PLUGIN_ROOT}/scripts/<name>.<ext>`.
-- **Valid hook types:** `command`, `http`, `prompt`, `agent`. This plan uses only `command`.
+**Cowork plugin contract (per confirmed Cowork guidance — NOT the Claude Code plugin reference; Cowork ≠ Claude Code):**
+- **Skills are passive markdown.** `skills/<name>/SKILL.md` frontmatter accepts only `name` and `description`. No `allowed-tools`, no Python, no executables. Skills describe procedure; tool availability comes from `.mcp.json`, commands, or agents.
+- **Commands can invoke tools** via `allowed-tools` in their frontmatter. To run Python: `allowed-tools: Bash(python:*)` invoking a script from `scripts/`.
+- **Agents declare tools** via `tools: [...]` allowlist in frontmatter. To run Python: include `Bash` in `tools` and have the agent shell out to a `scripts/*.py` script.
+- **Python lives in `hooks/` or `scripts/`** — never in `skills/`. Skill-creator precedent uses `scripts/`.
+- **MCP servers** declared in `.mcp.json` expose Python capabilities as tools.
+
+**Open questions (flagged, NOT assumed):**
+- **Env var name for the plugin root**: the plan uses `${CLAUDE_PLUGIN_ROOT}` in hook/command/monitor paths. Claude Code documents this name; I have not verified it for Cowork. Before Task 1 ships, the implementer MUST check the Cowork plugin docs (or a reference Cowork plugin) and, if different, do a single global find-and-replace across `hooks.json`, `.mcp.json`, `monitors.json`, and the bootstrap entry. Every path in the plan flows through this one variable name, so the fix is mechanical.
+- **Valid hook events**: the plan uses `PreToolUse` and `PostToolUse` (both standard). If Cowork uses a different event vocabulary, adjust `hooks/hooks.json` accordingly — the Python hook scripts themselves are event-name-agnostic.
 
 ---
 
@@ -1900,8 +1903,14 @@ git commit -m "feat(commands): stretch — brief, draft-reply"
 ---
 name: redaction-agent
 description: Specialist subagent for auditing large redaction jobs or investigating suspected leaks. Invoke when the user reports a suspected PII leak, when an outbound payload was blocked at the 5MB cap, or when the user wants an end-to-end walk-through of what left the laptop in a session.
-model: sonnet
-disallowedTools: Write, Edit, MultiEdit, WebFetch, WebSearch
+tools:
+  - Read
+  - Glob
+  - Grep
+  - Bash
+  - mcp__hacienda__vault_search
+  - mcp__hacienda__vault_get
+  - mcp__hacienda__vault_stats
 ---
 
 You are the hacienda redaction auditor. Your job is to answer three
@@ -1931,26 +1940,25 @@ dump (question 2). Default to placeholders.
 Append to `tests/test_skill_frontmatter.py`:
 ```python
 def test_agent_frontmatter_valid():
-    """Agent schema (per Claude Code plugins reference):
-    required: name, description, model
-    optional: effort, maxTurns, disallowedTools, isolation
-    There is NO `tools:` allowlist — agents inherit session tools;
-    use `disallowedTools` to subtract.
+    """Cowork agent frontmatter — name, description, tools (allowlist).
+
+    Cowork agents declare their tools with a `tools:` list (per the
+    Cowork plugin contract the product team confirmed). Not to be
+    confused with the Claude Code agent schema which uses
+    `disallowedTools` — Cowork ≠ Claude Code.
     """
     path = ROOT / "agents" / "redaction-agent.md"
     fm = _parse_frontmatter(path)
     assert fm.get("name") == "redaction-agent"
     assert "description" in fm and len(fm["description"]) >= 40
-    assert "model" in fm
-    assert "tools" not in fm, "agents use disallowedTools (subtractive), not tools (allowlist)"
-    # Fail-closed: outbound write/fetch tools must be denied so the auditor
-    # cannot leak vault contents by accident.
-    assert "disallowedTools" in fm
-    denied = fm["disallowedTools"] if isinstance(fm["disallowedTools"], list) else [
-        t.strip() for t in fm["disallowedTools"].split(",")
-    ]
-    for required in ("Write", "Edit", "WebFetch", "WebSearch"):
-        assert required in denied, f"redaction-agent must disallow {required}"
+    assert "tools" in fm, "Cowork agents declare a tools allowlist"
+    # Core vault-read tools the auditor needs
+    assert "mcp__hacienda__vault_get" in fm["tools"]
+    # Must NOT grant any outbound write/send capability — auditor is read-only
+    for forbidden in ("Write", "Edit", "MultiEdit", "WebFetch", "WebSearch"):
+        assert forbidden not in fm["tools"], (
+            f"redaction-agent is read-only; {forbidden} must not be in tools"
+        )
 ```
 
 - [ ] **Step 3: Run test — expect PASS**
