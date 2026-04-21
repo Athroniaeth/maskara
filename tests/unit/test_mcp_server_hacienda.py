@@ -108,3 +108,35 @@ class TestSessionAuditTools:
             assert events[1]["event"] == "rehydrate"
         finally:
             await svc.close()
+
+
+@pytest.mark.asyncio
+class TestBootstrapClientFolder:
+    async def test_creates_project_and_data_dir(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("HACIENDA_DATA_DIR", str(tmp_path / "hdata"))
+        monkeypatch.setenv("CLOAKPIPE_VAULT_KEY", "x" * 48)
+        mcp, svc = await build_mcp(vault_dir=tmp_path / "vault")
+        try:
+            tool = await mcp.get_tool("bootstrap_client_folder")
+            result = await tool.run({"folder": str(tmp_path / "ACME")})
+            data = result.structured_content
+            assert data["project"].startswith("acme-")
+            assert (tmp_path / "hdata").is_dir()
+            projects = {p.name for p in await svc.list_projects()}
+            assert data["project"] in projects
+        finally:
+            await svc.close()
+
+    async def test_idempotent(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("HACIENDA_DATA_DIR", str(tmp_path / "hdata"))
+        monkeypatch.setenv("CLOAKPIPE_VAULT_KEY", "x" * 48)
+        mcp, svc = await build_mcp(vault_dir=tmp_path / "vault")
+        try:
+            tool = await mcp.get_tool("bootstrap_client_folder")
+            a = await tool.run({"folder": str(tmp_path / "ACME")})
+            b = await tool.run({"folder": str(tmp_path / "ACME")})
+            assert a.structured_content["project"] == b.structured_content["project"]
+        finally:
+            await svc.close()

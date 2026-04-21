@@ -186,6 +186,35 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
     async def session_audit_read(session_id: str) -> list[dict]:
         return _audit_for(session_id).read()
 
+    from piighost.mcp.bootstrap import ensure_data_dir, ensure_vault_key
+
+    @mcp.tool(
+        description=(
+            "Idempotent first-run setup for a Cowork client folder. "
+            "Ensures the hacienda data directory and vault key exist, creates "
+            "the project if missing. Safe to call on every session start."
+        )
+    )
+    async def bootstrap_client_folder(folder: str) -> dict:
+        from piighost.mcp.folder import project_name_for_folder
+        data_dir = Path(
+            os.environ.get("HACIENDA_DATA_DIR", Path.home() / ".hacienda")
+        )
+        ensure_data_dir(data_dir)
+        key = ensure_vault_key(data_dir=data_dir)
+        project = project_name_for_folder(Path(folder))
+
+        existing = {p.name for p in await svc.list_projects()}
+        if project not in existing:
+            await svc.create_project(project, description=f"Cowork folder: {folder}")
+
+        return {
+            "folder": folder,
+            "project": project,
+            "data_dir": str(data_dir),
+            "vault_key_provisioned": bool(key),
+        }
+
     @mcp.resource("piighost://vault/stats")
     async def vault_stats_resource() -> str:
         stats = svc._vault.stats()
