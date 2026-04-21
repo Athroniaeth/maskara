@@ -17,6 +17,7 @@ if find_spec("kreuzberg") is None:
     collect_ignore = [
         "test_haystack_rag_advanced.py",
         "test_haystack_rag_roundtrip.py",
+        "test_hacienda_cowork_smoke.py",
         "test_incremental_indexing.py",
         "test_index_query_roundtrip.py",
         "test_langchain_rag_advanced.py",
