@@ -253,12 +253,18 @@ from piighost.entity_resolver import FuzzyEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
+detector = SpacyDetector("fr_core_news_sm")              # Votre detecteur
+span_resolver = ConfidenceSpanConflictResolver()         # Ou votre resolver
+entity_linker = ExactEntityLinker()                      # Ou votre linker
+entity_resolver = FuzzyEntityConflictResolver()          # Fusion floue
+anonymizer = Anonymizer(UUIDPlaceholderFactory())        # Tags UUID opaques
+
 pipeline = ThreadAnonymizationPipeline(
-    detector=SpacyDetector("fr_core_news_sm"),  # Votre detecteur
-    span_resolver=ConfidenceSpanConflictResolver(),  # Ou votre resolver
-    entity_linker=ExactEntityLinker(),  # Ou votre linker
-    entity_resolver=FuzzyEntityConflictResolver(),  # Fusion floue
-    anonymizer=Anonymizer(UUIDPlaceholderFactory()),  # Tags UUID opaques
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)

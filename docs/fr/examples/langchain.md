@@ -136,12 +136,20 @@ informations personnelles."
 # Charger le modele GLiNER2 (telechargement HuggingFace ~500 Mo a la premiere execution)
 extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
+# Instancier chaque composant
+detector = Gliner2Detector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5)
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
+# Assembler le pipeline puis le middleware
 pipeline = ThreadAnonymizationPipeline(
-    detector=Gliner2Detector(model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 middleware = PIIAnonymizationMiddleware(pipeline=pipeline)
 

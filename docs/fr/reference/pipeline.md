@@ -151,12 +151,18 @@ from gliner2 import GLiNER2
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
+detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
 pipeline = AnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 

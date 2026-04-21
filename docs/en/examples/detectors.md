@@ -52,13 +52,17 @@ from examples.detectors.us import create_full_detector
 
 detector = create_full_detector()
 # create_full_detector() merges common + US patterns via CompositeDetector
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, _ = await pipeline.anonymize(
@@ -102,19 +106,21 @@ from examples.detectors.common import create_detector as create_regex
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
-detector = CompositeDetector(
-    detectors=[
-        Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-        create_regex(),  # emails, IPs, URLs, API keys, etc.
-    ]
-)
+ner_detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
+regex_detector = create_regex()  # emails, IPs, URLs, API keys, etc.
+detector = CompositeDetector(detectors=[ner_detector, regex_detector])
+
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, _ = await pipeline.anonymize("Patrick at alice@example.com, IP 10.0.0.1.")

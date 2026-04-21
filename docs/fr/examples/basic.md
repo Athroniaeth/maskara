@@ -26,13 +26,20 @@ from piighost.span_resolver import ConfidenceSpanConflictResolver
 # Charger le modele GLiNER2
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 
-# Construire le pipeline
+# Instancier chaque composant
+detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
+# Assembler le pipeline
 pipeline = AnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 
@@ -91,12 +98,18 @@ from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.placeholder import CounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
+detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
 conv_pipeline = ThreadAnonymizationPipeline(
-    detector=Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 

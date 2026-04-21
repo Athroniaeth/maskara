@@ -20,12 +20,18 @@ from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflic
 from piighost.pipeline import AnonymizationPipeline
 from piighost.placeholder import CounterPlaceholderFactory
 
+detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
+span_resolver = ConfidenceSpanConflictResolver()
+entity_linker = ExactEntityLinker()
+entity_resolver = MergeEntityConflictResolver()
+anonymizer = Anonymizer(CounterPlaceholderFactory())
+
 pipeline = AnonymizationPipeline(
-    detector=ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")]),
-    span_resolver=ConfidenceSpanConflictResolver(),
-    entity_linker=ExactEntityLinker(),
-    entity_resolver=MergeEntityConflictResolver(),
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    detector=detector,
+    span_resolver=span_resolver,
+    entity_linker=entity_linker,
+    entity_resolver=entity_resolver,
+    anonymizer=anonymizer,
 )
 
 anonymized, entities = await pipeline.anonymize("Patrick lives in Paris.")
@@ -48,12 +54,18 @@ from piighost.placeholder import CounterPlaceholderFactory
 
 @pytest.mark.asyncio
 async def test_my_pipeline():
+    detector = ExactMatchDetector([("Alice", "PERSON")])
+    span_resolver = ConfidenceSpanConflictResolver()
+    entity_linker = ExactEntityLinker()
+    entity_resolver = MergeEntityConflictResolver()
+    anonymizer = Anonymizer(CounterPlaceholderFactory())
+
     pipeline = AnonymizationPipeline(
-        detector=ExactMatchDetector([("Alice", "PERSON")]),
-        span_resolver=ConfidenceSpanConflictResolver(),
-        entity_linker=ExactEntityLinker(),
-        entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        detector=detector,
+        span_resolver=span_resolver,
+        entity_linker=entity_linker,
+        entity_resolver=entity_resolver,
+        anonymizer=anonymizer,
     )
 
     anonymized, entities = await pipeline.anonymize("Alice lives in Lyon.")
