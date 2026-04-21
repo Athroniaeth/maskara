@@ -15,8 +15,9 @@ def _indexing_available() -> bool:
     return importlib.util.find_spec("sentence_transformers") is not None
 
 
-async def build_mcp(vault_dir: Path) -> tuple[FastMCP, PIIGhostService]:
-    config = ServiceConfig()
+async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tuple[FastMCP, PIIGhostService]:
+    if config is None:
+        config = ServiceConfig()
     svc = await PIIGhostService.create(vault_dir=vault_dir, config=config)
     mcp = FastMCP("piighost", "GDPR-compliant PII anonymization and document retrieval")
 
@@ -169,9 +170,23 @@ async def build_mcp(vault_dir: Path) -> tuple[FastMCP, PIIGhostService]:
 
     @mcp.resource("piighost://index/status")
     async def index_status_resource() -> str:
-        records = svc._chunk_store.all_records()
-        doc_ids = {r["doc_id"] for r in records}
-        return f"Indexed documents: {len(doc_ids)}\nTotal chunks: {len(records)}"
+        import json
+        status = await svc.index_status()
+        if not status.files:
+            state = "empty"
+        else:
+            state = "ready"
+        last_update = max(
+            (f.indexed_at for f in status.files), default=0
+        )
+        payload = {
+            "state": state,
+            "total_docs": status.total_docs,
+            "total_chunks": status.total_chunks,
+            "last_update": last_update,
+            "errors": [],
+        }
+        return json.dumps(payload)
 
     @mcp.resource("piighost://projects")
     async def projects_resource() -> str:
