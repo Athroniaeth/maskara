@@ -1,0 +1,43 @@
+# ============================================================================
+# Overlay : LLM local via Ollama
+#
+# Usage :  docker compose -f docker-compose.yml -f docker-compose.llm.yml up -d
+# ============================================================================
+
+services:
+  ollama:
+    image: ollama/ollama:0.4@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    container_name: piighost-ollama
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_MODELS: /var/lib/ollama/models
+    volumes:
+      - piighost-ollama:/var/lib/ollama
+    networks: [piighost-llm]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  piighost-mcp:
+    networks: [piighost-internal, piighost-llm]
+    environment:
+      PIIGHOST_LLM_URL: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  piighost-ollama:
+    name: piighost-ollama
+
+networks:
+  piighost-llm:
+    name: piighost-llm
+    internal: true

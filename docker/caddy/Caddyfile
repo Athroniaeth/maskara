@@ -1,0 +1,33 @@
+# piighost reverse proxy — server profile
+
+{
+    email {$CADDY_EMAIL}
+    servers {
+        protocols h1 h2
+    }
+}
+
+{$PIIGHOST_PUBLIC_HOSTNAME} {
+    encode gzip zstd
+
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    @unauthenticated {
+        not header Authorization "Bearer *"
+    }
+    respond @unauthenticated "Unauthorized" 401 {
+        close
+    }
+
+    reverse_proxy piighost-mcp:8765 {
+        header_up X-Real-IP {remote_host}
+        header_up Host {host}
+        header_up -Authorization
+    }
+}

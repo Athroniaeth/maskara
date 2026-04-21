@@ -1,0 +1,36 @@
+# ============================================================================
+# Overlay : serveur d'embeddings local (sentence-transformers)
+#
+# Usage :  docker compose -f docker-compose.yml -f docker-compose.embedder.yml up -d
+# ============================================================================
+
+services:
+  piighost-embedder:
+    image: ${PIIGHOST_IMAGE}:full
+    container_name: piighost-embedder
+    user: "10001:10001"
+    read_only: true
+    tmpfs: [/tmp, /run]
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    command: ["cli", "embedder-serve", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      SENTENCE_TRANSFORMERS_HOME: /var/lib/piighost/.cache/sentence-transformers
+    volumes:
+      - piighost-data:/var/lib/piighost
+    networks: [piighost-internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  piighost-daemon:
+    environment:
+      PIIGHOST_EMBEDDER_URL: http://piighost-embedder:8001
+    depends_on:
+      piighost-embedder:
+        condition: service_healthy

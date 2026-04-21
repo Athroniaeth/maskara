@@ -57,6 +57,10 @@ Issues = "https://github.com/Athroniaeth/piighost/issues"
 Changelog = "https://github.com/Athroniaeth/piighost/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
+docker = [
+    "httpx>=0.28",
+    "pyyaml>=6",
+]
 gliner2 = [
     "gliner2>=1.2",
 ]

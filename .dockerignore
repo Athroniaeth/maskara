@@ -1,0 +1,23 @@
+# Build-context exclusions — keep the image small and safe
+.git/
+.github/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+dist/
+build/
+*.egg-info/
+**/__pycache__/
+**/*.pyc
+docs/
+tests/
+examples/
+docker/secrets/*
+!docker/secrets/*.example
+.env
+.env.*
+*.log
+.DS_Store
+.worktrees/

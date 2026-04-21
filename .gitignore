@@ -179,3 +179,13 @@ sandbox/
 
 # Git worktrees (isolated dev environments)
 .worktrees/
+
+# Docker secrets — only *.example templates are tracked
+docker/secrets/*.txt
+docker/secrets/*.pem
+docker/secrets/*.key
+!docker/secrets/*.example
+
+# Compose overrides and local backups
+docker-compose.override.yml
+backups/

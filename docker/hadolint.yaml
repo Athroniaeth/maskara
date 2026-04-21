@@ -1,0 +1,8 @@
+# Dockerfile linter config — strict mode
+failure-threshold: warning
+ignored:
+  - DL3008  # pinning apt packages (we don't install any in slim)
+trustedRegistries:
+  - gcr.io
+  - cgr.dev
+  - ghcr.io

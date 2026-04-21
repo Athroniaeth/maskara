@@ -1,0 +1,10 @@
+# Workstation-only overlay — publishes MCP on loopback.
+# Apply with:
+#   docker compose -f docker-compose.yml -f docker-compose.workstation-ports.yml --profile workstation up
+services:
+  piighost-mcp:
+    ports:
+      - target: 8765
+        published: ${PIIGHOST_MCP_PORT:-8765}
+        host_ip: ${PIIGHOST_MCP_HOST:-127.0.0.1}
+        protocol: tcp
