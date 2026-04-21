@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import kreuzberg
+# kreuzberg is an optional dep (``[project.optional-dependencies].index``).
+# Import it lazily inside ``extract_text`` so that ``list_document_paths``
+# — which only uses the standard library — works without the extras
+# installed (and so that tests that don't exercise extraction can be
+# collected on slim CI environments).
 
 _SUPPORTED_EXTENSIONS = {
     # Office / OpenDocument binaries
@@ -30,6 +34,13 @@ async def list_document_paths(
 async def extract_text(path: Path, *, max_bytes: int = 10_485_760) -> str | None:
     if path.stat().st_size > max_bytes:
         return None
+    try:
+        import kreuzberg  # optional dep — installed via `[index]` extras
+    except ImportError as exc:
+        raise RuntimeError(
+            "extract_text requires the 'index' extras; "
+            "install with `pip install piighost[index]`"
+        ) from exc
     try:
         result = await kreuzberg.extract_file(path)
         text: str = result.content

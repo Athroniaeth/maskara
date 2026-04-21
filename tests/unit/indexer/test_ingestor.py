@@ -36,6 +36,7 @@ def test_list_document_paths_non_recursive(tmp_path):
 
 
 def test_extract_text_plain_txt(tmp_path):
+    pytest.importorskip("kreuzberg", reason="[index] extras not installed")
     f = tmp_path / "hello.txt"
     f.write_text("Hello World")
     text = asyncio.run(extract_text(f))
@@ -44,6 +45,7 @@ def test_extract_text_plain_txt(tmp_path):
 
 
 def test_extract_text_empty_file(tmp_path):
+    pytest.importorskip("kreuzberg", reason="[index] extras not installed")
     f = tmp_path / "empty.txt"
     f.write_text("   ")
     assert asyncio.run(extract_text(f)) is None
