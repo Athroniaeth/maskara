@@ -19,6 +19,9 @@ data.
     become a privacy concern in its own right: an LLM hosted by a third party should not see your users' sensitive
     data.
 
+!!! tip "New to these terms?"
+    See the [Glossary](glossary.md) for definitions of NER, span, entity linking, middleware, placeholder, and more.
+
 Two families of solutions currently exist to detect PII, regex and NER (Named Entity Recognition) models:
 
 - **Regex**: fast and predictable, but limited to structured formats (emails, phone numbers) and incapable of

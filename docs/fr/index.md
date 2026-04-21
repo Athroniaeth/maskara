@@ -19,6 +19,9 @@ permet de profiter des modèles les plus capables tout en gardant la main sur le
     un enjeu de confidentialité à part entière : un LLM hébergé chez un tiers ne devrait pas voir les données
     sensibles de vos utilisateurs.
 
+!!! tip "Première fois sur ces termes ?"
+    Consultez le [Glossaire](glossary.md) pour les définitions de NER, span, liaison d'entités, middleware, placeholder et plus.
+
 Il existe actuellement deux familles de solutions pour détecter les PII, les regex et les modèles NER
 (Named Entity Recognition) :
 
