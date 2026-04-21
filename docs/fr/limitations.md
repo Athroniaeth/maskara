@@ -9,12 +9,13 @@ atténuer.
 
 ## La couverture linguistique dépend du modèle
 
-L'ensemble des langues que `piighost` peut anonymiser est déterminé par le modèle NER branché sur `GlinerDetector`.
-Par exemple, `fastino/gliner2-multi-v1` couvre plusieurs langues mais pas toutes avec la même précision. Avant de
-déployer sur une nouvelle locale, lisez la fiche du modèle et exécutez un petit jeu de validation.
+L'ensemble des langues que `piighost` peut anonymiser est déterminé par le modèle NER branché sur le détecteur NER
+(`GlinerDetector` dans la configuration par défaut, qui encapsule GLiNER2). Par exemple, `fastino/gliner2-multi-v1`
+couvre plusieurs langues mais pas toutes avec la même précision. Avant de déployer sur une nouvelle locale, lisez
+la fiche du modèle et exécutez un petit jeu de validation.
 
 **Mitigation** : chargez un modèle spécifique à la locale pour une meilleure précision, ou combinez plusieurs
-détecteurs via `CompositeDetector`.
+détecteurs via le détecteur composite (`CompositeDetector`).
 
 ## Les faux négatifs NER sont inhérents
 
@@ -22,8 +23,9 @@ Aucun modèle NER n'est parfait. Des noms rares, des orthographes inhabituelles 
 peuvent être manquées. Pour les catégories critiques (emails, numéros de téléphone, identifiants nationaux),
 s'appuyer uniquement sur la NER est risqué.
 
-**Mitigation** : combinez `GlinerDetector` avec un `RegexDetector` via `CompositeDetector` pour une couverture
-déterministe des formats de PII structurés. Voir [Étendre PIIGhost](extending.md) pour les recettes.
+**Mitigation** : chaînez le détecteur NER (`GlinerDetector`) avec un détecteur à motif (`RegexDetector`) via le
+détecteur composite (`CompositeDetector`) pour une couverture déterministe des formats de PII structurés. Voir
+[Étendre PIIGhost](extending.md) pour les recettes.
 
 ## Les PII générées par le LLM ne sont pas liées
 
@@ -36,9 +38,9 @@ sortie du LLM et décidez s'il faut les supprimer, les signaler ou les réanonym
 
 ## Le cache est en mémoire par défaut
 
-`AnonymizationPipeline` utilise `aiocache` avec un backend en mémoire par défaut. C'est correct pour un déploiement
-mono-processus, mais cela casse dès que vous passez à l'échelle horizontalement (deux workers, deux caches, deux
-espaces de placeholders indépendants).
+La pipeline d'anonymisation (`AnonymizationPipeline`) utilise `aiocache` avec un backend en mémoire par défaut.
+C'est correct pour un déploiement mono-processus, mais cela casse dès que vous passez à l'échelle horizontalement
+(deux workers, deux caches, deux espaces de placeholders indépendants).
 
 **Mitigation** : configurez un backend de cache externe supporté par `aiocache` (Redis, Memcached). Voir
 [Déploiement](deployment.md) pour les exemples de configuration.
