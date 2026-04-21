@@ -143,6 +143,19 @@ async def build_mcp(vault_dir: Path) -> tuple[FastMCP, PIIGhostService]:
         stopped = stop_daemon(vault_dir)
         return {"stopped": stopped}
 
+    from piighost.mcp.folder import project_name_for_folder
+
+    @mcp.tool(
+        description=(
+            "Resolve the Cowork active folder to its piighost project name. "
+            "Deterministic: same folder always maps to the same project. "
+            "Use this in every hacienda skill before calling index_path or query."
+        )
+    )
+    async def resolve_project_for_folder(folder: str) -> dict:
+        project = project_name_for_folder(Path(folder))
+        return {"folder": folder, "project": project}
+
     @mcp.resource("piighost://vault/stats")
     async def vault_stats_resource() -> str:
         stats = svc._vault.stats()
