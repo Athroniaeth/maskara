@@ -41,8 +41,14 @@ class TestSessionAudit:
 
     def test_session_id_validated(self, tmp_path: Path) -> None:
         # No path traversal via session id.
-        with pytest.raises(ValueError):
-            SessionAudit(root=tmp_path, session_id="../etc/passwd")
+        bad = "../etc/passwd"
+        with pytest.raises(ValueError) as exc_info:
+            SessionAudit(root=tmp_path, session_id=bad)
+        # Safety invariant: the rejected value must NOT be echoed in the error
+        # message — otherwise a malicious session_id (which could carry PII)
+        # would be reflected into logs via FastMCP's exception-to-MCP-response
+        # propagation.  See CLAUDE.md "Never return raw PII in errors".
+        assert bad not in str(exc_info.value)
 
     def test_append_never_logs_raw_pii_values(self, tmp_path: Path) -> None:
         """Safety invariant: the audit payload must not contain raw PII.

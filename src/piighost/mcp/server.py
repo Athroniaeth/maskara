@@ -16,6 +16,23 @@ def _indexing_available() -> bool:
     return importlib.util.find_spec("sentence_transformers") is not None
 
 
+def _last_update_iso(files) -> str | None:
+    """Return the most recent ``indexed_at`` as an ISO 8601 UTC string, or None.
+
+    ``indexed_at`` is a Unix timestamp (seconds).  Skills compare this field
+    against ``now - 10 min`` on network drives, so a stable string format with
+    timezone marker is required.  Returns ``None`` (→ JSON ``null``) when no
+    files are indexed yet, so the ``/status`` skill can render "never".
+    """
+    from datetime import datetime, timezone
+    if not files:
+        return None
+    latest = max(f.indexed_at for f in files)
+    return datetime.fromtimestamp(latest, tz=timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
 async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tuple[FastMCP, PIIGhostService]:
     if config is None:
         config = ServiceConfig()
@@ -206,7 +223,10 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
 
         existing = {p.name for p in await svc.list_projects()}
         if project not in existing:
-            await svc.create_project(project, description=f"Cowork folder: {folder}")
+            # Description contains only the project hash — never the folder
+            # path, which would surface via list_projects and leak client names
+            # (PII) to the model. See CLAUDE.md "Never return raw PII".
+            await svc.create_project(project, description=f"hacienda project {project}")
 
         return {
             "folder": folder,
@@ -230,18 +250,12 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
     async def index_status_resource() -> str:
         import json
         status = await svc.index_status()
-        if not status.files:
-            state = "empty"
-        else:
-            state = "ready"
-        last_update = max(
-            (f.indexed_at for f in status.files), default=0
-        )
+        state = "ready" if status.files else "empty"
         payload = {
             "state": state,
             "total_docs": status.total_docs,
             "total_chunks": status.total_chunks,
-            "last_update": last_update,
+            "last_update": _last_update_iso(status.files),
             "errors": [],
         }
         return json.dumps(payload)
@@ -259,13 +273,13 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
         project = project_name_for_folder(Path(folder))
         try:
             status = await svc.index_status(project=project)
-        except Exception as exc:  # project may not exist yet
+        except Exception:  # project may not exist yet
             return json.dumps({
                 "folder": folder,
                 "project": project,
                 "state": "empty",
                 "progress": {"done": 0, "total": 0},
-                "last_update": 0,
+                "last_update": None,
                 "errors": ["index_status unavailable"],
             })
         payload = {
@@ -273,7 +287,7 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
             "project": project,
             "state": "ready" if status.total_docs else "empty",
             "progress": {"done": status.total_docs, "total": status.total_docs},  # v0: no partial-progress tracking
-            "last_update": max((f.indexed_at for f in status.files), default=0),
+            "last_update": _last_update_iso(status.files),
             "errors": [],
         }
         return json.dumps(payload)
