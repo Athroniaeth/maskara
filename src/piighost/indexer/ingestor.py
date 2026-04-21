@@ -5,8 +5,13 @@ from pathlib import Path
 import kreuzberg
 
 _SUPPORTED_EXTENSIONS = {
-    ".pdf", ".docx", ".xlsx", ".odt", ".ods", ".pptx",
+    # Office / OpenDocument binaries
+    ".pdf", ".docx", ".xlsx", ".pptx", ".odt", ".ods",
+    # Plain-text / markup
     ".txt", ".md", ".rst", ".html", ".htm",
+    # Email containers — .eml is RFC 5322 text, .msg is Outlook CFB binary.
+    # Kreuzberg parses both via its native backend.
+    ".eml", ".msg",
 }
 
 
