@@ -1,4 +1,5 @@
 from piighost.anonymizer import AnyAnonymizer, Anonymizer
+from piighost.detector.base import ExactMatchDetector
 from piighost.exceptions import CacheMissError, PIIGhostException
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import (
@@ -17,6 +18,7 @@ __all__ = [
     "CounterPlaceholderFactory",
     "Detection",
     "Entity",
+    "ExactMatchDetector",
     "HashPlaceholderFactory",
     "MaskPlaceholderFactory",
     "PIIGhostException",
