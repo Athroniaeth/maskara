@@ -1,0 +1,117 @@
+# ============================================================================
+# piighost — base compose
+#
+# Profils :
+#   workstation  (défaut) — MCP en loopback, pas de Caddy, pas d'auth
+#   server                — MCP derrière Caddy, TLS, bearer/mTLS
+#   no-backup             — désactive le sidecar de sauvegarde
+#
+# Overlays (à ajouter avec -f) :
+#   docker-compose.embedder.yml  — sentence-transformers local
+#   docker-compose.llm.yml       — Ollama local
+# ============================================================================
+
+x-common-security: &common-security
+  user: "10001:10001"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  restart: unless-stopped
+
+x-common-tmpfs: &common-tmpfs
+  - /tmp
+  - /run
+
+services:
+  piighost-mcp:
+    <<: *common-security
+    image: ${PIIGHOST_IMAGE}:${PIIGHOST_TAG}
+    container_name: piighost-mcp
+    tmpfs: *common-tmpfs
+    command: ["mcp"]
+    depends_on:
+      piighost-daemon:
+        condition: service_healthy
+    networks: [piighost-internal]
+    secrets:
+      - piighost_vault_key
+    volumes:
+      - piighost-data:/var/lib/piighost
+    profiles: [workstation, server]
+    healthcheck:
+      test: ["CMD", "python", "-m", "piighost.cli.main", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - target: 8765
+        published: ${PIIGHOST_MCP_PORT:-8765}
+        host_ip: ${PIIGHOST_MCP_HOST:-127.0.0.1}
+        protocol: tcp
+
+  piighost-daemon:
+    <<: *common-security
+    image: ${PIIGHOST_IMAGE}:${PIIGHOST_TAG}
+    container_name: piighost-daemon
+    tmpfs: *common-tmpfs
+    command: ["daemon"]
+    networks:
+      piighost-internal:
+    secrets:
+      - piighost_vault_key
+    volumes:
+      - piighost-data:/var/lib/piighost
+    profiles: [workstation, server]
+    healthcheck:
+      test: ["CMD", "python", "-m", "piighost.cli.main", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  piighost-backup:
+    <<: *common-security
+    image: ${PIIGHOST_IMAGE}:${PIIGHOST_TAG}
+    container_name: piighost-backup
+    tmpfs: *common-tmpfs
+    command: ["backup"]
+    environment:
+      PIIGHOST_BACKUP_SCHEDULE: ${PIIGHOST_BACKUP_SCHEDULE:-30 2 * * *}
+      PIIGHOST_BACKUP_RETENTION_DAILY: ${PIIGHOST_BACKUP_RETENTION_DAILY:-7}
+      PIIGHOST_BACKUP_RETENTION_WEEKLY: ${PIIGHOST_BACKUP_RETENTION_WEEKLY:-4}
+    secrets:
+      - piighost_age_recipient
+    volumes:
+      - piighost-data:/var/lib/piighost:ro
+      - ${PIIGHOST_BACKUP_DIR:-./backups}:/backups
+    profiles: [workstation, server]
+
+  piighost-update-notify:
+    <<: *common-security
+    image: ${PIIGHOST_IMAGE}:${PIIGHOST_TAG}
+    container_name: piighost-update-notify
+    tmpfs: *common-tmpfs
+    command: ["notify"]
+    environment:
+      PIIGHOST_UPDATE_CHECK_INTERVAL: ${PIIGHOST_UPDATE_CHECK_INTERVAL:-86400}
+    volumes:
+      - piighost-data:/var/lib/piighost
+    profiles: [workstation, server]
+
+volumes:
+  piighost-data:
+    name: piighost-data
+
+networks:
+  piighost-internal:
+    name: piighost-internal
+    internal: true
+
+secrets:
+  piighost_vault_key:
+    file: ${PIIGHOST_VAULT_KEY_FILE:-./docker/secrets/vault-key.txt}
+  piighost_age_recipient:
+    file: ${PIIGHOST_AGE_RECIPIENT_FILE:-./docker/secrets/age-recipient.txt}
