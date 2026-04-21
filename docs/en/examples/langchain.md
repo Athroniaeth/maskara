@@ -31,14 +31,29 @@ To use the LangChain middleware, install the additional dependencies:
 
 ## Integration structure
 
-```
-GLiNER2 model
-    └── GlinerDetector
-            └── ThreadAnonymizationPipeline
-                    ├── AnonymizationPipeline (base)
-                    ├── ConversationMemory
-                    └── PIIAnonymizationMiddleware
-                                └── create_agent(middleware=[...])
+```mermaid
+flowchart TB
+    classDef model fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef comp fill:#90CAF9,stroke:#1565C0,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef agent fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    MODEL["`**GLiNER2 model**
+    _fastino/gliner2-multi-v1_`"]:::model
+    DET["`**Gliner2Detector**
+    _wraps the NER model_`"]:::comp
+    PIPE["`**ThreadAnonymizationPipeline**
+    _extends AnonymizationPipeline_
+    _holds ConversationMemory_`"]:::comp
+    MW["`**PIIAnonymizationMiddleware**
+    _LangChain hooks_`"]:::mw
+    AGENT["`**create_agent(middleware=[...])**
+    _LangGraph entry point_`"]:::agent
+
+    MODEL -->|wrapped by| DET
+    DET -->|injected into| PIPE
+    PIPE -->|passed to| MW
+    MW -->|registered with| AGENT
 ```
 
 ---
@@ -160,42 +175,64 @@ graph = create_agent(
 
 ### `abefore_model` before the LLM
 
-```
-User       : "Send an email to Patrick in Paris"
-      ↓
-Middleware : NER detection via pipeline.anonymize()
-           → "Send an email to <<PERSON_1>> in <<LOCATION_1>>"
-      ↓
-LLM sees   : "Send an email to <<PERSON_1>> in <<LOCATION_1>>"
+```mermaid
+flowchart LR
+    classDef user fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    U["`**User**
+    _'Send an email to Patrick in Paris'_`"]:::user
+    M["`**Middleware**
+    _NER detection via_
+    _pipeline.anonymize()_`"]:::mw
+    L["`**LLM sees**
+    _'Send an email to <<PERSON_1>>_
+    _in <<LOCATION_1>>'_`"]:::llm
+
+    U --> M --> L
 ```
 
 ### `awrap_tool_call` around tools
 
-```
-LLM calls    : send_email(to="<<PERSON_1>>", subject="...", body="...")
-      ↓
-Middleware   : deanonymize args
-             → send_email(to="Patrick", subject="...", body="...")
-      ↓
-Tool receives: to="Patrick"  ← real value
-      ↓
-Tool returns : "Email successfully sent to Patrick."
-      ↓
-Middleware   : reanonymize response
-             → "Email successfully sent to <<PERSON_1>>."
-      ↓
-LLM sees     : "Email successfully sent to <<PERSON_1>>."
+```mermaid
+flowchart TB
+    classDef tool fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    L1["`**LLM calls**
+    _send_email(to='<<PERSON_1>>', ...)_`"]:::llm
+    M1["`**Middleware**
+    _deanonymize args_`"]:::mw
+    T1["`**Tool receives**
+    _to='Patrick' (real value)_`"]:::tool
+    T2["`**Tool returns**
+    _'Email successfully sent to Patrick.'_`"]:::tool
+    M2["`**Middleware**
+    _reanonymize response_`"]:::mw
+    L2["`**LLM sees**
+    _'Email successfully sent to <<PERSON_1>>.'_`"]:::llm
+
+    L1 --> M1 --> T1 --> T2 --> M2 --> L2
 ```
 
 ### `aafter_model` after the LLM
 
-```
-LLM replies  : "Done! Email sent to <<PERSON_1>>."
-      ↓
-Middleware   : deanonymize all messages
-             → "Done! Email sent to Patrick."
-      ↓
-User sees    : "Done! Email sent to Patrick."
+```mermaid
+flowchart LR
+    classDef user fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    L["`**LLM replies**
+    _'Done! Email sent to <<PERSON_1>>.'_`"]:::llm
+    M["`**Middleware**
+    _deanonymize all messages_`"]:::mw
+    U["`**User sees**
+    _'Done! Email sent to Patrick.'_`"]:::user
+
+    L --> M --> U
 ```
 
 ---

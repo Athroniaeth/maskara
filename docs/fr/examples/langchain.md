@@ -31,14 +31,29 @@ Pour utiliser le middleware LangChain, installez les dependances supplementaires
 
 ## Structure de l'integration
 
-```
-GLiNER2 model
-    └── GlinerDetector
-            └── ThreadAnonymizationPipeline
-                    ├── AnonymizationPipeline (base)
-                    ├── ConversationMemory
-                    └── PIIAnonymizationMiddleware
-                                └── create_agent(middleware=[...])
+```mermaid
+flowchart TB
+    classDef model fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef comp fill:#90CAF9,stroke:#1565C0,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef agent fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    MODEL["`**Modèle GLiNER2**
+    _fastino/gliner2-multi-v1_`"]:::model
+    DET["`**Gliner2Detector**
+    _encapsule le modèle NER_`"]:::comp
+    PIPE["`**ThreadAnonymizationPipeline**
+    _étend AnonymizationPipeline_
+    _contient ConversationMemory_`"]:::comp
+    MW["`**PIIAnonymizationMiddleware**
+    _hooks LangChain_`"]:::mw
+    AGENT["`**create_agent(middleware=[...])**
+    _point d'entrée LangGraph_`"]:::agent
+
+    MODEL -->|encapsulé par| DET
+    DET -->|injecté dans| PIPE
+    PIPE -->|passé à| MW
+    MW -->|enregistré auprès de| AGENT
 ```
 
 ---
@@ -150,42 +165,64 @@ Le `PIIAnonymizationMiddleware` intercepte chaque tour de l'agent en trois point
 
 ### `abefore_model` avant le LLM
 
-```
-Utilisateur : "Envoie un email a Patrick a Paris"
-      ↓
-Middleware  : detection NER via pipeline.anonymize()
-            → "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
-      ↓
-LLM voit   : "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
+```mermaid
+flowchart LR
+    classDef user fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    U["`**Utilisateur**
+    _'Envoie un email à Patrick à Paris'_`"]:::user
+    M["`**Middleware**
+    _détection NER via_
+    _pipeline.anonymize()_`"]:::mw
+    L["`**Le LLM voit**
+    _'Envoie un email à <<PERSON_1>>_
+    _à <<LOCATION_1>>'_`"]:::llm
+
+    U --> M --> L
 ```
 
 ### `awrap_tool_call` autour des outils
 
-```
-LLM appelle  : send_email(to="<<PERSON_1>>", subject="...", body="...")
-      ↓
-Middleware   : desanonymise les args
-             → send_email(to="Patrick", subject="...", body="...")
-      ↓
-Outil recoit : to="Patrick"  ← vraie valeur
-      ↓
-Outil retourne: "Email envoye a Patrick."
-      ↓
-Middleware   : reanonymise la reponse
-             → "Email envoye a <<PERSON_1>>."
-      ↓
-LLM voit     : "Email envoye a <<PERSON_1>>."
+```mermaid
+flowchart TB
+    classDef tool fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    L1["`**Le LLM appelle**
+    _send_email(to='<<PERSON_1>>', ...)_`"]:::llm
+    M1["`**Middleware**
+    _désanonymise les arguments_`"]:::mw
+    T1["`**L'outil reçoit**
+    _to='Patrick' (vraie valeur)_`"]:::tool
+    T2["`**L'outil retourne**
+    _'Email envoyé à Patrick.'_`"]:::tool
+    M2["`**Middleware**
+    _réanonymise la réponse_`"]:::mw
+    L2["`**Le LLM voit**
+    _'Email envoyé à <<PERSON_1>>.'_`"]:::llm
+
+    L1 --> M1 --> T1 --> T2 --> M2 --> L2
 ```
 
-### `aafter_model` apres le LLM
+### `aafter_model` après le LLM
 
-```
-LLM repond   : "C'est fait ! Email envoye a <<PERSON_1>>."
-      ↓
-Middleware   : desanonymise tous les messages
-             → "C'est fait ! Email envoye a Patrick."
-      ↓
-Utilisateur  : "C'est fait ! Email envoye a Patrick."
+```mermaid
+flowchart LR
+    classDef user fill:#A5D6A7,stroke:#2E7D32,color:#000
+    classDef mw fill:#BBDEFB,stroke:#1565C0,color:#000
+    classDef llm fill:#FFF9C4,stroke:#F9A825,color:#000
+
+    L["`**Le LLM répond**
+    _'C'est fait ! Email envoyé à <<PERSON_1>>.'_`"]:::llm
+    M["`**Middleware**
+    _désanonymise tous les messages_`"]:::mw
+    U["`**L'utilisateur voit**
+    _'C'est fait ! Email envoyé à Patrick.'_`"]:::user
+
+    L --> M --> U
 ```
 
 ---
