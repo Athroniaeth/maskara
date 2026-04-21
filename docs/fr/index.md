@@ -123,8 +123,10 @@ Voir [Architecture](architecture.md) pour les détails de chaque étape.
 
 D'autres librairies couvrent une partie du périmètre :
 
-- **[Microsoft Presidio](https://github.com/microsoft/presidio)** : détection/anonymisation très solide, mais pas
-  de liaison inter-messages native ni de middleware LangChain bidirectionnel. Excellent comme moteur de détection
+- **[Microsoft Presidio](https://github.com/microsoft/presidio)** : catalogue riche de recognizers prêts à
+  l'emploi (cartes bancaires validées par Luhn, IBAN avec checksum, SSN, passeports, emails, téléphones) enrichis
+  par scoring contextuel par mots-clés, avec un moteur NER branché sur spaCy / stanza / transformers. Pas de
+  liaison inter-messages native ni de middleware LangChain bidirectionnel. Excellent comme moteur de détection
   brut, mais laisse au développeur la charge d'orchestrer le cas conversationnel.
 - **Extensions spaCy / regex custom** : bon pour des pipelines de traitement batch, mais ne gèrent pas l'aller-retour
   anonymisation/désanonymisation au fil d'une conversation.

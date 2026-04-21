@@ -120,8 +120,10 @@ See [Architecture](architecture.md) for the details of each stage.
 
 Other libraries cover part of the scope:
 
-- **[Microsoft Presidio](https://github.com/microsoft/presidio)**: very solid detection and anonymization, but no
-  native cross-message linking and no bidirectional LangChain middleware. Excellent as a raw detection engine, but
+- **[Microsoft Presidio](https://github.com/microsoft/presidio)**: rich catalogue of built-in recognizers
+  (credit cards validated with Luhn, IBANs with checksum, SSNs, passports, emails, phone numbers) enriched by
+  keyword-based context scoring, with an NER engine backed by spaCy / stanza / transformers. No native
+  cross-message linking and no bidirectional LangChain middleware. Excellent as a raw detection engine, but
   leaves the developer responsible for orchestrating the conversational case.
 - **spaCy extensions / custom regex**: good for batch processing pipelines, but do not handle the
   anonymization/deanonymization round trip across a conversation.
