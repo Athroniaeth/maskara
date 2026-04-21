@@ -208,13 +208,13 @@ async def build_mcp(vault_dir: Path, config: ServiceConfig | None = None) -> tup
                 "state": "empty",
                 "progress": {"done": 0, "total": 0},
                 "last_update": 0,
-                "errors": [str(exc)],
+                "errors": ["index_status unavailable"],
             })
         payload = {
             "folder": folder,
             "project": project,
             "state": "ready" if status.total_docs else "empty",
-            "progress": {"done": status.total_docs, "total": status.total_docs},
+            "progress": {"done": status.total_docs, "total": status.total_docs},  # v0: no partial-progress tracking
             "last_update": max((f.indexed_at for f in status.files), default=0),
             "errors": [],
         }
