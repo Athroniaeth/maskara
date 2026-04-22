@@ -33,12 +33,29 @@ dépôt avec un modèle de menaces : ce contre quoi `piighost` protège, et ce c
 - **Accès amont aux journaux** : `piighost` ne journalise pas les PII brutes, mais votre application peut le
   faire. Auditez vos propres journaux, traces et rapports d'erreurs avant de revendiquer une conformité.
 
-!!! todo "Durcir les dataclasses qui portent des PII"
-    Les dataclasses `Entity`, `Detection` et `Span` exposent aujourd'hui des champs `str` qui contiennent les PII
-    brutes en clair. Envelopper ces champs avec le type [`SecretStr`](https://docs.pydantic.dev/latest/api/types/#pydantic.types.SecretStr)
-    de Pydantic (ou un wrapper équivalent) masquerait leur valeur dans `repr()`, les tracebacks et les formateurs
-    de logs tiers, ce qui rendrait une fuite accidentelle via `print(entity)` ou une exception non rattrapée bien
-    moins probable. À prévoir dans un futur travail de durcissement.
+## `repr()` masqué sur les dataclasses porteuses de PII
+
+La dataclass `Detection` porte la forme brute de la PII dans son champ
+`text`. Pour éviter les fuites accidentelles via `print(detection)`,
+`logger.info("got %s", detection)` ou une traceback non rattrapée,
+`__repr__` masque ce champ :
+
+```python
+>>> from piighost.models import Detection, Span
+>>> d = Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9)
+>>> repr(d)
+"Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
+```
+
+`Entity.__repr__` hérite gratuitement du masquage puisqu'il rend ses
+`Detection` via `repr()`. `Span` n'est pas masqué : les positions sont
+des métadonnées, pas du contenu.
+
+Il s'agit d'une protection de type « garde-fou », pas d'un substitut à
+la discipline. La valeur brute reste accessible via `detection.text` ;
+tout code qui imprime ou journalise explicitement cet attribut
+contourne le masquage. `SecretStr` de Pydantic n'est pas utilisé pour
+garder minimale la surface de dépendances principales de `piighost`.
 
 ## Décisions de conception qui soutiennent le modèle de menaces
 

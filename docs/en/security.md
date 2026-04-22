@@ -29,12 +29,29 @@ root with a threat model: what `piighost` protects against, and what it does not
 - **Upstream access to logs**: `piighost` does not log raw PII, but your app might. Audit your own logging, tracing,
   and error reporting before claiming compliance.
 
-!!! todo "Harden PII-bearing dataclasses"
-    The `Entity`, `Detection`, and `Span` dataclasses currently expose `str` fields that hold raw PII in clear.
-    Wrapping these fields with Pydantic's [`SecretStr`](https://docs.pydantic.dev/latest/api/types/#pydantic.types.SecretStr)
-    (or an equivalent wrapper) would mask their value in `repr()`, tracebacks, and third-party log formatters, making
-    accidental leakage via `print(entity)` or an uncaught exception much less likely. Tracked as a future hardening
-    task.
+## Masked `repr()` on PII-bearing dataclasses
+
+The `Detection` dataclass holds the raw PII surface form in its `text`
+field. To prevent accidental leakage through `print(detection)`,
+`logger.info("got %s", detection)`, or an uncaught traceback, its
+`__repr__` masks that field:
+
+```python
+>>> from piighost.models import Detection, Span
+>>> d = Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9)
+>>> repr(d)
+"Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
+```
+
+`Entity.__repr__` inherits this masking for free because it renders its
+nested `Detection` objects via `repr()`. `Span` is not masked (positions
+are metadata, not content).
+
+This is a best-effort safeguard, not a substitute for discipline. The
+raw value remains accessible via `detection.text`; any caller that
+explicitly prints or logs that attribute bypasses the mask. Pydantic's
+`SecretStr` is not used because `piighost` keeps its core dependency
+surface minimal.
 
 ## Design decisions that back the threat model
 
