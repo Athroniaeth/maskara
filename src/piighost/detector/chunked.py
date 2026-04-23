@@ -1,5 +1,6 @@
 """Chunked detector for texts that exceed NER model context windows."""
 
+import asyncio
 from dataclasses import dataclass
 
 from piighost.detector.base import AnyDetector
@@ -58,13 +59,15 @@ class ChunkedDetector:
             return await self.detector.detect(text)
 
         chunks = self._compute_chunks(len(text))
-        all_detections: list[Detection] = []
+        chunk_results = await asyncio.gather(
+            *(self.detector.detect(text[start:end]) for start, end in chunks)
+        )
 
-        for chunk_start, chunk_end in chunks:
-            chunk_text = text[chunk_start:chunk_end]
-            chunk_detections = await self.detector.detect(chunk_text)
-            shifted = self._shift_detections(chunk_detections, chunk_start, text)
-            all_detections.extend(shifted)
+        all_detections: list[Detection] = []
+        for (chunk_start, _), chunk_detections in zip(chunks, chunk_results):
+            all_detections.extend(
+                self._shift_detections(chunk_detections, chunk_start, text)
+            )
 
         return self._deduplicate(all_detections)
 

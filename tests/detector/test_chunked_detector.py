@@ -294,3 +294,36 @@ class TestIntegration:
         result = await chunked.detect(text)
         assert len(result) == 1
         assert result[0].confidence == 1.0
+
+
+class TestConcurrency:
+    """Chunks are dispatched with asyncio.gather (parallel, not sequential)."""
+
+    async def test_chunks_run_concurrently(self) -> None:
+        import asyncio
+        import time
+
+        class SlowDetector:
+            """Each detect() call sleeps for ``delay`` seconds."""
+
+            def __init__(self, delay: float) -> None:
+                self.delay = delay
+                self.calls = 0
+
+            async def detect(self, text: str):
+                self.calls += 1
+                await asyncio.sleep(self.delay)
+                return []
+
+        slow = SlowDetector(delay=0.05)
+        chunked = ChunkedDetector(detector=slow, chunk_size=10, overlap=2)
+
+        # Text length 40 with chunk_size=10 overlap=2 → 5 chunks.
+        text = "x" * 40
+        start = time.monotonic()
+        await chunked.detect(text)
+        elapsed = time.monotonic() - start
+
+        assert slow.calls >= 4
+        # Sequential would take calls * delay; parallel stays close to delay.
+        assert elapsed < slow.calls * slow.delay * 0.75
