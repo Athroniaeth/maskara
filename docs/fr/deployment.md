@@ -15,7 +15,7 @@ Le canal runtime est pratique pour prototyper mais télécharge plusieurs centai
 
 ## Cacher les packages optionnels
 
-### Stratégie 1 — Cacher le dossier de téléchargement de `uv` (recommandé, gain rapide)
+### Stratégie 1 : Cacher le dossier de téléchargement de `uv` (recommandé, gain rapide)
 
 Ajoutez un volume nommé sur `/root/.cache/uv`. `uv` y conserve tous les wheels qu'il a déjà téléchargés ; au démarrage suivant, il évite le réseau et se contente de relier les fichiers dans le venv du conteneur. Le démarrage à froid passe typiquement de plusieurs minutes à quelques secondes, sans toucher à l'image.
 
@@ -38,7 +38,7 @@ volumes:
 !!! note
     Le volume `huggingface-cache` cache les poids de modèles téléchargés (GLiNER2, modèles transformers). Il est indépendant du cache des wheels et doit être conservé.
 
-### Stratégie 2 — Cuire les extras dans une image custom (zéro install au runtime)
+### Stratégie 2 : Cuire les extras dans une image custom (zéro install au runtime)
 
 Pour les environnements où le temps de démarrage compte (CI, production, serverless), construisez votre propre image par-dessus `piighost-api`. Le `uv sync` tourne une seule fois au `docker build`, les extras sont cuits dans un layer d'image, et chaque démarrage suivant est instantané.
 
@@ -61,7 +61,7 @@ services:
 
 C'est l'option la plus reproductible : l'image est auto-suffisante, le cache de layers Docker gère les rebuilds, et aucune dépendance runtime sur la disponibilité de PyPI.
 
-### Stratégie 3 — Monter le venv complet (démarrage le plus rapide, plus fragile)
+### Stratégie 3 : Monter le venv complet (démarrage le plus rapide, plus fragile)
 
 Montez un volume nommé sur le chemin du venv de l'image, pour que les fichiers installés eux-mêmes persistent entre les runs. Le démarrage est quasi-instantané après le premier boot, au prix d'un cache qui peut silencieusement dériver si l'image upstream change de version Python ou de layout de venv.
 
@@ -79,7 +79,7 @@ volumes:
 ```
 
 !!! warning
-    Si vous mettez à jour `ghcr.io/athroniaeth/piighost-api:latest`, purgez le volume du venv (`docker compose down -v`) avant le démarrage suivant — sinon l'ancien venv masque le nouveau et vous débugguez des mismatches de versions mystérieux.
+    Si vous mettez à jour `ghcr.io/athroniaeth/piighost-api:latest`, purgez le volume du venv (`docker compose down -v`) avant le démarrage suivant. Sinon l'ancien venv masque le nouveau et vous débugguez des mismatches de versions mystérieux.
 
 ---
 
