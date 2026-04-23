@@ -92,37 +92,3 @@ volumes:
 | Boucle de dev rapide sur image de base figée | Stratégie 3 (volume venv)        |
 
 Les stratégies 1 et 2 se composent très bien : gardez le cache `uv` sur votre machine de dev pour accélérer le `docker build`, et cuisez les extras dans l'image pour le déploiement.
-
----
-
-## Publier plusieurs versions de la doc avec `mike`
-
-Le site FR est pré-configuré pour publier plusieurs versions côte à côte via `mike`, une fork de l'outil historique MkDocs adapté à Zensical. Un sélecteur de version apparaît dans le header dès qu'au moins deux versions sont poussées.
-
-!!! note "Installation"
-    `mike` n'est pas sur PyPI pour l'instant. Installez-le directement depuis GitHub :
-
-    ```bash
-    pip install git+https://github.com/squidfunk/mike.git
-    ```
-
-Workflow type à chaque release :
-
-```bash
-# Pousser la doc de la version courante sous l'alias "latest"
-mike deploy --push --update-aliases 0.2 latest
-
-# Fixer "latest" comme redirection par défaut depuis la racine
-mike set-default --push latest
-```
-
-Chaque version est publiée dans un sous-dossier du `site_url` (`/0.1/`, `/0.2/`, etc.). Les lecteurs qui arrivent sur une version ancienne voient un avertissement les invitant à basculer vers `latest`.
-
-Côté configuration, le bloc concerné dans `zensical.fr.toml` est :
-
-```toml
-[project.extra.version]
-provider = "mike"
-alias = true
-default = "latest"
-```
