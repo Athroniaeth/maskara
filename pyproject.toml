@@ -118,6 +118,7 @@ llm = [
 
 [tool.pytest.ini_options]
 addopts = "--cov=src/piighost"
+testpaths = ["tests"]
 
 [tool.coverage.report]
 show_missing = true
