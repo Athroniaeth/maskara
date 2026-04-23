@@ -6,7 +6,7 @@ icon: lucide/download
 
 ## Prérequis
 
-- Python 3.12+
+- Python 3.10+
 - [uv](https://docs.astral.sh/uv/) (recommandé) ou pip
 
 ## Installation basique
