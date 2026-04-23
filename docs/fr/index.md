@@ -205,10 +205,3 @@ Chaque page suit un rôle précis du [framework Diátaxis](https://diataxis.fr/)
     - [Sécurité](security.md)
 
 </div>
-
-*[PII]: Personally Identifiable Information — toute donnée permettant d'identifier une personne
-*[LLM]: Large Language Model — modèle de langage génératif (GPT, Claude, Gemini…)
-*[NER]: Named Entity Recognition — détection d'entités nommées
-*[RAG]: Retrieval-Augmented Generation
-*[CRM]: Customer Relationship Management
-*[API]: Application Programming Interface

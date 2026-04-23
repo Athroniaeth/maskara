@@ -67,10 +67,3 @@ Middleware
 Thread
 :   Portée de conversation identifiée par un `thread_id`. La mémoire et le cache sont isolés par thread de sorte que
     deux conversations parallèles ne partagent pas l'état des PII.
-
-*[PII]: Personally Identifiable Information — toute donnée permettant d'identifier une personne
-*[LLM]: Large Language Model — modèle de langage génératif (GPT, Claude, Gemini…)
-*[NER]: Named Entity Recognition — détection d'entités nommées
-*[RAG]: Retrieval-Augmented Generation
-*[CRM]: Customer Relationship Management
-*[API]: Application Programming Interface
