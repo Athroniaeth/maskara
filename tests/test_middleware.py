@@ -29,8 +29,6 @@ from piighost.placeholder import (
 )
 from piighost.resolver.span import ConfidenceSpanConflictResolver
 
-pytestmark = pytest.mark.asyncio
-
 # ---------------------------------------------------------------------------
 # Spy infrastructure
 # ---------------------------------------------------------------------------

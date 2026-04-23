@@ -14,6 +14,8 @@ import importlib
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 # Maps each optional group to the third-party modules it should provide.
 EXTRA_TO_MODULES: dict[str, list[str]] = {
     "gliner2": ["gliner2"],

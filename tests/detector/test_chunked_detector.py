@@ -5,8 +5,6 @@ import pytest
 from piighost.detector import ChunkedDetector, ExactMatchDetector
 from piighost.models import Span
 
-pytestmark = pytest.mark.asyncio
-
 
 # ---------------------------------------------------------------------------
 # Validation
