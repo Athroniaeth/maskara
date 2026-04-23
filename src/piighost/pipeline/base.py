@@ -6,7 +6,7 @@ if importlib.util.find_spec("aiocache") is None:
         "AnonymizationPipeline requires aiocache for caching. Install with `uv add piighost[cache]`."
     )
 
-from aiocache import BaseCache, Cache
+from aiocache import BaseCache, SimpleMemoryCache
 
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
@@ -72,7 +72,7 @@ class AnonymizationPipeline:
         self._entity_linker = entity_linker
         self._entity_resolver = entity_resolver
         self._anonymizer = anonymizer
-        self._cache = cache or Cache(Cache.MEMORY)
+        self._cache = cache or SimpleMemoryCache()
 
     @property
     def ph_factory(self) -> "AnyPlaceholderFactory":
