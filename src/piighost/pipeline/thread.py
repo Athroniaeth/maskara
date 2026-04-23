@@ -13,6 +13,7 @@ by message hash and deduplicated by ``(text.lower(), label)``.  The
 pipeline to recreate consistent placeholder tokens across messages.
 """
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -31,6 +32,16 @@ from piighost.placeholder import MaskPlaceholderFactory, RedactPlaceholderFactor
 from piighost.resolver.entity import AnyEntityConflictResolver
 from piighost.resolver.span import AnySpanConflictResolver
 from piighost.utils import hash_sha256
+
+_current_thread_id: ContextVar[str] = ContextVar(
+    "piighost_current_thread_id", default="default"
+)
+"""Active thread id for the running coroutine.
+
+Used by :class:`ThreadAnonymizationPipeline` to propagate the ``thread_id``
+argument down to the cache-key helpers without mutating instance state,
+which would be unsafe when several coroutines share one pipeline.
+"""
 
 
 class AnyConversationMemory(Protocol):
@@ -178,7 +189,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         )
 
         self._memories: dict[str, ConversationMemory] = {}
-        self._thread_id: str = "default"
 
     def get_memory(self, thread_id: str = "default") -> ConversationMemory:
         """Return the memory for *thread_id* (created on first access)."""
@@ -194,9 +204,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
     # Cache key helpers — prefix with thread_id for isolation
     # ------------------------------------------------------------------
 
-    def _thread_key(self, key: str) -> str:
-        """Prefix a cache key with the active thread id."""
-        return f"{self._thread_id}:{key}"
+    @staticmethod
+    def _thread_key(thread_id: str, key: str) -> str:
+        """Prefix a cache key with the given thread id."""
+        return f"{thread_id}:{key}"
 
     async def override_detections(
         self,
@@ -221,8 +232,9 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         if self._cache is None:
             raise RuntimeError("Cannot override detections without a cache backend")
 
-        self._thread_id = thread_id
-        cache_key = self._thread_key(f"{CACHE_KEY_DETECTION}:{hash_sha256(text)}")
+        cache_key = self._thread_key(
+            thread_id, f"{CACHE_KEY_DETECTION}:{hash_sha256(text)}"
+        )
         value = self._serialize_detections(detections)
         await self._cache.set(cache_key, value, ttl=self._cache_ttl)
 
@@ -231,7 +243,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         if self._cache is None:
             return await self._detector.detect(text)
 
-        cache_key = self._thread_key(f"{CACHE_KEY_DETECTION}:{hash_sha256(text)}")
+        thread_id = _current_thread_id.get()
+        cache_key = self._thread_key(
+            thread_id, f"{CACHE_KEY_DETECTION}:{hash_sha256(text)}"
+        )
         cached = await self._cache.get(cache_key)
 
         if cached is not None:
@@ -252,8 +267,11 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         if self._cache is None:
             return
 
+        thread_id = _current_thread_id.get()
         serialized_entities = self._serialize_entities(entities)
-        key = self._thread_key(f"{CACHE_KEY_ANONYMIZATION}:{hash_sha256(anonymized)}")
+        key = self._thread_key(
+            thread_id, f"{CACHE_KEY_ANONYMIZATION}:{hash_sha256(anonymized)}"
+        )
 
         await self._cache.set(
             key,
@@ -293,9 +311,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         """
         from piighost.exceptions import CacheMissError
 
-        self._thread_id = thread_id
         key = self._thread_key(
-            f"{CACHE_KEY_ANONYMIZATION}:{hash_sha256(anonymized_text)}"
+            thread_id, f"{CACHE_KEY_ANONYMIZATION}:{hash_sha256(anonymized_text)}"
         )
         cached = await self._cache_get(key)
 
@@ -322,20 +339,22 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         Returns:
             A tuple of (anonymized text, entities used for anonymization).
         """
-        self._thread_id = thread_id
-        memory = self.get_memory(thread_id)
+        token = _current_thread_id.set(thread_id)
+        try:
+            memory = self.get_memory(thread_id)
 
-        entities = await self.detect_entities(text)
-        entities = self._entity_linker.link_entities(
-            entities,
-            memory.all_entities,
-        )
-        memory.record(hash_sha256(text), entities)
-        result = self.anonymize_with_ent(text, thread_id=thread_id)
+            entities = await self.detect_entities(text)
+            entities = self._entity_linker.link_entities(
+                entities,
+                memory.all_entities,
+            )
+            memory.record(hash_sha256(text), entities)
+            result = self.anonymize_with_ent(text, thread_id=thread_id)
 
-        # Required for deanonymize method which looks up mappings via cache.
-        await self._store_mapping(text, result, entities)
-        return result, entities
+            await self._store_mapping(text, result, entities)
+            return result, entities
+        finally:
+            _current_thread_id.reset(token)
 
     async def deanonymize_with_ent(
         self,
@@ -358,7 +377,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         Returns:
             Text with tokens replaced by original values.
         """
-        self._thread_id = thread_id
         resolved = self.get_resolved_entities(thread_id)
 
         if not resolved:
@@ -367,7 +385,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         tokens = self.ph_factory.create(resolved)
 
         anonymized = text
-        # Sort by token length descending (longest-first).
         for entity, token in sorted(
             tokens.items(),
             key=lambda x: len(x[1]),
@@ -376,8 +393,11 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
             canonical = entity.detections[0].text
             text = text.replace(token, canonical)
 
-        # Store mapping so deanonymize() cache lookup works for this text.
-        await self._store_mapping(text, anonymized, resolved)
+        cv_token = _current_thread_id.set(thread_id)
+        try:
+            await self._store_mapping(text, anonymized, resolved)
+        finally:
+            _current_thread_id.reset(cv_token)
         return text
 
     def anonymize_with_ent(
