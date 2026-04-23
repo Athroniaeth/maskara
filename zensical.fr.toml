@@ -9,6 +9,7 @@ repo_name = "Athroniaeth/piighost"
 edit_uri = "edit/master/docs/fr/"
 docs_dir = "docs/fr"
 site_dir = "site/fr"
+extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Accueil" = "index.md" },

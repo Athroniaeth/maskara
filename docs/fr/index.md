@@ -146,7 +146,7 @@ Entrée :
 
 Sortie :
 
-> `<<PERSON_1>>` habite à `<<LOCATION_1>>`. `<<PERSON_1>>` adore `<<LOCATION_1>>`.
+> `<<PERSON_1>>`{ .placeholder } habite à `<<LOCATION_1>>`{ .placeholder }. `<<PERSON_1>>`{ .placeholder } adore `<<LOCATION_1>>`{ .placeholder }.
 
 Les deux occurrences de « Patrick » sont reliées, idem pour « Paris ». Dans une conversation, les messages suivants
 réutilisent les mêmes placeholders, et la désanonymisation est automatique pour l'utilisateur final.

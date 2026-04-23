@@ -1,0 +1,28 @@
+/* PIIGhost placeholder highlight.
+   Apply to inline code containing <<LABEL_N>> tokens via attr_list:
+     `<<PERSON_1>>`{ .placeholder }
+*/
+code.placeholder,
+.placeholder {
+  background-color: rgba(124, 58, 237, 0.12);
+  color: #7C3AED;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-weight: 500;
+}
+
+[data-md-color-scheme="slate"] code.placeholder,
+[data-md-color-scheme="slate"] .placeholder {
+  background-color: rgba(167, 139, 250, 0.18);
+  color: #C4B5FD;
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+/* Figure caption helper used on mermaid diagrams. */
+.figure-caption {
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--md-default-fg-color--light);
+  margin-top: -0.5em;
+}
