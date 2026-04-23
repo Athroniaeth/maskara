@@ -6,8 +6,6 @@ hide:
 
 # PIIGhost
 
-> Anonymisation transparente des PII dans les conversations d'agents IA, avec un middleware LangChain intégré pour LangGraph.
-
 `piighost` est une bibliothèque Python qui détecte, anonymise et désanonymise automatiquement les entités sensibles (noms, lieux, numéros de compte…) dans les conversations d'agents IA. Son middleware LangChain s'intègre dans LangGraph sans modifier votre code existant : le LLM ne voit que des placeholders, les outils reçoivent les vraies valeurs, l'utilisateur voit la réponse désanonymisée.
 
 ## Cas d'usage
