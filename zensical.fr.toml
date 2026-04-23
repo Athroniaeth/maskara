@@ -6,6 +6,7 @@ site_author = "PIIGhost"
 copyright = "Copyright &copy; 2026 contributeurs PIIGhost"
 repo_url = "https://github.com/Athroniaeth/piighost"
 repo_name = "Athroniaeth/piighost"
+edit_uri = "edit/master/docs/fr/"
 docs_dir = "docs/fr"
 site_dir = "site/fr"
 
@@ -37,6 +38,8 @@ language = "fr"
 icon.logo = "lucide/ghost"
 features = [
   "announce.dismiss",
+  "content.action.edit",
+  "content.action.view",
   "content.code.annotate",
   "content.code.copy",
   "content.code.select",
