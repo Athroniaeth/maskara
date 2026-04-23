@@ -219,11 +219,11 @@ défaut raisonnables :
 
 | Étape                | Défaut                           | Rôle                                                                                | Sans cette étape                                                                       |
 |----------------------|----------------------------------|-------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| **Detect**           | *(obligatoire)*                  | Trouve les spans PII via NER                                                        | —                                                                                      |
+| **Detect**           | *(obligatoire)*                  | Trouve les spans PII via NER                                                        | -                                                                                      |
 | **Resolve Spans**    | `ConfidenceSpanConflictResolver` | Déduplique les détections chevauchantes (garde la plus haute confiance)             | Les spans chevauchants de plusieurs détecteurs provoquent des remplacements incorrects |
 | **Link Entities**    | `ExactEntityLinker`              | Trouve toutes les occurrences de chaque entité via une regex aux frontières de mots | Seules les mentions détectées par NER sont anonymisées ; les autres fuient             |
 | **Resolve Entities** | `MergeEntityConflictResolver`    | Fusionne les groupes d'entités partageant une mention (union-find)                  | La même entité pourrait recevoir deux espaces réservés différents                      |
-| **Anonymize**        | *(obligatoire)*                  | Remplace les entités par des espaces réservés (`<<PERSON_1>>`)                      | —                                                                                      |
+| **Anonymize**        | *(obligatoire)*                  | Remplace les entités par des espaces réservés (`<<PERSON_1>>`)                      | -                                                                                      |
 
 Chaque étape est un **protocole** : remplacez n'importe quelle valeur par défaut par votre propre implémentation.
 

@@ -8,7 +8,7 @@
 [![Deps: uv](https://img.shields.io/badge/deps-managed%20with%20uv-3E4DD8.svg)](https://docs.astral.sh/uv/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-4B32C3.svg)](https://docs.astral.sh/ruff/)
 
-[README EN](README.fr.md) - [README FR](README.fr.md)
+[README EN](README.md) - [README FR](README.fr.md)
 
 `piighost` is a Python library that detects PII (personally identifiable information), extracts them, applies corrections, and automatically anonymizes and deanonymizes sensitive entities (names, locations, etc.). With modules for bidirectional anonymization in AI agent conversations, it integrates via a LangChain middleware without modifying your existing agent code.
 
@@ -204,17 +204,17 @@ The middleware intercepts every agent turn the LLM only sees anonymized text, to
 
 ### Pipeline components
 
-The pipeline runs 5 stages. Only `detector` and `anonymizer` are required — the others have sensible defaults:
+The pipeline runs 5 stages. Only `detector` and `anonymizer` are required; the others have sensible defaults:
 
 | Stage | Default | Role | Without it |
 |-------|---------|------|------------|
-| **Detect** | *(required)* | Finds PII spans via NER | — |
+| **Detect** | *(required)* | Finds PII spans via NER | - |
 | **Resolve Spans** | `ConfidenceSpanConflictResolver` | Deduplicates overlapping detections (keeps highest confidence) | Overlapping spans from multiple detectors cause garbled replacements |
 | **Link Entities** | `ExactEntityLinker` | Finds all occurrences of each entity via word-boundary regex | Only NER-detected mentions are anonymized; other occurrences leak through |
 | **Resolve Entities** | `MergeEntityConflictResolver` | Merges entity groups that share a mention (union-find) | Same entity could get two different placeholders |
-| **Anonymize** | *(required)* | Replaces entities with placeholders (`<<PERSON_1>>`) | — |
+| **Anonymize** | *(required)* | Replaces entities with placeholders (`<<PERSON_1>>`) | - |
 
-Each stage is a **protocol** — swap any default for your own implementation.
+Each stage is a **protocol**: swap any default for your own implementation.
 
 ## How it works
 
@@ -332,8 +332,8 @@ uv run pytest tests/ -k "test_name"  # Run a single test
 
 ## Ecosystem
 
-- **[piighost-api](https://github.com/Athroniaeth/piighost-api)** — REST API server for PII anonymization inference. Loads a piighost pipeline once server-side and exposes anonymize/deanonymize via HTTP, so clients only need a lightweight HTTP client instead of embedding the NER model.
-- **[piighost-chat](https://github.com/Athroniaeth/piighost-chat)** — Demo chat app showcasing privacy-preserving AI conversations. Uses `PIIAnonymizationMiddleware` with LangChain to anonymize messages before the LLM and deanonymize responses transparently. Built with SvelteKit, Litestar, and Docker Compose.
+- **[piighost-api](https://github.com/Athroniaeth/piighost-api)**: REST API server for PII anonymization inference. Loads a piighost pipeline once server-side and exposes anonymize/deanonymize via HTTP, so clients only need a lightweight HTTP client instead of embedding the NER model.
+- **[piighost-chat](https://github.com/Athroniaeth/piighost-chat)**: Demo chat app showcasing privacy-preserving AI conversations. Uses `PIIAnonymizationMiddleware` with LangChain to anonymize messages before the LLM and deanonymize responses transparently. Built with SvelteKit, Litestar, and Docker Compose.
 
 ## Additional notes
 
