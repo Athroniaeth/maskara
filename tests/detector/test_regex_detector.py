@@ -177,3 +177,18 @@ class TestValidators:
         )
         await detector.detect("appel: 06 12 34 56 78")
         assert seen == ["06 12 34 56 78"]
+
+
+class TestCompiledPatternsCaching:
+    """Patterns are compiled once at init, not on every detect call."""
+
+    async def test_compiled_instances_stable_across_calls(self) -> None:
+        detector = RegexDetector(patterns={"EMAIL": r"[a-z]+@[a-z]+"})
+        before = detector._compiled["EMAIL"]
+        await detector.detect("alice@example")
+        await detector.detect("bob@example")
+        assert detector._compiled["EMAIL"] is before
+
+    async def test_compiled_contains_all_patterns(self) -> None:
+        detector = RegexDetector(patterns={"A": r"a", "B": r"b"})
+        assert set(detector._compiled) == {"A", "B"}

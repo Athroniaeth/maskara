@@ -147,6 +147,7 @@ class ExactMatchDetector:
 
     bag_of_words: list[tuple[str, str]]
     _flags: re.RegexFlag
+    _compiled: list[tuple[re.Pattern[str], str]]
 
     def __init__(
         self,
@@ -155,12 +156,22 @@ class ExactMatchDetector:
     ) -> None:
         self.bag_of_words = bag_of_words
         self._flags = flags
+        self._compiled = [
+            (self._build_pattern(word, flags), label) for word, label in bag_of_words
+        ]
+
+    @staticmethod
+    def _build_pattern(word: str, flags: re.RegexFlag) -> re.Pattern[str]:
+        escaped = re.escape(word)
+        prefix = r"\b" if word[0:1].isalnum() or word[0:1] == "_" else r"(?<!\w)"
+        suffix = r"\b" if word[-1:].isalnum() or word[-1:] == "_" else r"(?!\w)"
+        return re.compile(f"{prefix}{escaped}{suffix}", flags)
 
     async def detect(self, text: str) -> list[Detection]:
         """Detect entities by matching words from the dictionary in the text.
 
-        Iterates over each word in ``bag_of_words``, builds a word-boundary
-        regex pattern, and collects all non-overlapping matches.
+        Iterates over each pre-compiled pattern and collects all
+        non-overlapping matches.
 
         Args:
             text: The input text to search for entities.
@@ -171,14 +182,7 @@ class ExactMatchDetector:
         """
         detections: list[Detection] = []
 
-        for word, label in self.bag_of_words:
-            escaped = re.escape(word)
-
-            prefix = r"\b" if word[0:1].isalnum() or word[0:1] == "_" else r"(?<!\w)"
-            suffix = r"\b" if word[-1:].isalnum() or word[-1:] == "_" else r"(?!\w)"
-
-            pattern = re.compile(f"{prefix}{escaped}{suffix}", self._flags)
-
+        for pattern, label in self._compiled:
             for match in pattern.finditer(text):
                 detections.append(
                     Detection(
@@ -222,6 +226,12 @@ class RegexDetector:
 
     patterns: dict[str, str] = field(default_factory=dict)
     validators: dict[str, Callable[[str], bool]] = field(default_factory=dict)
+    _compiled: dict[str, re.Pattern[str]] = field(
+        init=False, repr=False, compare=False, default_factory=dict
+    )
+
+    def __post_init__(self) -> None:
+        self._compiled = {label: re.compile(p) for label, p in self.patterns.items()}
 
     async def detect(self, text: str) -> list[Detection]:
         """Find all regex matches for the configured patterns.
@@ -237,8 +247,7 @@ class RegexDetector:
         """
         detections: list[Detection] = []
 
-        for label, pattern in self.patterns.items():
-            compiled = re.compile(pattern)
+        for label, compiled in self._compiled.items():
             validator = self.validators.get(label)
 
             for match in compiled.finditer(text):

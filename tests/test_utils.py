@@ -2,7 +2,7 @@
 
 import re
 
-from piighost.utils import find_all_word_boundary, hash_sha256
+from piighost.utils import _word_boundary_pattern, find_all_word_boundary, hash_sha256
 
 
 class TestHashSha256:
@@ -78,3 +78,12 @@ class TestFindAllWordBoundary:
         """Underscore is treated as alphanumeric for boundary purposes."""
         assert find_all_word_boundary("foo_bar baz", "foo") == []
         assert find_all_word_boundary("foo bar", "foo") == [(0, 3)]
+
+    def test_pattern_compilation_is_cached(self):
+        """Repeated calls with the same fragment reuse the compiled pattern."""
+        _word_boundary_pattern.cache_clear()
+        find_all_word_boundary("abc abc", "abc")
+        find_all_word_boundary("abc here", "abc")
+        info = _word_boundary_pattern.cache_info()
+        assert info.hits >= 1
+        assert info.misses == 1

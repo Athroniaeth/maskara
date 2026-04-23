@@ -180,3 +180,13 @@ class TestDetectionAttributes:
         result = await detector.detect("Patrick et Patrick")
         assert len(result) == 2
         assert result[0].hash != result[1].hash
+
+    async def test_patterns_compiled_once(self) -> None:
+        """Bag-of-words patterns are compiled at __init__, not per detect."""
+        detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
+        before = [p for p, _ in detector._compiled]
+        await detector.detect("Patrick")
+        await detector.detect("Paris")
+        after = [p for p, _ in detector._compiled]
+        assert len(before) == 2
+        assert all(a is b for a, b in zip(before, after))
