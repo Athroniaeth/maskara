@@ -10,7 +10,7 @@ Un bon rapport de bug fait gagner du temps à tout le monde. Avant d'ouvrir une 
 
 1. **Vérifier la version** : reproduisez sur la dernière version publiée (`pip install -U piighost` ou `uv lock --upgrade-package piighost`).
 2. **Chercher dans les issues existantes** : [issues ouvertes et fermées](https://github.com/Athroniaeth/piighost/issues?q=is%3Aissue).
-3. **Isoler le problème** : le bug survient-il avec `ExactMatchDetector` (qui ne charge pas GLiNER2) ou seulement avec GLiNER2 ? La différence aide à localiser la cause.
+3. **Isoler le problème** : le bug survient-il avec `ExactMatchDetector` (qui ne charge aucun modèle NER) ou seulement avec le détecteur NER ? La différence aide à localiser la cause.
 
 ## Ce qu'un bon rapport contient
 

@@ -6,7 +6,7 @@ tags:
 
 # Tests
 
-Comment tester unitairement les pipelines PIIGhost et les composants personnalisés. L'approche recommandée utilise `ExactMatchDetector` pour éviter de télécharger le modèle GLiNER2 (~500 Mo) en CI, mais les patterns présentés s'appliquent à n'importe quel détecteur.
+Comment tester unitairement les pipelines PIIGhost et les composants personnalisés. L'approche recommandée utilise `ExactMatchDetector` pour éviter de télécharger un modèle NER en CI, mais les patterns présentés s'appliquent à n'importe quel détecteur.
 
 ---
 
@@ -78,7 +78,7 @@ async def test_my_pipeline():
 ```
 
 !!! tip "ExactMatchDetector en CI"
-    Utilisez toujours `ExactMatchDetector` (ou équivalent) en CI pour éviter de charger le modèle GLiNER2 (~500 Mo) lors des tests automatisés.
+    Utilisez toujours `ExactMatchDetector` (ou équivalent) en CI pour éviter de charger un modèle NER lors des tests automatisés.
 
 ---
 

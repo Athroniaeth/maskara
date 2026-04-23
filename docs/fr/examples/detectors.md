@@ -96,7 +96,7 @@ detector = RegexDetector(patterns=my_patterns)
 
 ---
 
-## Combiner avec GLiNER2 (NER + regex)
+## Combiner avec un NER (NER + regex)
 
 ```python
 from gliner2 import GLiNER2

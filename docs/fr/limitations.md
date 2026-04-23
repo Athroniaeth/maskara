@@ -48,7 +48,7 @@ C'est correct pour un déploiement mono-processus, mais cela casse dès que vous
 ## La latence ajoutée n'est pas encore mesurée
 
 Il n'existe pas de benchmark officiel de la latence ajoutée par le pipeline sur des charges typiques. L'overhead
-dépend du détecteur (inférence GLiNER2), de la longueur du texte, et de la présence de hits dans le cache.
+dépend du détecteur (inférence du NER choisi), de la longueur du texte, et de la présence de hits dans le cache.
 
 **Mitigation** : mesurez sur votre propre charge avant de dimensionner le trafic de production. Gardez les
 détecteurs sur GPU quand c'est possible pour les chemins à forte densité NER.

@@ -9,7 +9,7 @@ tags:
 
 Catalogue des ensembles de patterns `RegexDetector` fournis dans `examples/detectors/`. Chaque fichier expose un dictionnaire `PATTERNS` et un helper `create_detector()`.
 
-Pour les recettes (comment composer, combiner avec GLiNER2, ajouter les siens), voir [Utiliser les détecteurs prêts à l'emploi](../examples/detectors.md).
+Pour les recettes (comment composer, combiner avec un NER, ajouter les siens), voir [Utiliser les détecteurs prêts à l'emploi](../examples/detectors.md).
 
 ---
 

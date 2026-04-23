@@ -43,7 +43,7 @@ git checkout -b feat/ma-fonctionnalite
 
 - **Protocoles** à toutes les étapes du pipeline pour garder les composants interchangeables.
 - **Dataclasses gelées** pour les modèles (`Entity`, `Detection`, `Span`).
-- **`ExactMatchDetector`** dans les tests, jamais le vrai modèle GLiNER2 en CI.
+- **`ExactMatchDetector`** dans les tests, jamais de vrai modèle NER en CI.
 - **Commits conventionnels** via Commitizen (`feat:`, `fix:`, `refactor:`, etc.).
 
 ### Vérifications locales

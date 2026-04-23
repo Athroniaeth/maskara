@@ -4,11 +4,6 @@ icon: lucide/message-circle-question
 
 # FAQ
 
-??? question "Pourquoi GLiNER2 plutôt qu'un autre NER ?"
-    `piighost` n'est **pas** lié à GLiNER2. C'est juste le détecteur fourni par défaut car il offre un bon compromis multi-langues, zero-shot, et taille raisonnable (~500 Mo).
-
-    Vous pouvez le remplacer par spaCy, un endpoint distant, une liste blanche, ou un ensemble de regex via le protocole [`AnyDetector`](../extending.md). Les autres étapes du pipeline (résolveurs, linker, factory) n'ont pas d'avis sur la source de détection.
-
 ??? question "Mes placeholders doivent-ils avoir ce format `<<PERSON_1>>` ?"
     Non. Le format est piloté par `AnyPlaceholderFactory`. Par défaut `CounterPlaceholderFactory` produit `<<LABEL_N>>`, mais `HashPlaceholderFactory` produit des tags opaques déterministes, `RedactPlaceholderFactory` produit `<LABEL>` sans compteur, et vous pouvez écrire votre propre factory. Voir [Étendre PIIGhost](../extending.md).
 

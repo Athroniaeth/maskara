@@ -19,8 +19,9 @@ LLM
 
 NER
 :   **N**amed **E**ntity **R**ecognition, reconnaissance d'entités nommées. Tâche de machine learning qui identifie
-    les entités nommées dans un texte (personnes, lieux, organisations, dates, etc.). `piighost` utilise
-    [GLiNER2](https://github.com/fastino-ai/gliner2) comme moteur NER par défaut via la classe `GlinerDetector`.
+    les entités nommées dans un texte (personnes, lieux, organisations, dates, etc.). `piighost` fournit des
+    détecteurs pour plusieurs backends (`Gliner2Detector`, `SpacyDetector`, `TransformersDetector`), tous
+    interchangeables via le protocole `AnyDetector`.
 
 Détecteur
 :   Composant qui trouve les PII dans un texte. Les détecteurs implémentent le protocole `AnyDetector`.

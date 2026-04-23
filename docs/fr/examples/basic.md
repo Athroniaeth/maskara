@@ -60,7 +60,7 @@ async def main():
 asyncio.run(main())
 ```
 
-1. **Détecter** : trouve les PII candidates dans le texte via le modèle NER (GLiNER2 ici).
+1. **Détecter** : trouve les PII candidates dans le texte via un détecteur NER (ici GLiNER2, interchangeable avec spaCy ou Transformers).
 2. **Résoudre les spans** : arbitre les chevauchements lorsque plusieurs détecteurs rapportent des positions qui se recouvrent.
 3. **Lier les entités** : regroupe les occurrences d'une même PII (variantes de casse, typos, mentions partielles).
 4. **Résoudre les entités** : fusionne les groupes qui partagent une mention entre détecteurs.
@@ -170,6 +170,6 @@ pipeline_redact = AnonymizationPipeline(
 
 ---
 
-Pour tester unitairement les pipelines sans charger GLiNER2, voir le guide [Tests](testing.md).
+Pour tester unitairement les pipelines sans charger un modèle NER, voir le guide [Tests](testing.md).
 
 Voir aussi la [page Étendre PIIGhost](../extending.md) pour créer des composants personnalisés.
