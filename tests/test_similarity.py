@@ -2,7 +2,12 @@
 
 import pytest
 
-from piighost.similarity import jaro_winkler_similarity, levenshtein_similarity
+from piighost.similarity import (
+    JARO_WINKLER_DEFAULT_PREFIX_WEIGHT,
+    JARO_WINKLER_PREFIX_MAX,
+    jaro_winkler_similarity,
+    levenshtein_similarity,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +60,18 @@ class TestJaroWinklerSimilarity:
         score_ab = jaro_winkler_similarity("patrick", "patric")
         score_ba = jaro_winkler_similarity("patric", "patrick")
         assert score_ab == pytest.approx(score_ba)
+
+    def test_default_prefix_weight_constant(self) -> None:
+        """Default prefix weight used by the function matches the public constant."""
+        explicit = jaro_winkler_similarity(
+            "patrick", "patric", prefix_weight=JARO_WINKLER_DEFAULT_PREFIX_WEIGHT
+        )
+        implicit = jaro_winkler_similarity("patrick", "patric")
+        assert explicit == implicit
+
+    def test_prefix_max_constant_value(self) -> None:
+        """The documented Winkler prefix cap stays at 4 (standard spec)."""
+        assert JARO_WINKLER_PREFIX_MAX == 4
 
 
 # ---------------------------------------------------------------------------

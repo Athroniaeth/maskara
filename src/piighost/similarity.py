@@ -8,17 +8,27 @@ from typing import Callable
 
 AnySimilarityFn = Callable[[str, str], float]
 
+JARO_WINKLER_PREFIX_MAX = 4
+"""Maximum prefix length considered for the Winkler bonus."""
 
-def jaro_winkler_similarity(s1: str, s2: str, prefix_weight: float = 0.1) -> float:
+JARO_WINKLER_DEFAULT_PREFIX_WEIGHT = 0.1
+"""Standard Winkler prefix scaling factor; must satisfy prefix_weight * prefix_max <= 1."""
+
+
+def jaro_winkler_similarity(
+    s1: str,
+    s2: str,
+    prefix_weight: float = JARO_WINKLER_DEFAULT_PREFIX_WEIGHT,
+) -> float:
     """Jaro-Winkler similarity between two strings.
 
     Good for short strings like entity names gives a bonus for a shared
-    prefix (up to 4 characters).
+    prefix (up to ``JARO_WINKLER_PREFIX_MAX`` characters).
 
     Args:
         s1: First string.
         s2: Second string.
-        prefix_weight: Winkler prefix scaling factor (default 0.1).
+        prefix_weight: Winkler prefix scaling factor.
 
     Returns:
         Similarity score in [0.0, 1.0].
@@ -73,9 +83,8 @@ def jaro_winkler_similarity(s1: str, s2: str, prefix_weight: float = 0.1) -> flo
         matches / len1 + matches / len2 + (matches - transpositions / 2) / matches
     ) / 3
 
-    # Winkler bonus for shared prefix (up to 4 chars).
     prefix_len = 0
-    for i in range(min(4, len1, len2)):
+    for i in range(min(JARO_WINKLER_PREFIX_MAX, len1, len2)):
         if s1[i] == s2[i]:
             prefix_len += 1
         else:
