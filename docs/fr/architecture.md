@@ -216,6 +216,40 @@ Enveloppe chaque appel d'outil :
 | **`deanonymize_with_ent()`** | Remplacement de chaine : tokens → valeurs originales (plus long d'abord) |
 | **`anonymize_with_ent()`** | Remplacement de chaine : valeurs originales → tokens (plus long d'abord) |
 
+### Cycle de vie d'une PII
+
+Du point de vue d'une PII donnée, voici les états qu'elle traverse entre sa détection initiale et son affichage à l'utilisateur final, et les transitions possibles (premier passage, cache hit, désanonymisation).
+
+```mermaid
+flowchart TB
+    classDef state fill:#90CAF9,stroke:#1565C0,color:#000
+    classDef cache fill:#FFF9C4,stroke:#F9A825,color:#000
+    classDef terminal fill:#E1BEE7,stroke:#6A1B9A,color:#000
+
+    START([Texte brut]):::terminal
+    DET[Détectée]:::state
+    VAL[Validée]:::state
+    LINK[Groupée en Entity]:::state
+    MERGE[Consolidée]:::state
+    ANON[Anonymisée]:::state
+    CACHE[("En cache
+    _thread_id scope_")]:::cache
+    REST[Restaurée]:::state
+    END([Texte restauré]):::terminal
+
+    START -->|AnyDetector NER / regex| DET
+    DET -->|Resolve Spans| VAL
+    VAL -->|Link Entities| LINK
+    LINK -->|Resolve Entities| MERGE
+    MERGE -->|placeholder factory| ANON
+    ANON -->|store SHA-256 key| CACHE
+    CACHE -.->|cache hit même thread| ANON
+    ANON -->|deanonymize| REST
+    REST --> END
+```
+
+La mémoire (`ConversationMemory`) partage le mapping d'une entité sur toute la conversation identifiée par un `thread_id`. Un second message contenant la même PII saute directement à l'état `Anonymisée` via le cache, sans repasser par le détecteur NER.
+
 ---
 
 ## Modeles de donnees
