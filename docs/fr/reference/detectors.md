@@ -1,5 +1,6 @@
 ---
 icon: lucide/list
+status: new
 ---
 
 # Référence Détecteurs prêts à l'emploi

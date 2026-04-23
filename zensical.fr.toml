@@ -67,6 +67,10 @@ scheme = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Passer en mode clair"
 
+[project.extra.status]
+new = "Ajoutée récemment"
+deprecated = "Dépréciée"
+
 [[project.extra.alternate]]
 name = "English"
 link = "/piighost/"

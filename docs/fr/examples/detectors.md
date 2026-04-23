@@ -1,5 +1,6 @@
 ---
 icon: lucide/scan-search
+status: new
 ---
 
 # Utiliser les détecteurs prêts à l'emploi
