@@ -14,6 +14,7 @@ nav = [
   { "Home" = "index.md" },
   { "Get started" = [
     { "Installation" = "getting-started/installation.md" },
+    { "Quickstart" = "getting-started/quickstart.md" },
     { "First pipeline" = "getting-started/first-pipeline.md" },
     { "Conversational pipeline" = "getting-started/conversation.md" },
     { "LangChain middleware" = "getting-started/langchain.md" },

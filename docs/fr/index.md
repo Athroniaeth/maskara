@@ -176,6 +176,7 @@ Chaque page suit un rôle précis du [framework Diátaxis](https://diataxis.fr/)
     Installer et prendre piighost en main.
 
     - [Installation](getting-started/installation.md)
+    - [Quickstart](getting-started/quickstart.md)
     - [Premier pipeline](getting-started/first-pipeline.md)
     - [Pipeline conversationnel](getting-started/conversation.md)
     - [Middleware LangChain](getting-started/langchain.md)

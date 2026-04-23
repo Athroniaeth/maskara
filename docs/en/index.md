@@ -174,6 +174,7 @@ Each page follows a specific role from the [Diátaxis framework](https://diataxi
     Install and take piighost for a spin.
 
     - [Installation](getting-started/installation.md)
+    - [Quickstart](getting-started/quickstart.md)
     - [First pipeline](getting-started/first-pipeline.md)
     - [Conversational pipeline](getting-started/conversation.md)
     - [LangChain middleware](getting-started/langchain.md)
