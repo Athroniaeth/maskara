@@ -219,32 +219,16 @@ class TestDeanonymize:
 
     def test_roundtrip_token_same_length_as_text(self) -> None:
         """Token and original text have the same length."""
-        #        0       7     12       19
-        text = "Patrice habite Gironde, Patrice aime ça."
+        text = "Charlotte et Marseille sont amis."
         entities = [
-            Entity(
-                detections=(
-                    _det("Patrice", "PERSON", 0, 7),
-                    _det("Patrice", "PERSON", 24, 31),
-                )
-            ),
-            Entity(detections=(_det("Gironde", "COUNTRY", 15, 22),)),
-        ]
-        # <<PERSON_1>> = 12 chars, "Patrice" = 7 chars — not same length
-        # Use RedactPlaceholderFactory: <PERSON> = 8 chars, still not 7
-        # Use HashPlaceholderFactory with length=7: <PERSON:xxxxxxx> still not 7
-        # Simplest: just pick text whose length matches <<LABEL_N>>
-        # <<PER_1>> = 9 chars, so use a 9-char name
-        text2 = "Charlotte et Marseille sont amis."
-        entities2 = [
-            Entity(detections=(_det("Charlotte", "PER", 0, 9),)),  # <<PER_1>> = 9
-            Entity(detections=(_det("Marseille", "LOC", 13, 22),)),  # <<LOC_1>> = 9
+            Entity(detections=(_det("Charlotte", "PER", 0, 9),)),
+            Entity(detections=(_det("Marseille", "LOC", 13, 22),)),
         ]
         anon = Anonymizer(CounterPlaceholderFactory())
-        anonymized = anon.anonymize(text2, entities2)
-        assert len("<<PER_1>>") == len("Charlotte")  # both 9
-        restored = anon.deanonymize(anonymized, entities2)
-        assert restored == text2
+        anonymized = anon.anonymize(text, entities)
+        assert len("<<PER_1>>") == len("Charlotte")
+        restored = anon.deanonymize(anonymized, entities)
+        assert restored == text
 
     def test_deanonymize_missing_token_raises(self) -> None:
         """DeanonymizationError is raised with partial_text when a token is missing."""
