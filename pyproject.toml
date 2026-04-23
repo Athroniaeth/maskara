@@ -117,7 +117,7 @@ llm = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration' -p no:anyio -p no:faker -p no:langsmith_plugin"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
