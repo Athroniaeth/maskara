@@ -16,6 +16,8 @@ pipeline to recreate consistent placeholder tokens across messages.
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from aiocache import BaseCache
+
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.linker.entity import AnyEntityLinker
@@ -154,6 +156,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entity_linker: The entity linker to use.
         entity_resolver: The entity conflict resolver to use.
         anonymizer: The anonymizer to use for span-based replacement.
+        cache: Optional aiocache backend.  Defaults to a fresh
+            ``SimpleMemoryCache``.
+        cache_ttl: Time-to-live in seconds for every cache entry the
+            pipeline writes.  ``None`` keeps entries forever.
     """
 
     def __init__(
@@ -163,6 +169,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         entity_linker: AnyEntityLinker | None = None,
         entity_resolver: AnyEntityConflictResolver | None = None,
         span_resolver: AnySpanConflictResolver | None = None,
+        cache: BaseCache | None = None,
+        cache_ttl: int | None = None,
     ) -> None:
         factory = anonymizer.ph_factory
         if isinstance(factory, (RedactPlaceholderFactory, MaskPlaceholderFactory)):
@@ -179,6 +187,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
             entity_linker=entity_linker,
             entity_resolver=entity_resolver,
             anonymizer=anonymizer,
+            cache=cache,
+            cache_ttl=cache_ttl,
         )
 
         self._memories: dict[str, ConversationMemory] = {}
@@ -228,7 +238,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         self._thread_id = thread_id
         cache_key = self._thread_key(f"{CACHE_KEY_DETECTION}:{hash_sha256(text)}")
         value = self._serialize_detections(detections)
-        await self._cache.set(cache_key, value)
+        await self._cache.set(cache_key, value, ttl=self._cache_ttl)
 
     async def _cached_detect(self, text: str) -> list[Detection]:
         """Detect entities, using thread-scoped cache if available."""
@@ -243,7 +253,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         detections = await self._detector.detect(text)
         value = self._serialize_detections(detections)
-        await self._cache.set(cache_key, value)
+        await self._cache.set(cache_key, value, ttl=self._cache_ttl)
         return detections
 
     async def _store_mapping(
@@ -265,6 +275,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
                 "original": original,
                 "entities": serialized_entities,
             },
+            ttl=self._cache_ttl,
         )
 
     # ------------------------------------------------------------------

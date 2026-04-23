@@ -165,3 +165,48 @@ class TestCache:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=None)
         result, _ = await pipeline.anonymize("Bonjour Patrick")
         assert result == "Bonjour <<PERSON_1>>"
+
+
+class TestCacheTTL:
+    """``cache_ttl`` is propagated to every cache.set() call."""
+
+    async def test_ttl_passed_on_detect_and_anonymization(self) -> None:
+        cache = Cache(Cache.MEMORY)
+        pipeline = AnonymizationPipeline(
+            detector=ExactMatchDetector([("Patrick", "PERSON")]),
+            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            cache=cache,
+            cache_ttl=120,
+        )
+
+        observed: list[int | None] = []
+        original_set = cache.set
+
+        async def recording_set(key, value, *args, ttl=None, **kwargs):
+            observed.append(ttl)
+            return await original_set(key, value, *args, ttl=ttl, **kwargs)
+
+        cache.set = recording_set  # type: ignore[assignment]
+        await pipeline.anonymize("Bonjour Patrick")
+        assert observed
+        assert all(ttl == 120 for ttl in observed)
+
+    async def test_default_ttl_is_none(self) -> None:
+        cache = Cache(Cache.MEMORY)
+        pipeline = AnonymizationPipeline(
+            detector=ExactMatchDetector([("Patrick", "PERSON")]),
+            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            cache=cache,
+        )
+
+        observed: list[int | None] = []
+        original_set = cache.set
+
+        async def recording_set(key, value, *args, ttl=None, **kwargs):
+            observed.append(ttl)
+            return await original_set(key, value, *args, ttl=ttl, **kwargs)
+
+        cache.set = recording_set  # type: ignore[assignment]
+        await pipeline.anonymize("Bonjour Patrick")
+        assert observed
+        assert all(ttl is None for ttl in observed)

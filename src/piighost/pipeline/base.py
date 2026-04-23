@@ -51,6 +51,11 @@ class AnonymizationPipeline:
         anonymizer: Performs text replacement and deanonymization.
         cache: Optional aiocache instance. If ``None``, no caching
             is performed and deanonymize will raise KeyError.
+        cache_ttl: Time-to-live in seconds applied to every cache entry
+            the pipeline writes.  ``None`` (default) keeps entries until
+            the backend evicts them, which is fine for in-memory caches
+            but can leak unbounded state when sharing a Redis backend
+            across threads.
     """
 
     _detector: AnyDetector
@@ -59,6 +64,7 @@ class AnonymizationPipeline:
     _entity_resolver: AnyEntityConflictResolver
     _anonymizer: AnyAnonymizer
     _cache: BaseCache
+    _cache_ttl: int | None
 
     def __init__(
         self,
@@ -68,6 +74,7 @@ class AnonymizationPipeline:
         entity_linker: AnyEntityLinker | None = None,
         entity_resolver: AnyEntityConflictResolver | None = None,
         cache: BaseCache | None = None,
+        cache_ttl: int | None = None,
     ) -> None:
         span_resolver = span_resolver or ConfidenceSpanConflictResolver()
         entity_linker = entity_linker or ExactEntityLinker()
@@ -79,6 +86,7 @@ class AnonymizationPipeline:
         self._entity_resolver = entity_resolver
         self._anonymizer = anonymizer
         self._cache = cache or SimpleMemoryCache()
+        self._cache_ttl = cache_ttl
 
     @property
     def ph_factory(self) -> "AnyPlaceholderFactory":
@@ -163,6 +171,7 @@ class AnonymizationPipeline:
                 "original": original,
                 "entities": serialized_entities,
             },
+            ttl=self._cache_ttl,
         )
 
     async def _cached_detect(self, text: str) -> list[Detection]:
@@ -178,7 +187,7 @@ class AnonymizationPipeline:
 
         detections = await self._detector.detect(text)
         value = self._serialize_detections(detections)
-        await self._cache.set(cache_key, value)
+        await self._cache.set(cache_key, value, ttl=self._cache_ttl)
         return detections
 
     async def _cache_get(self, key: str) -> dict | None:
