@@ -12,24 +12,28 @@ site_dir = "site/fr"
 
 nav = [
   { "Accueil" = "index.md" },
-  { "Démarrage rapide" = "getting-started.md" },
-  { "Glossaire" = "glossary.md" },
-  { "Architecture" = "architecture.md" },
-  { "Limites" = "limitations.md" },
-  { "Sécurité" = "security.md" },
-  { "Exemples" = [
+  { "Démarrer" = [
+    { "Démarrage rapide" = "getting-started.md" },
     { "Usage basique" = "examples/basic.md" },
-    { "Intégration LangChain" = "examples/langchain.md" },
-    { "Utiliser les détecteurs prêts à l'emploi" = "examples/detectors.md" },
   ]},
-  { "Étendre PIIGhost" = "extending.md" },
-  { "Déploiement" = "deployment.md" },
-  { "Tests" = "examples/testing.md" },
-  { "Référence API" = [
+  { "Usage" = [
+    { "Intégration LangChain" = "examples/langchain.md" },
+    { "Détecteurs prêts à l'emploi" = "examples/detectors.md" },
+    { "Étendre PIIGhost" = "extending.md" },
+    { "Tests" = "examples/testing.md" },
+    { "Déploiement" = "deployment.md" },
+  ]},
+  { "Référence" = [
     { "Anonymizer" = "reference/anonymizer.md" },
     { "Pipeline" = "reference/pipeline.md" },
     { "Middleware" = "reference/middleware.md" },
-    { "Détecteurs prêts à l'emploi" = "reference/detectors.md" },
+    { "Détecteurs" = "reference/detectors.md" },
+  ]},
+  { "Concepts" = [
+    { "Architecture" = "architecture.md" },
+    { "Glossaire" = "glossary.md" },
+    { "Limites" = "limitations.md" },
+    { "Sécurité" = "security.md" },
   ]},
 ]
 
