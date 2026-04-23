@@ -95,6 +95,71 @@ pipeline = AnonymizationPipeline(
 
 ---
 
+## Curated regex packs
+
+For structured PII whose syntax is standardised (e-mails, IBANs, phone
+numbers, SSN), PIIGhost ships ready-to-use regex dictionaries organised
+by region. You pick only the packs you need, and merge them freely.
+
+| Pack | Module | Labels |
+|------|--------|--------|
+| `GENERIC_PATTERNS` | `piighost.detector.patterns.generic` | `EMAIL`, `URL`, `IPV4`, `CREDIT_CARD` |
+| `FR_PATTERNS` | `piighost.detector.patterns.fr` | `FR_PHONE`, `FR_IBAN`, `FR_NIR`, `FR_SIRET` |
+| `US_PATTERNS` | `piighost.detector.patterns.us` | `US_SSN`, `US_PHONE`, `US_ZIP` |
+| `EU_PATTERNS` | `piighost.detector.patterns.eu` | `IBAN` (any country) |
+
+```python
+from piighost.detector import RegexDetector
+from piighost.detector.patterns import FR_PATTERNS, GENERIC_PATTERNS
+
+detector = RegexDetector(patterns={**GENERIC_PATTERNS, **FR_PATTERNS})
+```
+
+The packs are intentionally **permissive on syntax**: the `CREDIT_CARD`
+pattern accepts any 13-19 digit sequence, `IBAN` accepts any country
+prefix + 11-30 alphanumerics, `FR_NIR` accepts the full NIR shape
+without enforcing the key. Without a validator, those patterns will
+over-match (any long digit sequence looks like a card number).
+
+## Checksum validators
+
+PIIGhost ships checksum validators in `piighost.validators` that you can
+plug into `RegexDetector` to filter syntactic matches that fail a
+domain-specific check:
+
+| Validator | Applies to | Algorithm |
+|-----------|-----------|-----------|
+| `validate_luhn` | credit cards, IMEIs | mod-10 (Luhn) |
+| `validate_iban` | IBANs (any country) | ISO 13616 mod-97 |
+| `validate_nir` | French NIR | key = 97 − (body mod 97) |
+
+```python
+from piighost.detector import RegexDetector
+from piighost.detector.patterns import FR_PATTERNS, GENERIC_PATTERNS
+from piighost.validators import validate_iban, validate_luhn, validate_nir
+
+detector = RegexDetector(
+    patterns={**GENERIC_PATTERNS, **FR_PATTERNS},
+    validators={
+        "CREDIT_CARD": validate_luhn,
+        "FR_IBAN": validate_iban,
+        "FR_NIR": validate_nir,
+    },
+)
+```
+
+A label without an entry in `validators` is accepted on the regex match
+alone. Matches rejected by a validator are silently dropped (no log, no
+exception); chain with another detector if you want to record the
+rejection.
+
+!!! tip "Bring your own validator"
+    Any `Callable[[str], bool]` works. Use this to add custom
+    checks (SSA invalid-range filter on `US_SSN`, allowlist of accepted
+    e-mail domains on `EMAIL`, etc.) without touching the regex.
+
+---
+
 ## NER label mapping
 
 The built-in NER detectors (`SpacyDetector`, `Gliner2Detector`, `TransformersDetector`) all inherit from `BaseNERDetector`, which supports **label mapping**: decoupling the label a model produces internally from the label that appears in `Detection.label` (and therefore in placeholders, datasets, etc.).

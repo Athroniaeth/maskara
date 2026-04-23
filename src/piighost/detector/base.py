@@ -1,5 +1,6 @@
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -203,32 +204,51 @@ class RegexDetector:
 
     Args:
         patterns: Mapping from entity label to a regex pattern string.
+        validators: Optional mapping from label to a callable that returns
+            ``True`` when the matched text is a genuine instance of the
+            entity (e.g. Luhn checksum for credit cards, mod-97 for IBANs).
+            A label without an entry in this mapping is accepted on the
+            regex match alone. Matches rejected by a validator are
+            silently dropped.
 
     Example:
-        >>> detector = RegexDetector(patterns={"FR_PHONE": r"\\b(?:\\+33|0)[1-9](?:[\\s.\\-]?\\d{2}){4}\\b"})
-        >>> detections = await detector.detect("Appelez le 06 12 34 56 78")
+        >>> from piighost.detector.patterns import FR_PATTERNS
+        >>> from piighost.validators import validate_iban, validate_nir
+        >>> detector = RegexDetector(
+        ...     patterns=FR_PATTERNS,
+        ...     validators={"FR_IBAN": validate_iban, "FR_NIR": validate_nir},
+        ... )
     """
 
     patterns: dict[str, str] = field(default_factory=dict)
+    validators: dict[str, Callable[[str], bool]] = field(default_factory=dict)
 
     async def detect(self, text: str) -> list[Detection]:
         """Find all regex matches for the configured patterns.
+
+        For labels that have a registered validator, each regex match is
+        passed to it and discarded if the validator returns ``False``.
 
         Args:
             text: The input text to search for entities.
 
         Returns:
-            One ``Detection`` per regex match, with ``confidence=1.0``.
+            One ``Detection`` per accepted match, with ``confidence=1.0``.
         """
         detections: list[Detection] = []
 
         for label, pattern in self.patterns.items():
             compiled = re.compile(pattern)
+            validator = self.validators.get(label)
 
             for match in compiled.finditer(text):
+                matched_text = match.group()
+                if validator is not None and not validator(matched_text):
+                    continue
+
                 detections.append(
                     Detection(
-                        text=match.group(),
+                        text=matched_text,
                         label=label,
                         position=Span(
                             start_pos=match.start(),

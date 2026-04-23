@@ -191,6 +191,61 @@ For a complete example (tools, system prompt, Langfuse observability, Aegra depl
 
 ---
 
+## Usage 4: Remote client
+
+`PIIGhostClient` is a thin async HTTP client that delegates every pipeline
+operation to a remote `piighost-api` server. Use it when the NER model must
+stay off the application host (separate inference pod, GPU node, shared
+anonymization service across microservices).
+
+```bash
+pip install piighost[client]
+```
+
+```python
+import asyncio
+
+from piighost.client import PIIGhostClient
+from piighost.exceptions import CacheMissError
+
+
+async def main():
+    async with PIIGhostClient(
+        base_url="http://piighost-api.internal:8000",
+        api_key="ak_v1-...",
+    ) as client:
+        text, entities = await client.anonymize(
+            "Patrick lives in Paris.",
+            thread_id="user-42",
+        )
+        print(text)
+        # <<PERSON_1>> lives in <<LOCATION_1>>.
+
+        try:
+            original, _ = await client.deanonymize(text, thread_id="user-42")
+        except CacheMissError:
+            # Server has no cached mapping for this thread (restart,
+            # eviction, wrong thread_id). Fall back to entity-based
+            # replacement which works on any placeholder-bearing text.
+            original = await client.deanonymize_with_ent(text, thread_id="user-42")
+        print(original)
+
+
+asyncio.run(main())
+```
+
+The client mirrors the `ThreadAnonymizationPipeline` API (`detect`,
+`anonymize`, `deanonymize`, `deanonymize_with_ent`, `override_detections`),
+so swapping a local pipeline for a remote one is a one-line change.
+
+!!! warning "Thread isolation is server-side"
+    The `thread_id` argument is sent to the server and used to scope the
+    cache and conversation memory. Reuse the same `thread_id` across calls
+    that belong to the same conversation, otherwise placeholders will not
+    be consistent between messages.
+
+---
+
 ## Development commands
 
 ```bash

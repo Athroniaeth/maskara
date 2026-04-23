@@ -25,12 +25,16 @@ class Span:
         return self.start_pos < other.end_pos and other.start_pos < self.end_pos
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Detection:
     """Represents a named entity recognition (NER) result from a text.
 
     Attributes:
         text: The surface form found in the source string (e.g. ``"Patrick"``).
+            This field holds **raw PII**; it is masked in :meth:`__repr__`
+            to prevent accidental leaks through ``print``, ``logger``,
+            or uncaught tracebacks. Access the raw value via
+            ``detection.text`` when needed.
         label: The entity type (e.g. ``"PERSON"``, ``"LOCATION"``).
         position: The span indicating where the entity was found.
         confidence: Confidence score of the detection (0.0 – 1.0).
@@ -40,6 +44,20 @@ class Detection:
     label: str
     position: Span
     confidence: float
+
+    def __repr__(self) -> str:
+        """Return a repr that masks the raw PII surface form.
+
+        The ``text`` field is redacted to ``<redacted:N>`` (N = length
+        in characters) so accidental ``print(detection)`` or a logger
+        call does not surface the unanonymised value. The other fields
+        are rendered verbatim.
+        """
+        return (
+            f"Detection(text=<redacted:{len(self.text)}>, "
+            f"label={self.label!r}, position={self.position!r}, "
+            f"confidence={self.confidence})"
+        )
 
     @property
     def hash(self) -> str:
