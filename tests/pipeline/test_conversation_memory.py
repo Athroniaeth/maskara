@@ -1,6 +1,6 @@
 """Tests for ``ConversationMemory``."""
 
-from piighost.pipeline.thread import ConversationMemory
+from piighost.pipeline.thread import ConversationMemory, _replace_longest_first
 from piighost.models import Detection, Entity, Span
 
 
@@ -131,3 +131,40 @@ class TestCanonicalIndex:
             ("patrick", "PERSON"),
             ("paris", "LOCATION"),
         }
+
+
+class TestReplaceLongestFirst:
+    """Helper that performs a multi-token replacement in one regex pass."""
+
+    def test_empty_pairs_returns_text_unchanged(self) -> None:
+        assert _replace_longest_first("hello", []) == "hello"
+
+    def test_basic_replacement(self) -> None:
+        assert _replace_longest_first("Patrick", [("Patrick", "X")]) == "X"
+
+    def test_longer_source_wins_over_prefix(self) -> None:
+        """'Patrick Dupont' must beat 'Patrick' on the same input."""
+        out = _replace_longest_first(
+            "Patrick Dupont",
+            [("Patrick", "A"), ("Patrick Dupont", "B")],
+        )
+        assert out == "B"
+
+    def test_regex_metachars_escaped(self) -> None:
+        out = _replace_longest_first("a.b and c.d", [("a.b", "X"), ("c.d", "Y")])
+        assert out == "X and Y"
+
+    def test_first_mapping_wins_on_duplicates(self) -> None:
+        """Duplicate source keeps the earliest-seen target."""
+        out = _replace_longest_first("hi", [("hi", "first"), ("hi", "second")])
+        assert out == "first"
+
+    def test_empty_source_skipped(self) -> None:
+        """Empty source strings must not match everywhere."""
+        out = _replace_longest_first("foo", [("", "BAD"), ("foo", "OK")])
+        assert out == "OK"
+
+    def test_single_pass_no_chain_replacement(self) -> None:
+        """Replacing does not cascade into a just-written target."""
+        out = _replace_longest_first("ab", [("a", "b"), ("b", "a")])
+        assert out == "ba"

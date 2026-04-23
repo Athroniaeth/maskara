@@ -2,8 +2,8 @@
 
 Wraps :class:`AnonymizationPipeline` with a :class:`ConversationMemory`
 to accumulate entities across messages.  Provides ``deanonymize_with_ent``
-and ``anonymize_with_ent`` for simple ``str.replace``-based operations
-on any text containing known tokens or original values.
+and ``anonymize_with_ent`` for single-pass regex replacement on any text
+containing known tokens or original values.
 
 Conversation-scoped memory for accumulating entities across messages.
 
@@ -13,6 +13,7 @@ by message hash and deduplicated by ``(text.lower(), label)``.  The
 pipeline to recreate consistent placeholder tokens across messages.
 """
 
+import re
 from collections import OrderedDict
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -43,6 +44,27 @@ Used by :class:`ThreadAnonymizationPipeline` to propagate the ``thread_id``
 argument down to the cache-key helpers without mutating instance state,
 which would be unsafe when several coroutines share one pipeline.
 """
+
+
+def _replace_longest_first(text: str, pairs: list[tuple[str, str]]) -> str:
+    """Replace every *source* with its *target* in one regex pass.
+
+    Sources are emitted longest-first in the alternation so that a match
+    on a longer source wins over any shorter prefix.  Duplicate sources
+    are collapsed: the first mapping wins.  Returns *text* unchanged
+    when ``pairs`` is empty.
+    """
+    mapping: dict[str, str] = {}
+    for source, target in pairs:
+        if source and source not in mapping:
+            mapping[source] = target
+
+    if not mapping:
+        return text
+
+    sources = sorted(mapping, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(s) for s in sources))
+    return pattern.sub(lambda m: mapping[m.group(0)], text)
 
 
 class AnyConversationMemory(Protocol):
@@ -141,7 +163,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
     Delegates detection, resolution, and span-based anonymization to the
     base pipeline.  After each ``anonymize()`` call, entities are recorded
     in memory so that ``deanonymize_with_ent`` / ``anonymize_with_ent``
-    can operate on *any* text via ``str.replace``.
+    can operate on *any* text via a single regex-alternation pass.
 
     Memory and cache are isolated per ``thread_id`` passed to each
     method.  Cache keys are prefixed with the thread id so that a
@@ -395,7 +417,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
         text: str,
         thread_id: str = "default",
     ) -> str:
-        """Replace all known tokens with original values via ``str.replace``.
+        """Replace all known tokens with original values in a single pass.
 
         Works on any text containing tokens, even text never anonymized
         by this pipeline (e.g. LLM-generated output, tool arguments).
@@ -417,29 +439,24 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
             return text
 
         tokens = self.ph_factory.create(resolved)
+        pairs = [(token, entity.detections[0].text) for entity, token in tokens.items()]
 
         anonymized = text
-        for entity, token in sorted(
-            tokens.items(),
-            key=lambda x: len(x[1]),
-            reverse=True,
-        ):
-            canonical = entity.detections[0].text
-            text = text.replace(token, canonical)
+        restored = _replace_longest_first(text, pairs)
 
         cv_token = _current_thread_id.set(thread_id)
         try:
-            await self._store_mapping(text, anonymized, resolved)
+            await self._store_mapping(restored, anonymized, resolved)
         finally:
             _current_thread_id.reset(cv_token)
-        return text
+        return restored
 
     def anonymize_with_ent(
         self,
         text: str,
         thread_id: str = "default",
     ) -> str:
-        """Replace all known original values with tokens via ``str.replace``.
+        """Replace all known original values with tokens in a single pass.
 
         Replaces **all** spelling variants of each entity (not just the
         canonical form).  Values are replaced **longest-first** to avoid
@@ -459,15 +476,9 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline):
 
         tokens = self.ph_factory.create(resolved)
 
-        # Collect all (detection_text, token) pairs for all variants.
-        replacements: list[tuple[str, str]] = []
+        pairs: list[tuple[str, str]] = []
         for entity, token in tokens.items():
             for detection in entity.detections:
-                replacements.append((detection.text, token))
+                pairs.append((detection.text, token))
 
-        # Sort by original text length descending (longest-first).
-        replacements.sort(key=lambda x: len(x[0]), reverse=True)
-
-        for original, token in replacements:
-            text = text.replace(original, token)
-        return text
+        return _replace_longest_first(text, pairs)
