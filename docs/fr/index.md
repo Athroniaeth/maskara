@@ -6,6 +6,8 @@ hide:
 
 # PIIGhost
 
+> Anonymisation transparente des PII dans les conversations d'agents IA, avec un middleware LangChain intégré pour LangGraph.
+
 ## Problématiques
 
 Aujourd'hui, avec l'essor des LLM, la question de la protection des données sensibles prend une nouvelle dimension. Les
