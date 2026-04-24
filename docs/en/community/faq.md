@@ -4,6 +4,9 @@ icon: lucide/message-circle-question
 
 # FAQ
 
+??? question "Is it really necessary to anonymize PII before calling an LLM?"
+    Yes, and this holds regardless of `piighost`. The stakes (exfiltration to providers, legal requisition, training on conversations, GDPR compliance, leaks via RAG and tools) are covered in [Why anonymize?](../why-anonymize.md). The page is library-agnostic: it explains why the problem exists before justifying a solution like `piighost`.
+
 ??? question "Do my placeholders have to look like `<<PERSON_1>>`?"
     No. The format is driven by `AnyPlaceholderFactory`. By default `CounterPlaceholderFactory` produces `<<LABEL_N>>`, but `HashPlaceholderFactory` yields opaque deterministic tags, `RedactPlaceholderFactory` produces `<LABEL>` without a counter, and you can write your own factory. See [Extending PIIGhost](../extending.md).
 

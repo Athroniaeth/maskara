@@ -36,6 +36,7 @@ nav = [
     { "Détecteurs" = "reference/detectors.md" },
   ]},
   { "Concepts" = [
+    { "Pourquoi anonymiser ?" = "why-anonymize.md" },
     { "Architecture" = "architecture.md" },
     { "Glossaire" = "glossary.md" },
     { "Limites" = "limitations.md" },
