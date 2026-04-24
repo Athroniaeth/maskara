@@ -1,6 +1,7 @@
 """LLM-based entity detector using structured output."""
 
 import importlib.util
+from typing import Any, cast
 
 from piighost.models import Detection, Span
 from piighost.utils import find_all_word_boundary
@@ -55,7 +56,12 @@ def _make_schema(labels: list[str]) -> type[BaseModel]:
         A Pydantic model class with an ``entities`` field containing
         a list of items, each with ``text: str`` and ``label: Label``.
     """
-    LabelEnum = Enum("Label", {label: label for label in labels})
+    # pyrefly cannot analyze the functional Enum form when members come from
+    # a runtime-built iterable, so we tell it this is intentional.
+    LabelEnum = Enum(  # type: ignore[invalid-argument]
+        "Label",
+        [(label, label) for label in labels],
+    )
 
     class _Entity(BaseModel):
         """A single extracted entity."""
@@ -135,7 +141,12 @@ class LLMDetector:
             HumanMessage(content=text),
         ]
 
-        result = await self._chain.ainvoke(messages)
+        # with_structured_output wires the chain to return an instance of
+        # self._schema (a dynamically generated Pydantic class with an
+        # ``entities`` field), but LangChain types ainvoke's return as
+        # ``dict | BaseModel``.  Cast to Any so the field access below is
+        # untyped rather than wrongly typed.
+        result = cast(Any, await self._chain.ainvoke(messages))
 
         detections: list[Detection] = []
         for entity in result.entities:

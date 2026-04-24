@@ -20,7 +20,7 @@ def _word_boundary_pattern(fragment: str, flags: int) -> re.Pattern[str]:
 def find_all_word_boundary(
     text: str,
     fragment: str,
-    flags: re.RegexFlag = re.IGNORECASE,
+    flags: int = re.IGNORECASE,
 ) -> list[tuple[int, int]]:
     """Find all word-boundary occurrences of *fragment* in *text*.
 

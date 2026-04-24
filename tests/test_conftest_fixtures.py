@@ -1,6 +1,6 @@
 """Smoke tests for the shared fixtures exposed by tests/conftest.py."""
 
-from aiocache import Cache
+from aiocache import SimpleMemoryCache
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
@@ -26,7 +26,7 @@ class TestFixtureTypes:
     def test_counter_factory(self, counter_factory: CounterPlaceholderFactory) -> None:
         assert isinstance(counter_factory, CounterPlaceholderFactory)
 
-    def test_memory_cache(self, memory_cache: Cache) -> None:
+    def test_memory_cache(self, memory_cache: SimpleMemoryCache) -> None:
         assert memory_cache is not None
 
     def test_patrick_detector(self, patrick_detector: ExactMatchDetector) -> None:
@@ -56,13 +56,13 @@ class TestFixturesWorkEndToEnd:
         assert "<<PERSON_1>>" in result
 
     async def test_memory_cache_is_fresh_per_test_part_1(
-        self, memory_cache: Cache
+        self, memory_cache: SimpleMemoryCache
     ) -> None:
         await memory_cache.set("k", "v1")
         assert await memory_cache.get("k") == "v1"
 
     async def test_memory_cache_is_fresh_per_test_part_2(
-        self, memory_cache: Cache
+        self, memory_cache: SimpleMemoryCache
     ) -> None:
         # The fixture must be a new instance: no leftover from part_1.
         assert await memory_cache.get("k") is None
@@ -71,7 +71,7 @@ class TestFixturesWorkEndToEnd:
         self,
         counter_factory: CounterPlaceholderFactory,
         patrick_detector: ExactMatchDetector,
-        memory_cache: Cache,
+        memory_cache: SimpleMemoryCache,
     ) -> None:
         # Building two pipelines from the same factory would collide in
         # token numbering; the fixture returns a fresh one each test.

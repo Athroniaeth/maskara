@@ -1,7 +1,7 @@
 """Tests for ``AnonymizationPipeline``."""
 
 import pytest
-from aiocache import Cache, BaseCache
+from aiocache import BaseCache, SimpleMemoryCache
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
@@ -84,7 +84,7 @@ class TestDeanonymize:
     """deanonymize() restores text using stored mappings in cache."""
 
     async def test_deanonymize_from_anonymized_text(self) -> None:
-        pipeline = _pipeline([("Patrick", "PERSON")], cache=Cache(Cache.MEMORY))
+        pipeline = _pipeline([("Patrick", "PERSON")], cache=SimpleMemoryCache())
         text = "Bonjour Patrick"
         anonymized, _ = await pipeline.anonymize(text)
         restored, _ = await pipeline.deanonymize(anonymized)
@@ -92,7 +92,7 @@ class TestDeanonymize:
 
     async def test_deanonymize_multiple_entities(self) -> None:
         pipeline = _pipeline(
-            [("Patrick", "PERSON"), ("Paris", "LOCATION")], cache=Cache(Cache.MEMORY)
+            [("Patrick", "PERSON"), ("Paris", "LOCATION")], cache=SimpleMemoryCache()
         )
         text = "Patrick habite à Paris"
         anonymized, _ = await pipeline.anonymize(text)
@@ -100,13 +100,13 @@ class TestDeanonymize:
         assert restored == text
 
     async def test_deanonymize_unknown_text_raises(self) -> None:
-        pipeline = _pipeline([("Patrick", "PERSON")], cache=Cache(Cache.MEMORY))
+        pipeline = _pipeline([("Patrick", "PERSON")], cache=SimpleMemoryCache())
         with pytest.raises(CacheMissError):
             await pipeline.deanonymize("unknown text")
 
     async def test_deanonymize_with_spelling_variants(self) -> None:
         pipeline = _pipeline(
-            [("Patrick", "PERSON"), ("patric", "PERSON")], cache=Cache(Cache.MEMORY)
+            [("Patrick", "PERSON"), ("patric", "PERSON")], cache=SimpleMemoryCache()
         )
         text = "Patrick et patric sont amis"
         anonymized, _ = await pipeline.anonymize(text)
@@ -130,7 +130,7 @@ class TestCache:
     """Detector results are cached via aiocache."""
 
     async def test_cache_avoids_second_detection(self) -> None:
-        cache = Cache(Cache.MEMORY)
+        cache = SimpleMemoryCache()
         pipeline = _pipeline([("Patrick", "PERSON")], cache=cache)
 
         # First call detector runs.
@@ -154,7 +154,7 @@ class TestCache:
         assert call_count == 0
 
     async def test_different_text_not_cached(self) -> None:
-        cache = Cache(Cache.MEMORY)
+        cache = SimpleMemoryCache()
         pipeline = _pipeline([("Patrick", "PERSON")], cache=cache)
 
         await pipeline.anonymize("Bonjour Patrick")
@@ -171,7 +171,7 @@ class TestCacheTTL:
     """``cache_ttl`` is propagated to every cache.set() call."""
 
     async def test_ttl_passed_on_detect_and_anonymization(self) -> None:
-        cache = Cache(Cache.MEMORY)
+        cache = SimpleMemoryCache()
         pipeline = AnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
             anonymizer=Anonymizer(CounterPlaceholderFactory()),
@@ -192,7 +192,7 @@ class TestCacheTTL:
         assert all(ttl == 120 for ttl in observed)
 
     async def test_default_ttl_is_none(self) -> None:
-        cache = Cache(Cache.MEMORY)
+        cache = SimpleMemoryCache()
         pipeline = AnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
             anonymizer=Anonymizer(CounterPlaceholderFactory()),

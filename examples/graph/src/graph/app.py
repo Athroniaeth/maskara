@@ -19,7 +19,7 @@ _src = str(_Path(__file__).parent.parent.resolve())
 if _src not in _sys.path:
     _sys.path.insert(0, _src)
 
-from graph.ttl_sweeper import load_ttl_config, run_sweeper  # ty: ignore[E402]
+from graph.ttl_sweeper import load_ttl_config, run_sweeper  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging

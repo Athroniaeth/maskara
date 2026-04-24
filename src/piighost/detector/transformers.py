@@ -74,11 +74,13 @@ class TransformersDetector(BaseNERDetector):
                     continue
                 label = mapped
 
+            start = int(ent["start"])
+            end = int(ent["end"])
             detections.append(
                 Detection(
-                    text=text[ent["start"] : ent["end"]],
+                    text=text[start:end],
                     label=label,
-                    position=Span(start_pos=ent["start"], end_pos=ent["end"]),
+                    position=Span(start_pos=start, end_pos=end),
                     confidence=float(ent["score"]),
                 )
             )

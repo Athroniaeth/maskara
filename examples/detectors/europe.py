@@ -61,6 +61,14 @@ def create_full_detector() -> CompositeDetector:
 
 
 if __name__ == "__main__":
+    import asyncio
+
+    from piighost.linker.entity import ExactEntityLinker
+    from piighost.pipeline.base import AnonymizationPipeline
+    from piighost.placeholder import CounterPlaceholderFactory
+    from piighost.resolver.entity import MergeEntityConflictResolver
+    from piighost.resolver.span import ConfidenceSpanConflictResolver
+
     text = (
         "Client: Marie Dupont, INSEE 185017512345612, tél 06 12 34 56 78. "
         "IBAN: FR7630006000011234567890189. TVA: FR12345678901. "
@@ -69,13 +77,25 @@ if __name__ == "__main__":
         "Email: marie.dupont@exemple.fr."
     )
 
-    detector = create_full_detector()
-    anonymizer = Anonymizer(detector=detector)
-    result = anonymizer.anonymize(text)
+    pipeline = AnonymizationPipeline(
+        detector=create_full_detector(),
+        span_resolver=ConfidenceSpanConflictResolver(),
+        entity_linker=ExactEntityLinker(),
+        entity_resolver=MergeEntityConflictResolver(),
+        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+    )
 
-    print("=== European PII Detector (common + EU) ===\n")
-    print(f"Original:\n  {result.original_text}\n")
-    print(f"Anonymized:\n  {result.anonymized_text}\n")
-    print("Detected entities:")
-    for p in result.placeholders:
-        print(f"  [{p.label}] {p.original!r} -> {p.replacement}")
+    async def main() -> None:
+        anonymized, entities = await pipeline.anonymize(text)
+
+        print("=== European PII Detector (common + EU) ===\n")
+        print(f"Original:\n  {text}\n")
+        print(f"Anonymized:\n  {anonymized}\n")
+        print("Detected entities:")
+
+        tokens = pipeline.ph_factory.create(entities)
+        for entity, token in tokens.items():
+            canonical = entity.detections[0].text
+            print(f"  [{entity.label}] {canonical!r} -> {token}")
+
+    asyncio.run(main())

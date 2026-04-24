@@ -9,7 +9,7 @@ working unchanged.
 from __future__ import annotations
 
 import pytest
-from aiocache import Cache
+from aiocache import SimpleMemoryCache
 
 from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
@@ -52,9 +52,9 @@ def counter_factory() -> CounterPlaceholderFactory:
 
 
 @pytest.fixture
-def memory_cache() -> Cache:
+def memory_cache() -> SimpleMemoryCache:
     """Fresh in-memory aiocache instance per test (no cross-test leakage)."""
-    return Cache(Cache.MEMORY)
+    return SimpleMemoryCache()
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ def patrick_paris_detector() -> ExactMatchDetector:
 def base_pipeline(
     patrick_paris_detector: ExactMatchDetector,
     counter_factory: CounterPlaceholderFactory,
-    memory_cache: Cache,
+    memory_cache: SimpleMemoryCache,
 ) -> AnonymizationPipeline:
     """Stateless pipeline backed by an isolated in-memory cache."""
     return AnonymizationPipeline(
