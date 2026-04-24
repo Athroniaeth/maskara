@@ -5,6 +5,7 @@ lint:
 	-uv run ruff format .
 	-uv run ruff check --fix .
 	-uv run pyrefly check .
+	-uv run bandit -c pyproject.toml -r src examples scripts
 
 docs-build:
 	uv run python -m zensical build

@@ -9,6 +9,11 @@ Usage:
 
 from piighost.detector import RegexDetector
 
+# Bandit B105 flags this pattern as a hardcoded token because the name contains
+# "TOKEN" and the literal matches the GitHub token format. It is a regex used
+# to *detect* GitHub tokens in text, not a token value.
+_GITHUB_TOKEN_PATTERN = r"\bgh[ps]_[A-Za-z0-9_]{36,}\b"  # nosec B105
+
 PATTERNS: dict[str, str] = {
     "EMAIL": r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
     "IP_V4": r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
@@ -24,7 +29,7 @@ PATTERNS: dict[str, str] = {
     "PHONE_INTERNATIONAL": r"\+\d{1,3}[\s.\-]?\(?\d{1,4}\)?(?:[\s.\-]?\d{1,4}){1,4}",
     "OPENAI_API_KEY": r"sk-(?:proj-)?[A-Za-z0-9\-_]{20,}",
     "AWS_ACCESS_KEY": r"\bAKIA[0-9A-Z]{16}\b",
-    "GITHUB_TOKEN": r"\bgh[ps]_[A-Za-z0-9_]{36,}\b",
+    "GITHUB_TOKEN": _GITHUB_TOKEN_PATTERN,
     "STRIPE_KEY": r"\b[sr]k_(?:live|test)_[A-Za-z0-9]{24,}\b",
 }
 

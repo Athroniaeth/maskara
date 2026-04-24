@@ -93,6 +93,7 @@ dev = [
     "zensical>=0.0.27",
     "commitizen>=4.13.9",
     "pytest-asyncio>=0.25",
+    "bandit>=1.9.4",
 ]
 faker = [
     "faker>=40.11.0",
@@ -127,3 +128,20 @@ markers = [
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+    "benchmarks",
+    ".venv",
+    "examples/graph/.venv",
+    "examples/graph/front",
+    "site",
+    "dist",
+    "docs",
+    ".idea",
+    ".git",
+    ".cache",
+    ".pytest_cache",
+    ".ruff_cache",
+]
