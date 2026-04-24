@@ -45,9 +45,7 @@ class TestFindAllWordBoundary:
         ]
 
     def test_case_sensitive_flag(self):
-        matches = find_all_word_boundary(
-            "Patrick and patrick", "patrick", flags=0
-        )
+        matches = find_all_word_boundary("Patrick and patrick", "patrick", flags=0)
         assert matches == [(12, 19)]
 
     def test_word_boundary_excludes_substring(self):
