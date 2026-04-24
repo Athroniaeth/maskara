@@ -164,6 +164,7 @@ class PIIGhostClient:
         )
         if response.status_code == 404:
             raise CacheMissError(response.json().get("error", "Cache miss"))
+
         response.raise_for_status()
         data = response.json()
         entities = _deserialize_entities(data.get("entities", []))
