@@ -1,7 +1,7 @@
 [project]
 site_name = "PIIGhost"
 site_url = "https://athroniaeth.github.io/piighost/fr/"
-site_description = "Couche d'anonymisation PII pour agents LLM, basée sur GLiNER2"
+site_description = "`piighost` est une bibliothèque Python qui détecte les données personnelles identifiables (PII), les extrait, puis anonymise et désanonymise automatiquement les entités sensibles (noms, lieux, etc.). Elle propose des modules d'anonymisation bidirectionnelle pour les conversations d'agents IA, et s'intègre via un middleware LangChain sans modification de votre code agent existant."
 site_author = "PIIGhost"
 copyright = "Copyright &copy; 2026 contributeurs PIIGhost"
 repo_url = "https://github.com/Athroniaeth/piighost"
