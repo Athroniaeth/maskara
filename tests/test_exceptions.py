@@ -34,8 +34,8 @@ class TestDeanonymizationError:
         assert issubclass(DeanonymizationError, PIIGhostException)
 
     def test_stores_partial_text(self):
-        exc = DeanonymizationError("token missing", partial_text="Hello <<PERSON_1>>")
-        assert exc.partial_text == "Hello <<PERSON_1>>"
+        exc = DeanonymizationError("token missing", partial_text="Hello <<PERSON:1>>")
+        assert exc.partial_text == "Hello <<PERSON:1>>"
         assert str(exc) == "token missing"
 
     def test_raise_and_access_partial(self):

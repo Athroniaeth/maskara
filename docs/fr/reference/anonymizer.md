@@ -30,17 +30,17 @@ Remplace chaque detection dans `text` par le token de son entite. Les remplaceme
 
 ```python
 from piighost.anonymizer import Anonymizer
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.models import Detection, Entity, Span
 
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 entity = Entity(detections=(
     Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),
 ))
 
 result = anonymizer.anonymize("Patrick est gentil", [entity])
-# '<<PERSON_1>> est gentil'
+# '<<PERSON:1>> est gentil'
 ```
 
 #### `deanonymize(anonymized_text, entities) -> str`
@@ -48,7 +48,7 @@ result = anonymizer.anonymize("Patrick est gentil", [entity])
 Restaure le texte original en remplacant les tokens par les textes de detection originaux.
 
 ```python
-original = anonymizer.deanonymize("<<PERSON_1>> est gentil", [entity])
+original = anonymizer.deanonymize("<<PERSON:1>> est gentil", [entity])
 # 'Patrick est gentil'
 ```
 
@@ -127,22 +127,22 @@ class AnyPlaceholderFactory(Protocol):
     def create(self, entities: list[Entity]) -> dict[Entity, str]: ...
 ```
 
-### `CounterPlaceholderFactory`
+### `LabelCounterPlaceholderFactory`
 
-Tags sequentiels `<<LABEL_N>>`.
+Tags sequentiels `<<LABEL:N>>`.
 
 ```python
-factory = CounterPlaceholderFactory()
+factory = LabelCounterPlaceholderFactory()
 tokens = factory.create([person, location])
-# {person: '<<PERSON_1>>', location: '<<LOCATION_1>>'}
+# {person: '<<PERSON:1>>', location: '<<LOCATION:1>>'}
 ```
 
-### `LabeledHashPlaceholderFactory`
+### `LabelHashPlaceholderFactory`
 
 Tags opaques deterministes bases sur SHA-256.
 
 ```python
-factory = LabeledHashPlaceholderFactory(hash_length=8)
+factory = LabelHashPlaceholderFactory(hash_length=8)
 tokens = factory.create([person])
 # {person: '<<PERSON:a1b2c3d4>>'}
 ```

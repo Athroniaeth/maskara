@@ -10,7 +10,7 @@ dépôt avec un modèle de menaces : ce contre quoi `piighost` protège, et ce c
 ## Ce contre quoi `piighost` protège
 
 !!! success "Dans le périmètre de protection"
-    - **Exfiltration vers les LLM tiers** : le LLM ne voit jamais que des placeholders (`<<PERSON_1>>`{ .placeholder }, etc.),
+    - **Exfiltration vers les LLM tiers** : le LLM ne voit jamais que des placeholders (`<<PERSON:1>>`{ .placeholder }, etc.),
       jamais les vraies PII. Même si le prestataire journalise la requête, aucune donnée sensible ne fuit.
     - **Fuite via les appels d'outils** : le middleware désanonymise les arguments d'outil juste avant exécution
       et réanonymise les résultats avant qu'ils ne repartent vers le LLM, de sorte que les vraies valeurs ne

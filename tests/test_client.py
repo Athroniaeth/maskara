@@ -216,7 +216,7 @@ async def test_anonymize_returns_text_and_entities() -> None:
         return httpx.Response(
             200,
             json={
-                "anonymized_text": "<<PERSON_1>> habite ici",
+                "anonymized_text": "<<PERSON:1>> habite ici",
                 "entities": [_entity_payload("Patrick", "PERSON", 0, 7)],
             },
         )
@@ -224,7 +224,7 @@ async def test_anonymize_returns_text_and_entities() -> None:
     async with _make_client(handler) as client:
         text, entities = await client.anonymize("Patrick habite ici")
 
-    assert text == "<<PERSON_1>> habite ici"
+    assert text == "<<PERSON:1>> habite ici"
     assert len(entities) == 1
     assert entities[0].detections[0].text == "Patrick"
 
@@ -259,7 +259,7 @@ async def test_deanonymize_returns_original_text() -> None:
         )
 
     async with _make_client(handler) as client:
-        text, entities = await client.deanonymize("<<PERSON_1>> habite ici")
+        text, entities = await client.deanonymize("<<PERSON:1>> habite ici")
 
     assert text == "Patrick habite ici"
     assert len(entities) == 1
@@ -272,7 +272,7 @@ async def test_deanonymize_raises_cache_miss_on_404() -> None:
 
     async with _make_client(handler) as client:
         with pytest.raises(CacheMissError, match="no mapping for thread"):
-            await client.deanonymize("<<PERSON_1>>")
+            await client.deanonymize("<<PERSON:1>>")
 
 
 @pytest.mark.asyncio
@@ -282,7 +282,7 @@ async def test_deanonymize_404_without_error_key_still_raises() -> None:
 
     async with _make_client(handler) as client:
         with pytest.raises(CacheMissError, match="Cache miss"):
-            await client.deanonymize("<<PERSON_1>>")
+            await client.deanonymize("<<PERSON:1>>")
 
 
 @pytest.mark.asyncio
@@ -292,7 +292,7 @@ async def test_deanonymize_raises_on_other_http_errors() -> None:
 
     async with _make_client(handler) as client:
         with pytest.raises(httpx.HTTPStatusError):
-            await client.deanonymize("<<PERSON_1>>")
+            await client.deanonymize("<<PERSON:1>>")
 
 
 # ---------------------------------------------------------------------------
@@ -311,14 +311,14 @@ async def test_deanonymize_with_ent_returns_plain_text() -> None:
 
     async with _make_client(handler) as client:
         text = await client.deanonymize_with_ent(
-            "Bonjour <<PERSON_1>>", thread_id="t-9"
+            "Bonjour <<PERSON:1>>", thread_id="t-9"
         )
 
     import json
 
     assert text == "Bonjour Patrick"
     assert json.loads(captured["body"]) == {
-        "text": "Bonjour <<PERSON_1>>",
+        "text": "Bonjour <<PERSON:1>>",
         "thread_id": "t-9",
     }
 

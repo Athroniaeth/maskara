@@ -31,7 +31,7 @@ async def main():
             thread_id="user-42",
         )
         print(text)
-        # <<PERSON_1>> lives in <<LOCATION_1>>.
+        # <<PERSON:1>> lives in <<LOCATION:1>>.
 
         try:
             original, _ = await client.deanonymize(text, thread_id="user-42")

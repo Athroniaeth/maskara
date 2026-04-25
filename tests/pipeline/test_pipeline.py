@@ -9,7 +9,7 @@ from piighost.exceptions import CacheMissError
 from piighost.linker.entity import ExactEntityLinker
 from piighost.pipeline.base import AnonymizationPipeline
 from piighost.placeholder import (
-    CounterPlaceholderFactory,
+    LabelCounterPlaceholderFactory,
     LabelPlaceholderFactory,
     AnyPlaceholderFactory,
 )
@@ -30,7 +30,7 @@ def _pipeline(
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(factory or CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(factory or LabelCounterPlaceholderFactory()),
         cache=cache,
     )
 
@@ -46,20 +46,20 @@ class TestAnonymize:
     async def test_single_entity(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
         result, _ = await pipeline.anonymize("Bonjour Patrick")
-        assert result == "Bonjour <<PERSON_1>>"
+        assert result == "Bonjour <<PERSON:1>>"
 
     async def test_multiple_entities(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Paris", "LOCATION")])
         result, _ = await pipeline.anonymize("Patrick habite à Paris")
-        assert "<<PERSON_1>>" in result
-        assert "<<LOCATION_1>>" in result
+        assert "<<PERSON:1>>" in result
+        assert "<<LOCATION:1>>" in result
         assert "Patrick" not in result
         assert "Paris" not in result
 
     async def test_expands_to_all_occurrences(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
         result, _ = await pipeline.anonymize("Patrick est gentil. Patrick habite ici.")
-        assert result.count("<<PERSON_1>>") == 2
+        assert result.count("<<PERSON:1>>") == 2
 
     async def test_no_match_returns_unchanged(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
@@ -135,7 +135,7 @@ class TestCache:
 
         # First call detector runs.
         result1, _ = await pipeline.anonymize("Bonjour Patrick")
-        assert result1 == "Bonjour <<PERSON_1>>"
+        assert result1 == "Bonjour <<PERSON:1>>"
 
         # Spy on the detector to check it's not called again.
         original_detect = pipeline._detector.detect
@@ -150,7 +150,7 @@ class TestCache:
 
         # Second call same text, should use cache.
         result2, _ = await pipeline.anonymize("Bonjour Patrick")
-        assert result2 == "Bonjour <<PERSON_1>>"
+        assert result2 == "Bonjour <<PERSON:1>>"
         assert call_count == 0
 
     async def test_different_text_not_cached(self) -> None:
@@ -159,12 +159,12 @@ class TestCache:
 
         await pipeline.anonymize("Bonjour Patrick")
         result, _ = await pipeline.anonymize("Salut Patrick")
-        assert "<<PERSON_1>>" in result
+        assert "<<PERSON:1>>" in result
 
     async def test_no_cache_still_works(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")], cache=None)
         result, _ = await pipeline.anonymize("Bonjour Patrick")
-        assert result == "Bonjour <<PERSON_1>>"
+        assert result == "Bonjour <<PERSON:1>>"
 
 
 class TestCacheTTL:
@@ -174,7 +174,7 @@ class TestCacheTTL:
         cache = SimpleMemoryCache()
         pipeline = AnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
             cache=cache,
             cache_ttl=120,
         )
@@ -195,7 +195,7 @@ class TestCacheTTL:
         cache = SimpleMemoryCache()
         pipeline = AnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
             cache=cache,
         )
 

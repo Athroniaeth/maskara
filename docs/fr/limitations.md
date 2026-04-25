@@ -40,7 +40,7 @@ sortie du LLM et décidez s'il faut les supprimer, les signaler ou les réanonym
 
 `PIIAnonymizationMiddleware` expose trois stratégies d'appel outil (`FULL`, `INBOUND_ONLY`, `PASSTHROUGH`) via le
 paramètre `tool_strategy`. La frontière outil ne peut pas s'appuyer sur le cache, uniquement sur du remplacement de
-chaîne, donc elle exige des placeholders uniques pour rester réversible. `LabeledHashPlaceholderFactory` est le défaut le
+chaîne, donc elle exige des placeholders uniques pour rester réversible. `LabelHashPlaceholderFactory` est le défaut le
 plus sûr ; `FakerPlaceholderFactory` peut collisionner avec de vraies valeurs dans les réponses d'outils ;
 `LabelPlaceholderFactory` et `MaskPlaceholderFactory` sont rejetés à la construction par
 `ThreadAnonymizationPipeline`.

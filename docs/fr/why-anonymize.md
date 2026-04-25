@@ -144,7 +144,7 @@ Dans ce contexte, la question n'est pas "est-ce que les conversations LLM seront
 
 ### Pourquoi l'anonymisation casse ce graphe
 
-Une PII envoyée en clair devient un nœud dans un graphe potentiel : elle peut être croisée avec des réseaux sociaux, des brèches antérieures, des registres publics ou des bases commerciales, pour ré-identifier, enrichir ou cibler. Un placeholder `<<PERSON_1>>` n'a, lui, aucune valeur d'agrégation. L'anonymisation avant envoi coupe la racine commune à toutes les chaînes d'usage secondaire décrites plus haut.
+Une PII envoyée en clair devient un nœud dans un graphe potentiel : elle peut être croisée avec des réseaux sociaux, des brèches antérieures, des registres publics ou des bases commerciales, pour ré-identifier, enrichir ou cibler. Un placeholder `<<PERSON:1>>` n'a, lui, aucune valeur d'agrégation. L'anonymisation avant envoi coupe la racine commune à toutes les chaînes d'usage secondaire décrites plus haut.
 
 ---
 
@@ -170,7 +170,7 @@ Changer de juridiction en passant à un **provider européen** (Mistral, OVHclou
 
 Enfin, **exécuter le modèle localement** sur votre propre infrastructure (`Ollama`, `vLLM`, `llama.cpp` ou équivalent) supprime entièrement le tiers : aucun provider n'a d'accès technique au contenu, par construction. C'est la protection maximale sur le plan de la confidentialité. La contrepartie est que toute la responsabilité bascule chez vous : sécurité physique et logique, chiffrement au repos, gestion des accès, mises à jour, journalisation. Les modèles ouverts exécutables localement (Llama, Mistral, Qwen, DeepSeek, etc.) peuvent rester en retrait des meilleurs modèles propriétaires sur certaines tâches complexes, bien que l'écart se réduise rapidement.
 
-Le choix du provider continue de compter pour beaucoup de choses : latence, coût, qualité du modèle, conformité RGPD d'ensemble, écosystème d'intégration. Mais **pour le risque spécifique de fuite de PII, l'anonymisation neutralise ce choix**. Si seuls des placeholders comme `<<PERSON_1>>` quittent votre infrastructure, un provider américain ne reçoit rien d'exploitable sur vos données sensibles. Il se retrouve, de ce seul point de vue, équivalent à un modèle exécuté en local.
+Le choix du provider continue de compter pour beaucoup de choses : latence, coût, qualité du modèle, conformité RGPD d'ensemble, écosystème d'intégration. Mais **pour le risque spécifique de fuite de PII, l'anonymisation neutralise ce choix**. Si seuls des placeholders comme `<<PERSON:1>>` quittent votre infrastructure, un provider américain ne reçoit rien d'exploitable sur vos données sensibles. Il se retrouve, de ce seul point de vue, équivalent à un modèle exécuté en local.
 
 ---
 
@@ -210,7 +210,7 @@ Toutes les protections mobilisées jusqu'ici reposent sur des instruments **juri
 | Régulation régionale         | RGPD                                       | Lent à produire des sanctions appliquées sur les LLM     |
 | Hébergement régional         | "Datacenters en Europe"                    | Neutralisé par le CLOUD Act si le provider est américain |
 
-La protection technique fonctionne différemment. Si la donnée personnelle ne quitte jamais votre infrastructure, et que seul un placeholder (par exemple `<<PERSON_1>>`) est envoyé au LLM :
+La protection technique fonctionne différemment. Si la donnée personnelle ne quitte jamais votre infrastructure, et que seul un placeholder (par exemple `<<PERSON:1>>`) est envoyé au LLM :
 
 - aucune injonction ne peut obliger un tiers à divulguer ce qu'il n'a pas,
 - aucun changement d'accord international ne vous affecte,

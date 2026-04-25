@@ -75,7 +75,7 @@ from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.pipeline import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 load_dotenv()
 
@@ -141,7 +141,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = Gliner2Detector(

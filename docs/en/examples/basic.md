@@ -20,7 +20,7 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 # Load the GLiNER2 model
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -29,7 +29,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = Gliner2Detector(
@@ -54,7 +54,7 @@ async def main():
         "Patrick lives in Paris. Patrick loves Paris.",
     )
     print(anonymized)
-    # <<PERSON_1>> lives in <<LOCATION_1>>. <<PERSON_1>> loves <<LOCATION_1>>.
+    # <<PERSON:1>> lives in <<LOCATION:1>>. <<PERSON:1>> loves <<LOCATION:1>>.
 
     # Deanonymize
     original, _ = await pipeline.deanonymize(anonymized)
@@ -69,7 +69,7 @@ asyncio.run(main())
 2. **Resolve Spans**: arbitrates overlaps when several detectors report overlapping positions.
 3. **Link Entities**: groups occurrences of the same PII (case variants, typos, partial mentions).
 4. **Resolve Entities**: merges groups that share a mention across detectors.
-5. **Anonymize**: replaces each entity with a placeholder produced by the factory (here `<<PERSON_1>>`{ .placeholder }, `<<LOCATION_1>>`{ .placeholder }…).
+5. **Anonymize**: replaces each entity with a placeholder produced by the factory (here `<<PERSON:1>>`{ .placeholder }, `<<LOCATION:1>>`{ .placeholder }…).
 
 ---
 
@@ -83,7 +83,7 @@ async def main():
         "Mary Smith works at Acme Corp in Lyon.",
     )
     print(anonymized)
-    # <<PERSON_1>> works at <<ORGANIZATION_1>> in <<LOCATION_1>>.
+    # <<PERSON:1>> works at <<ORGANIZATION:1>> in <<LOCATION:1>>.
 
     for entity in entities:
         canonical = entity.detections[0].text
@@ -106,13 +106,13 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = Gliner2Detector(
@@ -133,22 +133,22 @@ async def conversation():
     # First message: NER detection + entity recording
     r1, _ = await conv_pipeline.anonymize("Patrick is in Paris.")
     print(r1)
-    # <<PERSON_1>> is in <<LOCATION_1>>.
+    # <<PERSON:1>> is in <<LOCATION:1>>.
 
     # Same text again: cache hit (no second NER call)
     r2, _ = await conv_pipeline.anonymize("Patrick is in Paris.")
     print(r2)
-    # <<PERSON_1>> is in <<LOCATION_1>>.
+    # <<PERSON:1>> is in <<LOCATION:1>>.
 
     # String-based deanonymization on any text with tokens
-    restored = await conv_pipeline.deanonymize_with_ent("Hello, <<PERSON_1>>!")
+    restored = await conv_pipeline.deanonymize_with_ent("Hello, <<PERSON:1>>!")
     print(restored)
     # Hello, Patrick!
 
     # String-based reanonymization (original → token)
     reanon = conv_pipeline.anonymize_with_ent("Answer for Patrick in Paris")
     print(reanon)
-    # Answer for <<PERSON_1>> in <<LOCATION_1>>
+    # Answer for <<PERSON:1>> in <<LOCATION:1>>
 
 
 asyncio.run(conversation())
@@ -158,15 +158,15 @@ asyncio.run(conversation())
 
 ## Different placeholder factories
 
-By default, `CounterPlaceholderFactory` generates `<<LABEL_N>>` tags. You can swap it for other strategies:
+By default, `LabelCounterPlaceholderFactory` generates `<<LABEL:N>>` tags. You can swap it for other strategies:
 
 ```python
-from piighost.placeholder import LabeledHashPlaceholderFactory, LabelPlaceholderFactory
+from piighost.placeholder import LabelHashPlaceholderFactory, LabelPlaceholderFactory
 
 # Hash-based: deterministic opaque tags
 pipeline_hash = AnonymizationPipeline(
     ...,
-    anonymizer=Anonymizer(LabeledHashPlaceholderFactory()),
+    anonymizer=Anonymizer(LabelHashPlaceholderFactory()),
 )
 # Produces: <<PERSON:a1b2c3d4>>
 

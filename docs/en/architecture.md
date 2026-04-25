@@ -111,8 +111,8 @@ flowchart LR
     _AnyAnonymizer_`"]:::stage
 
     OUTPUT(["`**Output**
-    _'<<PERSON_1>> lives in <<LOCATION_1>>.
-    <<PERSON_1>> loves <<LOCATION_1>>.'_`"]):::data
+    _'<<PERSON:1>> lives in <<LOCATION:1>>.
+    <<PERSON:1>> loves <<LOCATION:1>>.'_`"]):::data
 
     INPUT --> DETECT
     DETECT -- "list[Detection]" --> RESOLVE_SPANS
@@ -129,8 +129,8 @@ flowchart LR
     _(word-boundary regex)_`"]:::protocol
     P_RESOLVE_ENTITIES["`MergeEntityConflictResolver
     _(union-find merge)_`"]:::protocol
-    P_ANONYMIZE["`Anonymizer + CounterPlaceholderFactory
-    _(<<LABEL_N>> tags)_`"]:::protocol
+    P_ANONYMIZE["`Anonymizer + LabelCounterPlaceholderFactory
+    _(<<LABEL:N>> tags)_`"]:::protocol
 
     P_DETECT -. "implements" .-> DETECT
     P_RESOLVE_SPANS -. "implements" .-> RESOLVE_SPANS
@@ -159,7 +159,7 @@ The provided implementations include `GlinerDetector` (wraps GLiNER2), `ExactMat
 
 ### Stage 5 Anonymize
 
-`AnyAnonymizer` uses a `AnyPlaceholderFactory` to generate tokens (`<<PERSON_1>>`, `<<LOCATION_1>>`) and performs span-based replacement from right to left.
+`AnyAnonymizer` uses a `AnyPlaceholderFactory` to generate tokens (`<<PERSON:1>>`, `<<LOCATION:1>>`) and performs span-based replacement from right to left.
 
 ---
 
@@ -179,14 +179,14 @@ sequenceDiagram
 
     U->>M: "Send an email to Patrick in Paris"
     M->>M: abefore_model()<br/>NER detect + anonymize
-    M->>L: "Send an email to <<PERSON_1>> in <<LOCATION_1>>"
-    L->>M: tool_call(send_email, to=<<PERSON_1>>)
+    M->>L: "Send an email to <<PERSON:1>> in <<LOCATION:1>>"
+    L->>M: tool_call(send_email, to=<<PERSON:1>>)
     M->>M: awrap_tool_call()<br/>deanonymize args
     M->>T: send_email(to="Patrick")
     T->>M: "Email sent to Patrick"
     M->>M: awrap_tool_call()<br/>reanonymize result
-    M->>L: "Email sent to <<PERSON_1>>"
-    L->>M: "Done! Email sent to <<PERSON_1>>."
+    M->>L: "Email sent to <<PERSON:1>>"
+    L->>M: "Done! Email sent to <<PERSON:1>>."
     M->>M: aafter_model()<br/>deanonymize for user
     M->>U: "Done! Email sent to Patrick."
 ```
@@ -223,10 +223,10 @@ Wraps each tool call:
 # Entities persist across messages
 anonymized_1, _ = await conv_pipeline.anonymize("Patrick lives in Paris.")
 anonymized_2, _ = await conv_pipeline.anonymize("Tell me about Patrick.")
-# Both use <<PERSON_1>> for "Patrick"
+# Both use <<PERSON:1>> for "Patrick"
 
 # String-based deanonymization on any text
-await conv_pipeline.deanonymize_with_ent("Hello <<PERSON_1>>")
+await conv_pipeline.deanonymize_with_ent("Hello <<PERSON:1>>")
 # → "Hello Patrick"
 ```
 
@@ -293,7 +293,7 @@ detector = GlinerDetector(...)                    # AnyDetector
 span_resolver = ConfidenceSpanConflictResolver()  # AnySpanConflictResolver
 entity_linker = ExactEntityLinker()               # AnyEntityLinker
 entity_resolver = MergeEntityConflictResolver()   # AnyEntityConflictResolver
-anonymizer = Anonymizer(ph_factory=CounterPlaceholderFactory())  # AnyAnonymizer
+anonymizer = Anonymizer(ph_factory=LabelCounterPlaceholderFactory())  # AnyAnonymizer
 
 pipeline = AnonymizationPipeline(
     detector=detector,

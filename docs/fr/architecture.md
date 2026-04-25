@@ -111,8 +111,8 @@ flowchart LR
     _AnyAnonymizer_`"]:::stage
 
     OUTPUT(["`**Sortie**
-    _'<<PERSON_1>> habite a <<LOCATION_1>>.
-    <<PERSON_1>> aime <<LOCATION_1>>.'_`"]):::data
+    _'<<PERSON:1>> habite a <<LOCATION:1>>.
+    <<PERSON:1>> aime <<LOCATION:1>>.'_`"]):::data
 
     INPUT --> DETECT
     DETECT -- "list[Detection]" --> RESOLVE_SPANS
@@ -129,8 +129,8 @@ flowchart LR
     _(regex word-boundary)_`"]:::protocol
     P_RESOLVE_ENTITIES["`MergeEntityConflictResolver
     _(fusion union-find)_`"]:::protocol
-    P_ANONYMIZE["`Anonymizer + CounterPlaceholderFactory
-    _(tags <<LABEL_N>>)_`"]:::protocol
+    P_ANONYMIZE["`Anonymizer + LabelCounterPlaceholderFactory
+    _(tags <<LABEL:N>>)_`"]:::protocol
 
     P_DETECT -. "implemente" .-> DETECT
     P_RESOLVE_SPANS -. "implemente" .-> RESOLVE_SPANS
@@ -159,7 +159,7 @@ Les implementations fournies incluent `GlinerDetector` (GLiNER2), `ExactMatchDet
 
 ### Etape 5 Anonymize
 
-`AnyAnonymizer` utilise un `AnyPlaceholderFactory` pour generer les tokens (`<<PERSON_1>>`{ .placeholder }, `<<LOCATION_1>>`{ .placeholder }) et effectue le remplacement par spans de droite a gauche.
+`AnyAnonymizer` utilise un `AnyPlaceholderFactory` pour generer les tokens (`<<PERSON:1>>`{ .placeholder }, `<<LOCATION:1>>`{ .placeholder }) et effectue le remplacement par spans de droite a gauche.
 
 ---
 
@@ -179,14 +179,14 @@ sequenceDiagram
 
     U->>M: "Envoie un email a Patrick a Paris"
     M->>M: abefore_model()<br/>NER detect + anonymise
-    M->>L: "Envoie un email a <<PERSON_1>> a <<LOCATION_1>>"
-    L->>M: tool_call(send_email, to=<<PERSON_1>>)
+    M->>L: "Envoie un email a <<PERSON:1>> a <<LOCATION:1>>"
+    L->>M: tool_call(send_email, to=<<PERSON:1>>)
     M->>M: awrap_tool_call()<br/>desanonymise les args
     M->>T: send_email(to="Patrick")
     T->>M: "Email envoye a Patrick"
     M->>M: awrap_tool_call()<br/>reanonymise le resultat
-    M->>L: "Email envoye a <<PERSON_1>>"
-    L->>M: "C'est fait ! Email envoye a <<PERSON_1>>."
+    M->>L: "Email envoye a <<PERSON:1>>"
+    L->>M: "C'est fait ! Email envoye a <<PERSON:1>>."
     M->>M: aafter_model()<br/>desanonymise pour l'utilisateur
     M->>U: "C'est fait ! Email envoye a Patrick."
 ```
@@ -280,7 +280,7 @@ AnonymizationPipeline(
     span_resolver=ConfidenceSpanConflictResolver(),  # AnySpanConflictResolver
     entity_linker=ExactEntityLinker(),               # AnyEntityLinker
     entity_resolver=MergeEntityConflictResolver(),   # AnyEntityConflictResolver
-    anonymizer=Anonymizer(CounterPlaceholderFactory()),  # AnyAnonymizer
+    anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),  # AnyAnonymizer
 )
 ```
 

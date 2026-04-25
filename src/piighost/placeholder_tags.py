@@ -22,7 +22,7 @@ Two **independent axes** organise the taxonomy:
 * **Label** — does the placeholder reveal the entity type?
   ``<PERSON>`` reveals it; ``[REDACT]`` does not.
 * **Identity** — does the placeholder uniquely identify the entity?
-  ``<<PERSON_1>>`` is unique per entity; ``<PERSON>`` collapses every
+  ``<<PERSON:1>>`` is unique per entity; ``<PERSON>`` collapses every
   person.
 
 The four base combinations correspond to four base tags:
@@ -30,7 +30,7 @@ The four base combinations correspond to four base tags:
 * :class:`PreservesNothing`           — neither axis (e.g. ``[REDACT]``)
 * :class:`PreservesLabel`             — label only (e.g. ``<PERSON>``)
 * :class:`PreservesIdentity`          — identity only (e.g. ``[a1b2c3d4]``)
-* :class:`PreservesLabeledIdentity`   — both (e.g. ``<<PERSON_1>>``)
+* :class:`PreservesLabeledIdentity`   — both (e.g. ``<<PERSON:1>>``)
 
 ``PreservesLabeledIdentity`` multi-inherits from both
 ``PreservesLabel`` and ``PreservesIdentity``; via covariance on
@@ -45,7 +45,7 @@ hierarchy: every ``PreservesLabeledIdentity`` is a
 A *realism* sub-axis refines ``PreservesLabeledIdentity``:
 
 * :class:`PreservesLabeledIdentityOpaque`     — clearly synthetic token
-  (``<<PERSON_1>>``, ``<PERSON:a1b2c3d4>``).
+  (``<<PERSON:1>>``, ``<PERSON:a1b2c3d4>``).
 * :class:`PreservesLabeledIdentityRealistic`  — looks like real data.
 * :class:`PreservesLabeledIdentityHashed`     — realistic format with
   hashed content (``a1b2c3d4@anonymized.local``).
@@ -154,7 +154,7 @@ class PreservesLabeledIdentity(PreservesLabel, PreservesIdentity):
 class PreservesLabeledIdentityOpaque(PreservesLabeledIdentity):
     """Labeled, unique, and clearly synthetic.
 
-    Tokens like ``<<PERSON_1>>`` or ``<PERSON:a1b2c3d4>`` cannot be
+    Tokens like ``<<PERSON:1>>`` or ``<PERSON:a1b2c3d4>`` cannot be
     confused with real data, are easy to scan in logs, and never
     coincidentally collide with a real value.
     """

@@ -19,7 +19,7 @@ pipeline = AnonymizationPipeline(detector=detector, anonymizer=Anonymizer())
 async def main():
     anonymized, _ = await pipeline.anonymize("Patrick habite à Paris.")
     print(anonymized)
-    # <<PERSON_1>> habite à <<LOCATION_1>>.
+    # <<PERSON:1>> habite à <<LOCATION:1>>.
 
 
 asyncio.run(main())

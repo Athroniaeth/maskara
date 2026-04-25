@@ -48,7 +48,7 @@ Liaison d'entités (entity linking)
     le même placeholder.
 
 Placeholder
-:   Jeton qui remplace une PII dans le texte anonymisé. Par défaut du type `<<PERSON_1>>`{ .placeholder }, `<<LOCATION_1>>`{ .placeholder }. La
+:   Jeton qui remplace une PII dans le texte anonymisé. Par défaut du type `<<PERSON:1>>`{ .placeholder }, `<<LOCATION:1>>`{ .placeholder }. La
     stratégie de nommage est contrôlée par une `PlaceholderFactory` (compteur, UUID, hash, masqué, caviardé).
 
 Pipeline

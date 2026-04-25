@@ -10,7 +10,7 @@ root with a threat model: what `piighost` protects against, and what it does not
 ## What `piighost` protects against
 
 !!! success "Within the protection scope"
-    - **Exfiltration toward third-party LLMs**: the LLM only ever sees placeholders (`<<PERSON_1>>`{ .placeholder },
+    - **Exfiltration toward third-party LLMs**: the LLM only ever sees placeholders (`<<PERSON:1>>`{ .placeholder },
       etc.), not the real PII. Even if the provider logs the request, no sensitive data is leaked.
     - **Tool-call leakage**: the middleware deanonymizes tool arguments just before execution and re-anonymizes
       results before they go back to the LLM, so the real values never flow through the LLM's visible context.

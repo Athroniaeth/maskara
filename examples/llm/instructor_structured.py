@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from piighost.anonymizer import Anonymizer
 from piighost.detector.gliner2 import Gliner2Detector
 from piighost.pipeline.base import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 
 class Profile(BaseModel):
@@ -75,7 +75,7 @@ def build_pipeline() -> AnonymizationPipeline:
     )
     return AnonymizationPipeline(
         detector=detector,
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
     )
 
 

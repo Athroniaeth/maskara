@@ -23,7 +23,7 @@ from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware, ToolCallStrategy
 from piighost.placeholder import (
-    CounterPlaceholderFactory,
+    LabelCounterPlaceholderFactory,
     MaskPlaceholderFactory,
     LabelPlaceholderFactory,
 )
@@ -69,7 +69,7 @@ def _build_pipeline() -> ThreadAnonymizationPipeline[PreservesIdentity]:
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
     )
 
 
@@ -89,7 +89,7 @@ class TestMiddlewareConversation:
             [
                 # Turn 1: text response with placeholders
                 AIMessage(
-                    content="Bonjour <<PERSON_1>>, que puis-je faire pour vous ?"
+                    content="Bonjour <<PERSON:1>>, que puis-je faire pour vous ?"
                 ),
                 # Turn 2: text response without placeholders
                 AIMessage(
@@ -101,7 +101,7 @@ class TestMiddlewareConversation:
                     tool_calls=[
                         {
                             "name": "get_weather",
-                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "args": {"country_or_city": "<<LOCATION:1>>"},
                             "id": "call_1",
                         }
                     ],
@@ -198,11 +198,11 @@ class TestPipelineConversationFlow:
         )
         assert (
             anonymized_1
-            == "Bonjour, je m'appelle <<PERSON_1>>, j'habite en <<LOCATION_1>>"
+            == "Bonjour, je m'appelle <<PERSON:1>>, j'habite en <<LOCATION:1>>"
         )
 
         # LLM responds (scripted) with placeholders
-        llm_response_1 = "Bonjour <<PERSON_1>>, que puis-je faire pour vous ?"
+        llm_response_1 = "Bonjour <<PERSON:1>>, que puis-je faire pour vous ?"
 
         # aafter_model: deanonymize for user display
         user_sees_1 = await pipeline.deanonymize_with_ent(llm_response_1)
@@ -232,7 +232,7 @@ class TestPipelineConversationFlow:
         assert anonymized_3 == "Donne moi la meteo ou j'habite"
 
         # LLM returns a tool call with placeholder arg
-        tool_arg = "<<LOCATION_1>>"
+        tool_arg = "<<LOCATION:1>>"
 
         # awrap_tool_call: deanonymize arg for the tool
         tool_receives = await pipeline.deanonymize_with_ent(tool_arg)
@@ -244,7 +244,7 @@ class TestPipelineConversationFlow:
 
         # awrap_tool_call: re-anonymize tool response
         tool_result_anon, _ = await pipeline.anonymize(tool_result)
-        assert tool_result_anon == "Il fait beau en <<LOCATION_1>>"
+        assert tool_result_anon == "Il fait beau en <<LOCATION:1>>"
 
         # LLM receives anonymized tool result and responds
         llm_response_3 = "Il fait 22C et ensoleille la ou vous habitez !"
@@ -276,14 +276,14 @@ class TestToolCallNoDoubleEncoding:
                     tool_calls=[
                         {
                             "name": "get_weather",
-                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "args": {"country_or_city": "<<LOCATION:1>>"},
                             "id": "call_1",
                         }
                     ],
                 ),
                 # Turn 1b: final response referencing the placeholder
                 AIMessage(
-                    content="La meteo a <<LOCATION_1>> est de 22C et ensoleillee."
+                    content="La meteo a <<LOCATION:1>> est de 22C et ensoleillee."
                 ),
             ]
         )
@@ -325,25 +325,25 @@ class TestToolCallNoDoubleEncoding:
 
         # abefore_model: anonymize user message
         anon, _ = await pipeline.anonymize("Donne moi la meteo en France")
-        assert "<<LOCATION_1>>" in anon
+        assert "<<LOCATION:1>>" in anon
 
         # awrap_tool_call: deanonymize arg → execute → re-anonymize response
-        tool_arg = await pipeline.deanonymize_with_ent("<<LOCATION_1>>")
+        tool_arg = await pipeline.deanonymize_with_ent("<<LOCATION:1>>")
         assert tool_arg == "France"
 
         tool_result = f"Il fait beau en {tool_arg}"
         tool_anon, _ = await pipeline.anonymize(tool_result)
-        assert tool_anon == "Il fait beau en <<LOCATION_1>>"
+        assert tool_anon == "Il fait beau en <<LOCATION:1>>"
 
         # KEY: abefore_model must NOT re-process the ToolMessage.
-        # If it did, anonymize("Il fait beau en <<LOCATION_1>>") would
-        # detect "LOCATION_1" as PII and produce <<<<LOCATION_1>>>>.
-        reanon, ents = await pipeline.anonymize("Il fait beau en <<LOCATION_1>>")
+        # If it did, anonymize("Il fait beau en <<LOCATION:1>>") would
+        # detect "LOCATION_1" as PII and produce <<<<LOCATION:1>>>>.
+        reanon, ents = await pipeline.anonymize("Il fait beau en <<LOCATION:1>>")
 
         # This documents the bug: NER detects the token text as an entity
         # and double-encodes it. The middleware fix skips ToolMessages
         # in abefore_model to avoid this.
-        if reanon != "Il fait beau en <<LOCATION_1>>":
+        if reanon != "Il fait beau en <<LOCATION:1>>":
             # If this branch runs, it proves why skipping ToolMessages matters
             assert "<<" in reanon and ">>" in reanon
 
@@ -354,12 +354,12 @@ class TestToolCallNoDoubleEncoding:
         await clean_pipeline.anonymize("Donne moi la meteo en France")
 
         # awrap_tool_call only
-        await clean_pipeline.deanonymize_with_ent("<<LOCATION_1>>")
+        await clean_pipeline.deanonymize_with_ent("<<LOCATION:1>>")
         tool_result_clean, _ = await clean_pipeline.anonymize("Il fait beau en France")
 
         # Do NOT re-anonymize the ToolMessage (middleware fix)
         # Directly deanonymize the LLM response
-        llm_response = "La meteo a <<LOCATION_1>> est de 22C et ensoleillee."
+        llm_response = "La meteo a <<LOCATION:1>> est de 22C et ensoleillee."
         user_sees = await clean_pipeline.deanonymize_with_ent(llm_response)
         assert user_sees == "La meteo a France est de 22C et ensoleillee."
 
@@ -384,7 +384,7 @@ class TestNonReversibleFactoryRejected:
     def test_counter_factory_accepted(self) -> None:
         ThreadAnonymizationPipeline(
             detector=ExactMatchDetector([("x", "PERSON")]),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
         )
 
 
@@ -403,7 +403,7 @@ class TestToolCallStrategies:
                     tool_calls=[
                         {
                             "name": "get_weather",
-                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "args": {"country_or_city": "<<LOCATION:1>>"},
                             "id": "call_1",
                         }
                     ],
@@ -438,7 +438,7 @@ class TestToolCallStrategies:
         ]
         assert tool_messages, "expected at least one ToolMessage"
         assert "France" not in tool_messages[-1].content
-        assert "<<LOCATION_1>>" in tool_messages[-1].content
+        assert "<<LOCATION:1>>" in tool_messages[-1].content
 
     async def test_inbound_only_leaves_tool_response_raw(self) -> None:
         """INBOUND_ONLY: tool sees real value; response keeps real value until next abefore_model."""
@@ -452,7 +452,7 @@ class TestToolCallStrategies:
                     tool_calls=[
                         {
                             "name": "get_weather",
-                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "args": {"country_or_city": "<<LOCATION:1>>"},
                             "id": "call_1",
                         }
                     ],
@@ -500,7 +500,7 @@ class TestToolCallStrategies:
                     tool_calls=[
                         {
                             "name": "get_weather",
-                            "args": {"country_or_city": "<<LOCATION_1>>"},
+                            "args": {"country_or_city": "<<LOCATION:1>>"},
                             "id": "call_1",
                         }
                     ],
@@ -529,7 +529,7 @@ class TestToolCallStrategies:
         )
 
         # Tool saw the placeholder, not the real value.
-        assert _tool_calls_log[0]["country_or_city"] == "<<LOCATION_1>>"
+        assert _tool_calls_log[0]["country_or_city"] == "<<LOCATION:1>>"
 
     def test_default_strategy_is_full(self) -> None:
         """Backward compatibility: omitting tool_strategy yields FULL."""

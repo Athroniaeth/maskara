@@ -4,14 +4,18 @@ from piighost.detector.base import AnyDetector, ExactMatchDetector
 from piighost.exceptions import CacheMissError, PIIGhostException
 from piighost.linker.entity import AnyEntityLinker, DisabledEntityLinker
 from piighost.models import Detection, Entity, Span
-from piighost.ph_factory.realistic import RealisticHashPlaceholderFactory
+from piighost.ph_factory.faker_hash import (
+    FakerCounterPlaceholderFactory,
+    FakerHashPlaceholderFactory,
+)
 from piighost.placeholder import (
-    AnonymousHashPlaceholderFactory,
     AnyPlaceholderFactory,
-    CounterPlaceholderFactory,
-    LabeledHashPlaceholderFactory,
+    LabelCounterPlaceholderFactory,
+    LabelHashPlaceholderFactory,
     LabelPlaceholderFactory,
     MaskPlaceholderFactory,
+    RedactCounterPlaceholderFactory,
+    RedactHashPlaceholderFactory,
     RedactPlaceholderFactory,
 )
 from piighost.placeholder_tags import (
@@ -34,7 +38,6 @@ from piighost.resolver.entity import (
 from piighost.resolver.span import AnySpanConflictResolver, DisabledSpanConflictResolver
 
 __all__ = [
-    "AnonymousHashPlaceholderFactory",
     "AnyAnonymizer",
     "AnyDetector",
     "AnyEntityConflictResolver",
@@ -43,15 +46,17 @@ __all__ = [
     "AnySpanConflictResolver",
     "Anonymizer",
     "CacheMissError",
-    "CounterPlaceholderFactory",
     "Detection",
     "DisabledEntityConflictResolver",
     "DisabledEntityLinker",
     "DisabledSpanConflictResolver",
     "Entity",
     "ExactMatchDetector",
+    "FakerCounterPlaceholderFactory",
+    "FakerHashPlaceholderFactory",
+    "LabelCounterPlaceholderFactory",
+    "LabelHashPlaceholderFactory",
     "LabelPlaceholderFactory",
-    "LabeledHashPlaceholderFactory",
     "MaskPlaceholderFactory",
     "PIIGhostException",
     "PlaceholderPreservation",
@@ -65,7 +70,8 @@ __all__ = [
     "PreservesLabeledIdentityRealistic",
     "PreservesNothing",
     "PreservesShape",
-    "RealisticHashPlaceholderFactory",
+    "RedactCounterPlaceholderFactory",
+    "RedactHashPlaceholderFactory",
     "RedactPlaceholderFactory",
     "Span",
     "labels",

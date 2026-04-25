@@ -65,7 +65,7 @@ Called before each LLM call. Anonymizes all messages in the conversation via `pi
 # [HumanMessage("Send an email to Patrick in Paris")]
 
 # After abefore_model:
-# [HumanMessage("Send an email to <<PERSON_1>> in <<LOCATION_1>>")]
+# [HumanMessage("Send an email to <<PERSON:1>> in <<LOCATION:1>>")]
 ```
 
 **Returns**: `{"messages": [...]}` if modifications were made, `None` otherwise.
@@ -78,7 +78,7 @@ Called after each LLM response. Deanonymizes all messages so the user sees real 
 
 ```python
 # Before aafter_model:
-# [AIMessage("Done! Email sent to <<PERSON_1>>.")]
+# [AIMessage("Done! Email sent to <<PERSON:1>>.")]
 
 # After aafter_model:
 # [AIMessage("Done! Email sent to Patrick.")]
@@ -97,12 +97,12 @@ Wraps each tool call in 3 steps:
 3. **Reanonymizes** the tool response via `pipeline.anonymize()` → the LLM never sees personal data
 
 ```python
-# LLM calls : send_email(to="<<PERSON_1>>", subject="Hello")
+# LLM calls : send_email(to="<<PERSON:1>>", subject="Hello")
 #                      ↓  deanonymize args
 # Tool gets  : send_email(to="Patrick", subject="Hello")
 # Tool returns: "Email successfully sent to Patrick."
 #                      ↓  reanonymize response
-# LLM sees   : "Email successfully sent to <<PERSON_1>>."
+# LLM sees   : "Email successfully sent to <<PERSON:1>>."
 ```
 
 Only `str` arguments are deanonymized. Non-string types are passed through unchanged.
@@ -164,7 +164,7 @@ from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
 from piighost.pipeline import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 
 @tool
@@ -179,7 +179,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = Gliner2Detector(

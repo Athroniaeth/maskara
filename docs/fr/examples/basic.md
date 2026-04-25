@@ -20,7 +20,7 @@ from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 # Charger le modele GLiNER2
@@ -31,7 +31,7 @@ detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 # Assembler le pipeline
 pipeline = AnonymizationPipeline(
@@ -49,7 +49,7 @@ async def main():
         "Patrick habite a Paris. Patrick aime Paris.",
     )
     print(anonymized)
-    # <<PERSON_1>> habite a <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
+    # <<PERSON:1>> habite a <<LOCATION:1>>. <<PERSON:1>> aime <<LOCATION:1>>.
 
     # Desanonymiser
     original, _ = await pipeline.deanonymize(anonymized)
@@ -64,7 +64,7 @@ asyncio.run(main())
 2. **Résoudre les spans** : arbitre les chevauchements lorsque plusieurs détecteurs rapportent des positions qui se recouvrent.
 3. **Lier les entités** : regroupe les occurrences d'une même PII (variantes de casse, typos, mentions partielles).
 4. **Résoudre les entités** : fusionne les groupes qui partagent une mention entre détecteurs.
-5. **Anonymiser** : remplace chaque entité par un placeholder produit par la factory (ici `<<PERSON_1>>`{ .placeholder }, `<<LOCATION_1>>`{ .placeholder }…).
+5. **Anonymiser** : remplace chaque entité par un placeholder produit par la factory (ici `<<PERSON:1>>`{ .placeholder }, `<<LOCATION:1>>`{ .placeholder }…).
 
 ---
 
@@ -78,7 +78,7 @@ async def main():
         "Marie Dupont travaille chez Acme Corp a Lyon.",
     )
     print(anonymized)
-    # <<PERSON_1>> travaille chez <<ORGANIZATION_1>> a <<LOCATION_1>>.
+    # <<PERSON:1>> travaille chez <<ORGANIZATION:1>> a <<LOCATION:1>>.
 
     for entity in entities:
         canonical = entity.detections[0].text
@@ -101,14 +101,14 @@ from piighost.pipeline import ThreadAnonymizationPipeline
 from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold=0.5)
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 conv_pipeline = ThreadAnonymizationPipeline(
     detector=detector,
@@ -123,22 +123,22 @@ async def conversation():
     # Premier message : detection NER + mise en cache
     r1, _ = await conv_pipeline.anonymize("Patrick est a Paris.")
     print(r1)
-    # <<PERSON_1>> est a <<LOCATION_1>>.
+    # <<PERSON:1>> est a <<LOCATION:1>>.
 
     # Meme texte : cache hit (pas de second appel NER)
     r2, _ = await conv_pipeline.anonymize("Patrick est a Paris.")
     print(r2)
-    # <<PERSON_1>> est a <<LOCATION_1>>.
+    # <<PERSON:1>> est a <<LOCATION:1>>.
 
     # Desanonymiser n'importe quelle chaine avec tokens (async)
-    restored = await conv_pipeline.deanonymize_with_ent("Bonjour, <<PERSON_1>> !")
+    restored = await conv_pipeline.deanonymize_with_ent("Bonjour, <<PERSON:1>> !")
     print(restored)
     # Bonjour, Patrick !
 
     # Reanonymiser (original → token)
     reanon = conv_pipeline.anonymize_with_ent("Reponse pour Patrick a Paris")
     print(reanon)
-    # Reponse pour <<PERSON_1>> a <<LOCATION_1>>
+    # Reponse pour <<PERSON:1>> a <<LOCATION:1>>
 
 
 asyncio.run(conversation())
@@ -148,15 +148,15 @@ asyncio.run(conversation())
 
 ## Differentes placeholder factories
 
-Par defaut, `CounterPlaceholderFactory` genere des tags `<<LABEL_N>>`. Vous pouvez changer de strategie :
+Par defaut, `LabelCounterPlaceholderFactory` genere des tags `<<LABEL:N>>`. Vous pouvez changer de strategie :
 
 ```python
-from piighost.placeholder import LabeledHashPlaceholderFactory, LabelPlaceholderFactory
+from piighost.placeholder import LabelHashPlaceholderFactory, LabelPlaceholderFactory
 
 # Hash : tags opaques deterministes
 pipeline_hash = AnonymizationPipeline(
     ...,
-    anonymizer=Anonymizer(LabeledHashPlaceholderFactory()),
+    anonymizer=Anonymizer(LabelHashPlaceholderFactory()),
 )
 # Produit : <<PERSON:a1b2c3d4>>
 

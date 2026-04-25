@@ -94,11 +94,11 @@ Use `---` between major sections sparingly. Once between blocks is fine, two in 
 The project normalises placeholder examples along a single rule:
 
 - **Synthetic placeholders that do not replicate a PII** (Redact, Type, Type+id, Id-only) wrap the content in `<<` / `>>` so the LLM sees an unambiguous token.
-  Examples: `<<REDACT>>`, `<<PERSON>>`, `<<EMAIL>>`, `<<PERSON_1>>`, `<<PERSON:a1b2c3d4>>`, `<<REDACT:a1b2c3d4>>`.
+  Examples: `<<REDACT>>`, `<<PERSON>>`, `<<EMAIL>>`, `<<PERSON:1>>`, `<<PERSON:a1b2c3d4>>`, `<<REDACT:a1b2c3d4>>`.
 - **Realistic placeholders that replicate a PII format** (Realistic-hashed, Faker, masked) keep no delimiters — the whole point is to look like a real value.
   Examples: `Patient_a1b2c3d4`, `a1b2c3d4@anonymized.local`, `john.doe@example.com`, `Jean Dupont`, `j***@mail.com`, `****4567`.
 
-The built-in factories follow this rule: `LabelPlaceholderFactory` emits `<<PERSON>>`, `LabeledHashPlaceholderFactory` emits `<<PERSON:a1b2c3d4>>`, `CounterPlaceholderFactory` emits `<<PERSON_1>>`, `MaskPlaceholderFactory` emits `j***@mail.com`, `FakerPlaceholderFactory` emits `john.doe@example.com`. Apply the same convention in any new doc example or new factory.
+The built-in factories follow this rule: `LabelPlaceholderFactory` emits `<<PERSON>>`, `LabelHashPlaceholderFactory` emits `<<PERSON:a1b2c3d4>>`, `LabelCounterPlaceholderFactory` emits `<<PERSON:1>>`, `MaskPlaceholderFactory` emits `j***@mail.com`, `FakerPlaceholderFactory` emits `john.doe@example.com`. Apply the same convention in any new doc example or new factory.
 
 ## Highlighting PII and placeholders inline
 
@@ -110,17 +110,17 @@ Two CSS classes defined in `stylesheets/extra.css`:
 Apply via `pymdownx.attr_list` *after* a backticked span (note the literal space between the backtick and the brace):
 
 ```markdown
-Le pipeline transmet `<<PERSON_1>>`{ .placeholder } à la place de `Patrick`{ .pii }.
+Le pipeline transmet `<<PERSON:1>>`{ .placeholder } à la place de `Patrick`{ .pii }.
 ```
 
 When to tag:
 
 | Inline code | Tag |
 |---|---|
-| Synthetic placeholder that does **not** replicate a real PII (use `<<...>>` delimiters): `<<PERSON_1>>`, `<<PERSON:a1b2c3d4>>`, `<<PERSON>>`, `<<EMAIL>>`, `<<REDACT>>`, `<<REDACT:a1b2c3d4>>` | `{ .placeholder }` |
+| Synthetic placeholder that does **not** replicate a real PII (use `<<...>>` delimiters): `<<PERSON:1>>`, `<<PERSON:a1b2c3d4>>`, `<<PERSON>>`, `<<EMAIL>>`, `<<REDACT>>`, `<<REDACT:a1b2c3d4>>` | `{ .placeholder }` |
 | Placeholder that **replicates** a real PII format (no delimiters): `j***@mail.com`, `john.doe@example.com`, `Jean Dupont`, `+33 6 12 34 56 78`, `a1b2c3d4@anonymized.local`, `Patient_a1b2c3d4` | `{ .placeholder }` |
 | Raw PII example: `Patrick`, `Marie`, `Paris` (when used as a value to anonymise) | `{ .pii }` |
-| Class / tag / method / parameter name: `LabeledHashPlaceholderFactory`, `PreservesIdentity`, `abefore_model`, `tool_strategy` | none — plain inline code |
+| Class / tag / method / parameter name: `LabelHashPlaceholderFactory`, `PreservesIdentity`, `abefore_model`, `tool_strategy` | none — plain inline code |
 
 ## Mermaid diagrams
 

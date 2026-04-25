@@ -45,8 +45,8 @@ Entity linking
     the same placeholder.
 
 Placeholder
-:   The token that replaces a PII in the anonymized text. Defaults look like `<<PERSON_1>>`{ .placeholder },
-    `<<LOCATION_1>>`{ .placeholder }. The naming strategy is controlled by a `PlaceholderFactory` (counter-based,
+:   The token that replaces a PII in the anonymized text. Defaults look like `<<PERSON:1>>`{ .placeholder },
+    `<<LOCATION:1>>`{ .placeholder }. The naming strategy is controlled by a `PlaceholderFactory` (counter-based,
     UUID, hashed, redacted, masked).
 
 Pipeline

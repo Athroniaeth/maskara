@@ -20,13 +20,13 @@ from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -37,7 +37,7 @@ pipeline = AnonymizationPipeline(
 )
 
 anonymized, entities = await pipeline.anonymize("Patrick lives in Paris.")
-assert anonymized == "<<PERSON_1>> lives in <<LOCATION_1>>."
+assert anonymized == "<<PERSON:1>> lives in <<LOCATION:1>>."
 ```
 
 ---
@@ -51,7 +51,7 @@ from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 
 @pytest.mark.asyncio
@@ -60,7 +60,7 @@ async def test_my_pipeline():
     span_resolver = ConfidenceSpanConflictResolver()
     entity_linker = ExactEntityLinker()
     entity_resolver = MergeEntityConflictResolver()
-    anonymizer = Anonymizer(CounterPlaceholderFactory())
+    anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
     pipeline = AnonymizationPipeline(
         detector=detector,
@@ -71,7 +71,7 @@ async def test_my_pipeline():
     )
 
     anonymized, entities = await pipeline.anonymize("Alice lives in Lyon.")
-    assert "<<PERSON_1>>" in anonymized
+    assert "<<PERSON:1>>" in anonymized
     assert "Alice" not in anonymized
 ```
 

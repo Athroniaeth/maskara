@@ -72,7 +72,7 @@ Chaque approche a ses failles propres, et les modèles NER en ajoutent quelques-
 Même en corrigeant ces défauts, il reste plusieurs problèmes de fond :
 
 - **Cohérence des placeholders** : toutes les occurrences d'un même PII doivent être anonymisées de la même manière
-  (ex. `<<PERSON_1>>`{ .placeholder } pour `Patrick`{ .pii } dans tout le texte), afin de préserver l'information
+  (ex. `<<PERSON:1>>`{ .placeholder } pour `Patrick`{ .pii } dans tout le texte), afin de préserver l'information
   qu'il s'agit de la même entité tout en protégeant la confidentialité.
 - **Liaison floue** : il faut pouvoir lier des détections qui ne sont pas strictement identiques, par exemple
   `Patrick`{ .pii } et `patrick`{ .pii } (différence de casse), `Patric`{ .pii } (faute d'orthographe), ou encore
@@ -165,7 +165,7 @@ Entrée :
 
 Sortie :
 
-> `<<PERSON_1>>`{ .placeholder } habite à `<<LOCATION_1>>`{ .placeholder }. `<<PERSON_1>>`{ .placeholder } adore `<<LOCATION_1>>`{ .placeholder }.
+> `<<PERSON:1>>`{ .placeholder } habite à `<<LOCATION:1>>`{ .placeholder }. `<<PERSON:1>>`{ .placeholder } adore `<<LOCATION:1>>`{ .placeholder }.
 
 Les deux occurrences de `Patrick`{ .pii } sont reliées, idem pour `Paris`{ .pii }. Dans une conversation, les
 messages suivants réutilisent les mêmes placeholders, et la désanonymisation est automatique pour l'utilisateur final.

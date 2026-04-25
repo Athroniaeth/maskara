@@ -20,14 +20,14 @@ from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 detector = ExactMatchDetector([("Patrick", "PERSON"), ("Paris", "LOCATION")])
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -38,7 +38,7 @@ pipeline = AnonymizationPipeline(
 )
 
 anonymized, entities = await pipeline.anonymize("Patrick habite à Paris.")
-assert anonymized == "<<PERSON_1>> habite à <<LOCATION_1>>."
+assert anonymized == "<<PERSON:1>> habite à <<LOCATION:1>>."
 ```
 
 ---
@@ -52,7 +52,7 @@ from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 
@@ -62,7 +62,7 @@ async def test_my_pipeline():
     span_resolver = ConfidenceSpanConflictResolver()
     entity_linker = ExactEntityLinker()
     entity_resolver = MergeEntityConflictResolver()
-    anonymizer = Anonymizer(CounterPlaceholderFactory())
+    anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
     pipeline = AnonymizationPipeline(
         detector=detector,
@@ -73,7 +73,7 @@ async def test_my_pipeline():
     )
 
     anonymized, entities = await pipeline.anonymize("Alice habite à Lyon.")
-    assert "<<PERSON_1>>" in anonymized
+    assert "<<PERSON:1>>" in anonymized
     assert "Alice" not in anonymized
 ```
 

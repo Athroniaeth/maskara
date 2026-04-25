@@ -4,7 +4,7 @@ from typing_extensions import TypeVar
 
 from piighost.exceptions import DeanonymizationError
 from piighost.models import Entity, Span
-from piighost.placeholder import AnyPlaceholderFactory, CounterPlaceholderFactory
+from piighost.placeholder import AnyPlaceholderFactory, LabelCounterPlaceholderFactory
 from piighost.placeholder_tags import PlaceholderPreservation
 
 PreservationT = TypeVar(
@@ -65,13 +65,13 @@ class Anonymizer(Generic[PreservationT]):
 
     Example:
         >>> from piighost.models import Detection, Entity, Span
-        >>> from piighost.placeholder import CounterPlaceholderFactory
+        >>> from piighost.placeholder import LabelCounterPlaceholderFactory
         >>> entity = Entity(detections=[
         ...     Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),
         ... ])
-        >>> anonymizer = Anonymizer(CounterPlaceholderFactory())
+        >>> anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
         >>> anonymizer.anonymize("Patrick est gentil", [entity])
-        '<<PERSON_1>> est gentil'
+        '<<PERSON:1>> est gentil'
     """
 
     ph_factory: AnyPlaceholderFactory[PreservationT]
@@ -80,7 +80,7 @@ class Anonymizer(Generic[PreservationT]):
         self,
         ph_factory: AnyPlaceholderFactory[PreservationT] | None = None,
     ) -> None:
-        self.ph_factory = ph_factory or CounterPlaceholderFactory()  # type: ignore[assignment]
+        self.ph_factory = ph_factory or LabelCounterPlaceholderFactory()  # type: ignore[assignment]
 
     def anonymize(self, text: str, entities: list[Entity]) -> str:
         """Replace each detection in the text with its entity's token.

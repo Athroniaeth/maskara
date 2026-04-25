@@ -14,7 +14,7 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 from gliner2 import GLiNER2
 
@@ -22,7 +22,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -43,24 +43,24 @@ pipeline = ThreadAnonymizationPipeline(
 async def conversation():
     # Premier message : détection NER + enregistrement des entités
     # la pipeline garde en mémoire que l'entrée et la sortie sont liées,
-    # et que <<PERSON_1>> correspond à "Patrick" et <<LOCATION_1>> à "Paris"
+    # et que <<PERSON:1>> correspond à "Patrick" et <<LOCATION:1>> à "Paris"
     anonymized, _ = await pipeline.anonymize("Patrick habite à Paris.")
     print(anonymized)
-    # <<PERSON_1>> habite à <<LOCATION_1>>.
+    # <<PERSON:1>> habite à <<LOCATION:1>>.
 
     # Désanonymisation via la correspondance stockée dans le cache de la pipeline
-    restored = await pipeline.deanonymize("Bonjour <<PERSON_1>> !")
+    restored = await pipeline.deanonymize("Bonjour <<PERSON:1>> !")
     print(restored)
 
     # Désanonymisation par remplacement de texte, utilisant les anciennes détections stockées en mémoire
-    restored = await pipeline.deanonymize_with_ent("Bonjour <<PERSON_1>> !")
+    restored = await pipeline.deanonymize_with_ent("Bonjour <<PERSON:1>> !")
     print(restored)
     # Bonjour Patrick !
 
     # Réanonymisation par remplacement de texte, utilisant les anciennes détections stockées en mémoire
     reanon = pipeline.anonymize_with_ent("Résultat pour Patrick à Paris")
     print(reanon)
-    # Résultat pour <<PERSON_1>> à <<LOCATION_1>>
+    # Résultat pour <<PERSON:1>> à <<LOCATION:1>>
 
 
 asyncio.run(conversation())

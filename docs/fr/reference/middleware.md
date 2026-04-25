@@ -121,7 +121,7 @@ from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 
@@ -137,7 +137,7 @@ detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,

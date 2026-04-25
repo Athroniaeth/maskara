@@ -4,7 +4,7 @@ icon: lucide/replace
 
 # Placeholder factories
 
-A **placeholder** is the synthetic placeholder that takes the place of a detected PII before the text is handed to the LLM. Instead of sending `"Patrick lives in Paris"` to the LLM, the pipeline sends `"<<PERSON_1>> lives in <<LOCATION_1>>"`. The original values stay in the cache and the conversation memory; the LLM never sees them.
+A **placeholder** is the synthetic placeholder that takes the place of a detected PII before the text is handed to the LLM. Instead of sending `"Patrick lives in Paris"` to the LLM, the pipeline sends `"<<PERSON:1>> lives in <<LOCATION:1>>"`. The original values stay in the cache and the conversation memory; the LLM never sees them.
 
 !!! note "Why the name 'placeholder factory'?"
 
@@ -14,14 +14,14 @@ A **placeholder** is the synthetic placeholder that takes the place of a detecte
 
     Placeholders used throughout this documentation and produced by the built-in factories follow a simple convention:
 
-    - **Synthetic placeholder** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<REDACT:a1b2c3d4>>`{ .placeholder }. The delimiters serve two purposes: an LLM (or a human re-reading) will never mistake the placeholder for a regular word or for an HTML/XML tag the model might emit; and the middleware can perform `str.replace` reliably during deanonymisation (see [Tool-call strategies](tool-call-strategies.md) for why this matters).
+    - **Synthetic placeholder** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON:1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<REDACT:a1b2c3d4>>`{ .placeholder }. The delimiters serve two purposes: an LLM (or a human re-reading) will never mistake the placeholder for a regular word or for an HTML/XML tag the model might emit; and the middleware can perform `str.replace` reliably during deanonymisation (see [Tool-call strategies](tool-call-strategies.md) for why this matters).
     - **Placeholder that replicates a PII format** (Faker, realistic hashed, masked): no delimiters. Examples: `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. The absence of delimiters is deliberate: the goal is precisely to look natural so a downstream tool that validates a format (email regex, card length) still accepts the placeholder.
 
     The rule also applies to any factory you write yourself: purely opaque placeholder? wrap it. Placeholder that mimics a real value? leave it raw.
 
 A **placeholder factory** decides what those placeholders look like and how much information they carry. Two questions structure the choice:
 
-1. *Are placeholders unique per entity?* `Patrick`{ .pii } and `Marie`{ .pii } should not both collapse onto a generic `<<PERSON>>`{ .placeholder }, otherwise the LLM cannot tell them apart. A unique placeholder per entity lets the LLM reason about relations between entities: *"is the manager the same person as `Patrick`{ .pii }?"* becomes *"is `<<PERSON_1>>`{ .placeholder } the same as `<<PERSON_2>>`{ .placeholder }?"* and gets a clear answer.
+1. *Are placeholders unique per entity?* `Patrick`{ .pii } and `Marie`{ .pii } should not both collapse onto a generic `<<PERSON>>`{ .placeholder }, otherwise the LLM cannot tell them apart. A unique placeholder per entity lets the LLM reason about relations between entities: *"is the manager the same person as `Patrick`{ .pii }?"* becomes *"is `<<PERSON:1>>`{ .placeholder } the same as `<<PERSON:2>>`{ .placeholder }?"* and gets a clear answer.
 2. *Are placeholders reversible?* Given a placeholder alone, can the original value be recovered without consulting the cache? This is the precondition for the middleware's string-replacement step on tool arguments. If two placeholders collapse onto the same `<<PERSON>>`{ .placeholder }, there is no way to know which original to restore.
 
 Seven families of factories sit at different points on that spectrum, and the choice has direct consequences on which `ToolCallStrategy` you can use safely. See [Tool-call strategies](tool-call-strategies.md) for the runtime side.
@@ -29,7 +29,7 @@ Seven families of factories sit at different points on that spectrum, and the ch
 - **No information** (`<<REDACT>>`{ .placeholder }): a constant placeholder that reveals nothing to the LLM. Classic redaction. No reasoning possible on entities (the LLM cannot tell that the value was a city, so it cannot decide to call `get_weather`).
 - **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }): a unique hash per entity, without revealing the type. The LLM sees that two distinct entities exist but cannot tell whether they are persons, emails, or credit cards. Keeps reversibility on the tool side without giving any semantic hint to the model.
 - **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }): the type is revealed but not the identity. Multiple persons in the same conversation collapse onto the same `<<PERSON>>`{ .placeholder } placeholder, so cross-references break.
-- **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }): type revealed, stable identity, clearly synthetic placeholder. The LLM can tell that `<<PERSON_1>>`{ .placeholder } and `<<PERSON_2>>`{ .placeholder } are different people. Unique, so reversible by string replacement.
+- **Type + id (opaque)** (`<<PERSON:1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }): type revealed, stable identity, clearly synthetic placeholder. The LLM can tell that `<<PERSON:1>>`{ .placeholder } and `<<PERSON:2>>`{ .placeholder } are different people. Unique, so reversible by string replacement.
 - **Type + partial value** (`p***@mail.com`{ .placeholder }): the format is preserved but real content is partially visible. The LLM sees that it is an email, may guess the domain, but cannot recover the full address. Riskier on privacy (real fragments leak) and reversibility (collisions possible).
 - **Type + id (Faker)** (`john.doe@gmail.com`{ .placeholder }): a fully plausible fake value. Natural-looking output, but exposes a coincidental-collision risk with a real-world value.
 - **Type + id (realistic hashed)** (`a1b2c3d4@anonymized.local`{ .placeholder }): a realistic fake value with a hash guaranteeing uniqueness. Combines the realistic format with a guarantee of non-collision.
@@ -48,7 +48,7 @@ Built-in: `RedactPlaceholderFactory` (output: `<<REDACT>>`{ .placeholder } by de
 
 `<<REDACT:a1b2c3d4>>`{ .placeholder }. Original trade-off: the placeholder keeps the synthetic `<<...>>` shape but does not reveal the label; it does carry a unique hash per entity. The LLM cannot tell whether the entity is a person, an email, or a credit card, but it can see that `<<REDACT:a1b2c3d4>>`{ .placeholder } and `<<REDACT:ef98abcd>>`{ .placeholder } are two distinct entities. One of the most protective levels while remaining usable on the tool side (the hash is unique, so string replacement works).
 
-Built-in: `AnonymousHashPlaceholderFactory` (output: `<<REDACT:a1b2c3d4>>`{ .placeholder }, prefix configurable). Tag `PreservesIdentityOnly` (under `PreservesIdentity`). The middleware accepts this factory like any other identity-preserving factory through covariance.
+Built-in: `RedactHashPlaceholderFactory` (output: `<<REDACT:a1b2c3d4>>`{ .placeholder }, prefix configurable). Tag `PreservesIdentityOnly` (under `PreservesIdentity`). The middleware accepts this factory like any other identity-preserving factory through covariance.
 
 ### Type only: known type, identities collapsed
 
@@ -58,19 +58,19 @@ Built-in: `LabelPlaceholderFactory` (output: `<<PERSON>>`{ .placeholder }). Tag 
 
 ### Type + id (opaque)
 
-`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }. The string clearly is *not* a person, an email, or a card number, it's a placeholder. The LLM cannot mistake it for real data, audit logs are easy to scan, and there is **zero chance** of collision with a real value. Trade-off: a strict downstream prompt or tool that validates "argument must look like an email" will reject these placeholders.
+`<<PERSON:1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }. The string clearly is *not* a person, an email, or a card number, it's a placeholder. The LLM cannot mistake it for real data, audit logs are easy to scan, and there is **zero chance** of collision with a real value. Trade-off: a strict downstream prompt or tool that validates "argument must look like an email" will reject these placeholders.
 
-Built-in: `CounterPlaceholderFactory` (`<<PERSON_1>>`{ .placeholder }), `LabeledHashPlaceholderFactory` (`<<PERSON:a1b2c3d4>>`{ .placeholder }). Tag `PreservesLabeledIdentityOpaque`.
+Built-in: `LabelCounterPlaceholderFactory` (`<<PERSON:1>>`{ .placeholder }), `LabelHashPlaceholderFactory` (`<<PERSON:a1b2c3d4>>`{ .placeholder }). Tag `PreservesLabeledIdentityOpaque`.
 
 ### Type + id (realistic hashed)
 
 A custom factory can produce values that **look like the original format** but whose content is driven by a hash, e.g. `a1b2c3d4@anonymized.local`{ .placeholder } for an email, or `Patient_a1b2c3d4`{ .placeholder } for a name. The placeholder passes basic format validation (email regex, length, allowed characters), so downstream tools and prompt templates that expect a real-looking value still work. Because the content is a hash, the placeholder is **unique and impossible to coincidentally match** an existing real value.
 
-Built-in: `RealisticHashPlaceholderFactory` (configured with a `label -> strategy` mapping that must cover every label your detector emits, **no fallback**: an unknown label raises `ValueError`). Tag `PreservesLabeledIdentityHashed`. See *Writing your own* below for a complete example.
+Built-in: `FakerHashPlaceholderFactory` (configured with a `label -> strategy` mapping that must cover every label your detector emits, **no fallback**: an unknown label raises `ValueError`). Tag `PreservesLabeledIdentityHashed`. See *Writing your own* below for a complete example.
 
 ### Type + id (Faker)
 
-`FakerPlaceholderFactory` returns fully plausible fake data: `john.doe@example.com`{ .placeholder }, `Jean Dupont`{ .placeholder }, `+33 6 12 34 56 78`{ .placeholder }. The LLM cannot tell that the value was anonymised, which is sometimes exactly what you want (clean drafts, no `<<PERSON_1>>`{ .placeholder } strings showing up in user-visible text). Two specific risks come with this:
+`FakerPlaceholderFactory` returns fully plausible fake data: `john.doe@example.com`{ .placeholder }, `Jean Dupont`{ .placeholder }, `+33 6 12 34 56 78`{ .placeholder }. The LLM cannot tell that the value was anonymised, which is sometimes exactly what you want (clean drafts, no `<<PERSON:1>>`{ .placeholder } strings showing up in user-visible text). Two specific risks come with this:
 
 1. **Coincidental collision with real values.** A Faker email could land on a real person's actual email address. If a tool response then contains that real address, the deanonymisation step cannot tell whether it should be replaced or left alone.
 2. **The agent may reason on the value as if it were real.** If a downstream tool routes on the email domain, it will route on the *fake* domain, a feature in `PASSTHROUGH`-style flows but a footgun in `FULL` flows where real PII flows back to the LLM.
@@ -99,7 +99,7 @@ Every factory carries a **phantom type** that summarises the preservation level 
 | No information | `<<REDACT>>`{ .placeholder } | `PreservesNothing` |
 | Id only | `<<REDACT:a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` |
 | Type only | `<<PERSON>>`{ .placeholder } | `PreservesLabel` |
-| Type + id (opaque) | `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` |
+| Type + id (opaque) | `<<PERSON:1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` |
 | Type + id (realistic hashed) | `a1b2c3d4@anonymized.local`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder } | `PreservesLabeledIdentityHashed` |
 | Type + id (Faker) | `john.doe@example.com`{ .placeholder }, `Jean Dupont`{ .placeholder } | `PreservesLabeledIdentityFaker` |
 | Type + partial value | `j***@mail.com`{ .placeholder }, `****4567`{ .placeholder } | `PreservesShape` |
@@ -150,7 +150,7 @@ Legend:
 <span class="sec-legend c-red">problematic</span>
 </small>
 
-Tags form an **inheritance hierarchy** that the type-checker exploits through the covariance of `AnyPlaceholderFactory[PreservationT_co]`. Two orthogonal axes structure the taxonomy: *Label* (the placeholder reveals the type) and *Identity* (the placeholder is unique per entity). `PreservesLabeledIdentity` combines the two via multiple inheritance, so a `<<PERSON_1>>` factory is both a `PreservesLabel` *and* a `PreservesIdentity`. A consumer typed against `PreservesIdentity` therefore accepts `PreservesIdentityOnly` *and* every `PreservesLabeledIdentity*`, while rejecting `PreservesLabel` / `PreservesShape` / `PreservesNothing` which lack the uniqueness guarantee.
+Tags form an **inheritance hierarchy** that the type-checker exploits through the covariance of `AnyPlaceholderFactory[PreservationT_co]`. Two orthogonal axes structure the taxonomy: *Label* (the placeholder reveals the type) and *Identity* (the placeholder is unique per entity). `PreservesLabeledIdentity` combines the two via multiple inheritance, so a `<<PERSON:1>>` factory is both a `PreservesLabel` *and* a `PreservesIdentity`. A consumer typed against `PreservesIdentity` therefore accepts `PreservesIdentityOnly` *and* every `PreservesLabeledIdentity*`, while rejecting `PreservesLabel` / `PreservesShape` / `PreservesNothing` which lack the uniqueness guarantee.
 
 ```mermaid
 classDiagram
@@ -209,8 +209,8 @@ classDiagram
 A factory declares the **most specific** tag that matches its guarantees:
 
 ```python
-class CounterPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
-class LabeledHashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
+class LabelCounterPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
+class LabelHashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
 class FakerPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityFaker]): ...
 class LabelPlaceholderFactory(AnyPlaceholderFactory[PreservesLabel]): ...
 class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
@@ -222,18 +222,25 @@ class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
 
 ## Built-in factories
 
-| Factory | Output example | Tag | Unique per entity? | Reversible? |
+| Factory | Style | Mechanism | Output example | Tag |
 |---|---|---|---|---|
-| `RedactPlaceholderFactory` | `<<REDACT>>`{ .placeholder } | `PreservesNothing` | no (constant) | no |
-| `LabelPlaceholderFactory` | `<<PERSON>>`{ .placeholder } | `PreservesLabel` | no (label only) | no |
-| `AnonymousHashPlaceholderFactory` | `<<REDACT:a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` | yes (deterministic) | yes |
-| `CounterPlaceholderFactory` (default) | `<<PERSON_1>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | yes (per thread) | yes |
-| `LabeledHashPlaceholderFactory` | `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | yes (deterministic) | yes |
-| `RealisticHashPlaceholderFactory` | depends on strategies (e.g. `a1b2c3d4@anonymized.local`{ .placeholder }) | `PreservesLabeledIdentityHashed` | yes (deterministic) | yes |
-| `FakerPlaceholderFactory` | random plausible value | `PreservesLabeledIdentityFaker` | yes (but may collide with a real value) | yes |
-| `MaskPlaceholderFactory` | `p***@mail.com`{ .placeholder } | `PreservesShape` | partial | yes (with collision risk) |
+| `RedactPlaceholderFactory` | Redact | — | `<<REDACT>>`{ .placeholder } | `PreservesNothing` |
+| `RedactCounterPlaceholderFactory` | Redact | Counter | `<<REDACT:1>>`{ .placeholder } | `PreservesIdentityOnly` |
+| `RedactHashPlaceholderFactory` | Redact | Hash | `<<REDACT:a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` |
+| `LabelPlaceholderFactory` | Label | — | `<<PERSON>>`{ .placeholder } | `PreservesLabel` |
+| `LabelCounterPlaceholderFactory` (default) | Label | Counter | `<<PERSON:1>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` |
+| `LabelHashPlaceholderFactory` | Label | Hash | `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` |
+| `FakerCounterPlaceholderFactory` | Faker | Counter | `John Doe:1`{ .placeholder } | `PreservesLabeledIdentityHashed` |
+| `FakerHashPlaceholderFactory` | Faker | Hash | `John Doe:a1b2c3d4`{ .placeholder } | `PreservesLabeledIdentityHashed` |
+| `FakerPlaceholderFactory` | Faker | random | `john.doe@example.com`{ .placeholder } | `PreservesLabeledIdentityFaker` |
+| `MaskPlaceholderFactory` | Mask | partial | `p***@mail.com`{ .placeholder } | `PreservesShape` |
 
-`CounterPlaceholderFactory` and `LabeledHashPlaceholderFactory` are the safe defaults. `AnonymousHashPlaceholderFactory` brings the same uniqueness without leaking the label (useful for bias reduction). `RealisticHashPlaceholderFactory` produces a realistic format with a hash: you must **explicitly provide a strategy for every label** your detector emits (no fallback). `FakerPlaceholderFactory` is reversible but its placeholders can collide with real values in tool responses. `RedactPlaceholderFactory`, `LabelPlaceholderFactory` and `MaskPlaceholderFactory` are non-reversible redaction tools (rejected by the middleware).
+The naming follows a `<Style><Mechanism>PlaceholderFactory` schema:
+
+- **Style** = what the placeholder preserves (Redact = nothing, Label = type, Faker = PII shape, Mask = partial value)
+- **Mechanism** = how uniqueness is achieved (Counter = sequential, Hash = SHA-256; absent when not relevant)
+
+`LabelCounterPlaceholderFactory` and `LabelHashPlaceholderFactory` are the safe defaults. `RedactCounter` / `RedactHash` add uniqueness without leaking the label (useful for bias reduction). `FakerCounter` / `FakerHash` produce a realistic format: you must **explicitly provide a strategy per label** (3 modes: base, template with `{counter}` or `{hash}`, callable like `fake_ip()` or `fake_phone()`). `FakerPlaceholderFactory` is reversible but its placeholders can collide with real values. `RedactPlaceholderFactory`, `LabelPlaceholderFactory` and `MaskPlaceholderFactory` are non-reversible redaction tools (rejected by the middleware).
 
 ---
 
@@ -249,7 +256,7 @@ The goal is to produce a sanitised version of a document: redacting a court ruli
 |---|---|---|
 | Erase every trace, no reversibility needed | **No information** (`<<REDACT>>`{ .placeholder }) | The most protective, no semantic leak. The document is readable but the LLM cannot infer anything. |
 | Keep the text readable (a human reader sees "[email]" rather than "<<REDACT>>") | **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }) | The type aids human reading without leaking the value. Built-in: `LabelPlaceholderFactory`. |
-| Allow server-side de-anonymisation (local cache) | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }) | Reversible via cache, trivial to audit, no collisions. Built-in: `CounterPlaceholderFactory` or `LabeledHashPlaceholderFactory`. |
+| Allow server-side de-anonymisation (local cache) | **Type + id (opaque)** (`<<PERSON:1>>`{ .placeholder }) | Reversible via cache, trivial to audit, no collisions. Built-in: `LabelCounterPlaceholderFactory` or `LabelHashPlaceholderFactory`. |
 | Track "who is who" without revealing the type (sensitive: medical, HR) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Distinguishes entities without any semantic hint. Custom factory (no built-in). |
 
 ### Case 2: anonymisation for an LLM / agent with tools
@@ -260,9 +267,9 @@ Direct consequence: only families with preserved identity (`Id only`, every `Typ
 
 | Need | Recommended family | Why |
 |---|---|---|
-| **Default** | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }) | Reversible, opaque, zero collision. The safe default. Built-in: `CounterPlaceholderFactory` (per thread) or `LabeledHashPlaceholderFactory` (deterministic). |
+| **Default** | **Type + id (opaque)** (`<<PERSON:1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }) | Reversible, opaque, zero collision. The safe default. Built-in: `LabelCounterPlaceholderFactory` (per thread) or `LabelHashPlaceholderFactory` (deterministic). |
 | Downstream tool validates a format (email regex, card length) | **Type + id (realistic hashed)** (`a1b2c3d4@anonymized.local`{ .placeholder }) | The placeholder passes validation while keeping uniqueness and zero collision. Custom factory (no built-in). |
-| User-facing output must read naturally (drafts, demos) | **Type + id (Faker)** (`john.doe@example.com`{ .placeholder }) | Fluent text, no `<<PERSON_1>>`{ .placeholder } leaking to the user. **Risk**: collision with a real value in a tool response. Avoid in `ToolCallStrategy.FULL`. Built-in: `FakerPlaceholderFactory`. |
+| User-facing output must read naturally (drafts, demos) | **Type + id (Faker)** (`john.doe@example.com`{ .placeholder }) | Fluent text, no `<<PERSON:1>>`{ .placeholder } leaking to the user. **Risk**: collision with a real value in a tool response. Avoid in `ToolCallStrategy.FULL`. Built-in: `FakerPlaceholderFactory`. |
 | Bias reduction (CV screening, hiring) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | The LLM does not see the type, so genre/origin inferable from a first name vanishes. Distinguishes candidates without biasing reasoning. |
 | Sensitive type (medical category, clearance level) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Same reason: the type itself is a PII and must not reach the LLM. |
 
@@ -342,29 +349,54 @@ Subclass `AnyPlaceholderFactory[<tag>]` with the right preservation tag for your
             return result
     ```
 
-??? example "Configuring `RealisticHashPlaceholderFactory` (realistic hashed, no fallback)"
+??? example "Configuring `FakerHashPlaceholderFactory` (realistic hashed, no fallback)"
 
-    Like Faker, you provide a `label -> strategy` mapping. Unlike Faker, **every label your detector emits must appear in it**, otherwise `create()` raises `ValueError`. Three helpers cover the usual cases:
+    You provide a `label -> strategy` mapping. Three modes coexist with runtime dispatch:
+
+    1. **Base**: `str` without `{hash}` → factory appends `:hash`. E.g. `"John Doe"` → `John Doe:a1b2c3d4`.
+    2. **Template**: `str` with `{hash}` → substitution. E.g. `"{hash}@example.com"` → `a1b2c3d4@example.com`.
+    3. **Callable**: `(hash) -> str`. Ideal for types that need a strict format (IP, phone, IBAN…) — use the `fake_*` helpers that seed Faker with the hash.
+
+    **No fallback**: an unknown label raises `ValueError` listing the registered labels. Configuration drift caught immediately.
 
     ```python
-    from piighost.ph_factory.realistic import (
-        RealisticHashPlaceholderFactory,
-        hashed_email,
-        hashed_with_prefix,
-        hashed_template,
+    from piighost.ph_factory.faker_hash import (
+        FakerHashPlaceholderFactory,
+        fake_ip,
+        fake_phone,
+        fake_iban,
     )
 
-    factory = RealisticHashPlaceholderFactory(
+    factory = FakerHashPlaceholderFactory(
         strategies={
-            "email":    hashed_email("anonymized.local"),    # a1b2c3d4@anonymized.local
-            "person":   hashed_with_prefix("Patient"),       # Patient_a1b2c3d4
-            "location": hashed_template("city-{hash}"),      # city-a1b2c3d4
+            "person":     "John Doe",                  # base → "John Doe:a1b2c3d4"
+            "location":   "Paris",                      # base → "Paris:a1b2c3d4"
+            "email":      "{hash}@example.com",         # template → "a1b2c3d4@example.com"
+            "url":        "https://example.com/{hash}", # template
+            "ip_address": fake_ip(),                    # callable → "192.168.42.7"
+            "phone":      fake_phone(),                 # callable → "+33 6 12 34 56 78"
+            "iban":       fake_iban(),                  # callable → "FR76..."
         },
         hash_length=8,
     )
     ```
 
-    If the detector emits a `PHONE` label not covered by the strategies, `factory.create([entity])` raises a `ValueError` listing the known labels. This is intentional: it avoids silently producing a malformed placeholder.
+    If you don't provide `strategies`, sensible defaults are used (`person` → `"John Doe"`, `email` → `"{hash}@example.com"`, `phone` → `fake_phone()`, etc.).
+
+??? example "Configuring `FakerCounterPlaceholderFactory` (realistic counted, no fallback)"
+
+    Same 3-mode API as `FakerHashPlaceholderFactory`, but with a sequential per-label counter instead of a hash. The template placeholder is `{counter}`.
+
+    ```python
+    from piighost.ph_factory.faker_hash import FakerCounterPlaceholderFactory
+
+    factory = FakerCounterPlaceholderFactory(
+        strategies={
+            "person":   "John Doe",                  # → "John Doe:1", "John Doe:2"…
+            "email":    "{counter}@example.com",     # → "1@example.com", "2@example.com"…
+        },
+    )
+    ```
 
 ---
 

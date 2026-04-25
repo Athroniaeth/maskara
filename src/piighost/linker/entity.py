@@ -169,7 +169,7 @@ class ExactEntityLinker(BaseEntityLinker):
         For each current entity, if a known entity shares the same
         canonical text (case-insensitive) and label, merge them into
         a single entity with known detections first.  This ensures
-        that ``CounterPlaceholderFactory`` assigns the same token.
+        that ``LabelCounterPlaceholderFactory`` assigns the same token.
 
         Args:
             entities: Entities detected in the current text.

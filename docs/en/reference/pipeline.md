@@ -54,7 +54,7 @@ Runs the full pipeline and stores the mapping in cache for later deanonymization
 ```python
 anonymized, entities = await pipeline.anonymize("Patrick lives in Paris.")
 print(anonymized)
-# <<PERSON_1>> lives in <<LOCATION_1>>.
+# <<PERSON:1>> lives in <<LOCATION:1>>.
 ```
 
 !!! note "SHA-256 cache"
@@ -114,7 +114,7 @@ Detects entities, records them in memory, then anonymizes using all known entiti
 
 ```python
 anonymized, entities = await conv_pipeline.anonymize("Patrick lives in Paris.")
-# <<PERSON_1>> lives in <<LOCATION_1>>.
+# <<PERSON:1>> lives in <<LOCATION:1>>.
 ```
 
 #### `deanonymize_with_ent(text) -> str` *(async)*
@@ -122,7 +122,7 @@ anonymized, entities = await conv_pipeline.anonymize("Patrick lives in Paris.")
 Replaces all known tokens with original values via `str.replace`. Works on any text containing tokens, even text never anonymized by this pipeline (e.g., LLM-generated output, tool arguments). Tokens are replaced **longest-first** to avoid partial matches.
 
 ```python
-result = await conv_pipeline.deanonymize_with_ent("Hello <<PERSON_1>>!")
+result = await conv_pipeline.deanonymize_with_ent("Hello <<PERSON:1>>!")
 # "Hello Patrick!"
 ```
 
@@ -132,7 +132,7 @@ Replaces all known original values with tokens via `str.replace`. Replaces all s
 
 ```python
 result = conv_pipeline.anonymize_with_ent("Result for Patrick in Paris")
-# "Result for <<PERSON_1>> in <<LOCATION_1>>"
+# "Result for <<PERSON:1>> in <<LOCATION:1>>"
 ```
 
 #### `resolved_entities` (property)
@@ -206,7 +206,7 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from gliner2 import GLiNER2
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -215,7 +215,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 detector = Gliner2Detector(
@@ -236,7 +236,7 @@ pipeline = AnonymizationPipeline(
 async def main():
     # Async anonymization
     anonymized, entities = await pipeline.anonymize("Patrick is in Lyon.")
-    print(anonymized)  # <<PERSON_1>> is in <<LOCATION_1>>.
+    print(anonymized)  # <<PERSON:1>> is in <<LOCATION:1>>.
 
     # Deanonymize via cache lookup
     original, _ = await pipeline.deanonymize(anonymized)

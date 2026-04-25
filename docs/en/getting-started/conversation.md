@@ -14,7 +14,7 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver import MergeEntityConflictResolver, ConfidenceSpanConflictResolver
 from piighost.pipeline import AnonymizationPipeline, ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 from gliner2 import GLiNER2
 
@@ -22,7 +22,7 @@ entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
 span_resolver = ConfidenceSpanConflictResolver()
 
-ph_factory = CounterPlaceholderFactory()
+ph_factory = LabelCounterPlaceholderFactory()
 anonymizer = Anonymizer(ph_factory=ph_factory)
 
 model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
@@ -43,24 +43,24 @@ pipeline = ThreadAnonymizationPipeline(
 async def conversation():
     # First message: NER detection + entity registration
     # The pipeline remembers that input and output are linked, and that
-    # <<PERSON_1>> maps to "Patrick" and <<LOCATION_1>> to "Paris".
+    # <<PERSON:1>> maps to "Patrick" and <<LOCATION:1>> to "Paris".
     anonymized, _ = await pipeline.anonymize("Patrick lives in Paris.")
     print(anonymized)
-    # <<PERSON_1>> lives in <<LOCATION_1>>.
+    # <<PERSON:1>> lives in <<LOCATION:1>>.
 
     # Deanonymize via the mapping stored in the pipeline cache
-    restored = await pipeline.deanonymize("Hello <<PERSON_1>>!")
+    restored = await pipeline.deanonymize("Hello <<PERSON:1>>!")
     print(restored)
 
     # Deanonymize by string replacement, using the detections kept in memory
-    restored = await pipeline.deanonymize_with_ent("Hello <<PERSON_1>>!")
+    restored = await pipeline.deanonymize_with_ent("Hello <<PERSON:1>>!")
     print(restored)
     # Hello Patrick!
 
     # Reanonymize by string replacement, using the detections kept in memory
     reanon = pipeline.anonymize_with_ent("Result for Patrick in Paris")
     print(reanon)
-    # Result for <<PERSON_1>> in <<LOCATION_1>>
+    # Result for <<PERSON:1>> in <<LOCATION:1>>
 
 
 asyncio.run(conversation())

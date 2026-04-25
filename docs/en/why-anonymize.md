@@ -144,7 +144,7 @@ In this context, the question is not "will LLM conversations one day be monetize
 
 ### Why anonymization breaks this graph
 
-A PII sent in cleartext becomes a node in a potential graph: it can be crossed with social networks, prior breaches, public registries or commercial databases, to re-identify, enrich or target. A `<<PERSON_1>>` placeholder has no aggregation value. Anonymizing before sending cuts the common root of every secondary-use chain described above.
+A PII sent in cleartext becomes a node in a potential graph: it can be crossed with social networks, prior breaches, public registries or commercial databases, to re-identify, enrich or target. A `<<PERSON:1>>` placeholder has no aggregation value. Anonymizing before sending cuts the common root of every secondary-use chain described above.
 
 ---
 
@@ -170,7 +170,7 @@ Switching jurisdiction by moving to a **European provider** (Mistral, OVHcloud A
 
 Finally, **running the model locally** on your own infrastructure (`Ollama`, `vLLM`, `llama.cpp` or equivalent) removes the third party entirely: no provider has technical access to the content, by construction. It is the maximum protection on the confidentiality front. The trade-off is that all responsibility shifts onto you: physical and logical security, encryption at rest, access management, updates, logging. Open models that can be run locally (Llama, Mistral, Qwen, DeepSeek, etc.) may still lag behind the best proprietary models on some complex tasks, though the gap is closing quickly.
 
-The choice of provider still matters for many things: latency, cost, model quality, overall GDPR compliance, integration ecosystem. But **for the specific risk of PII leakage, anonymization neutralizes that choice**. If only placeholders like `<<PERSON_1>>` leave your infrastructure, a US provider receives nothing exploitable about your sensitive data. From that specific angle, it becomes equivalent to a locally executed model.
+The choice of provider still matters for many things: latency, cost, model quality, overall GDPR compliance, integration ecosystem. But **for the specific risk of PII leakage, anonymization neutralizes that choice**. If only placeholders like `<<PERSON:1>>` leave your infrastructure, a US provider receives nothing exploitable about your sensitive data. From that specific angle, it becomes equivalent to a locally executed model.
 
 ---
 
@@ -210,7 +210,7 @@ All the protections mobilized so far rest on **legal** instruments: privacy poli
 | Regional regulation            | GDPR                                          | Slow to produce sanctions actually applied to LLMs         |
 | Regional hosting               | "Datacenters in Europe"                       | Neutralized by the CLOUD Act if the provider is American   |
 
-Technical protection works differently. If the personal data never leaves your infrastructure, and only a placeholder (for example `<<PERSON_1>>`) is sent to the LLM:
+Technical protection works differently. If the personal data never leaves your infrastructure, and only a placeholder (for example `<<PERSON:1>>`) is sent to the LLM:
 
 - no order can compel a third party to disclose what it does not hold,
 - no change to an international agreement affects you,

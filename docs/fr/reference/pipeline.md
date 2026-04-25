@@ -49,7 +49,7 @@ Execute le pipeline complet et stocke le mapping en cache pour desanonymisation 
 
 ```python
 anonymized, entities = await pipeline.anonymize("Patrick habite a Paris.")
-# <<PERSON_1>> habite a <<LOCATION_1>>.
+# <<PERSON:1>> habite a <<LOCATION:1>>.
 ```
 
 #### `deanonymize(anonymized_text) -> tuple[str, list[Entity]]` *(async)*
@@ -148,7 +148,7 @@ from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 from gliner2 import GLiNER2
 
@@ -158,7 +158,7 @@ detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -171,7 +171,7 @@ pipeline = AnonymizationPipeline(
 
 async def main():
     anonymized, entities = await pipeline.anonymize("Patrick est a Lyon.")
-    print(anonymized)  # <<PERSON_1>> est a <<LOCATION_1>>.
+    print(anonymized)  # <<PERSON:1>> est a <<LOCATION:1>>.
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)  # Patrick est a Lyon.

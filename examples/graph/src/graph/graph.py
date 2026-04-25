@@ -14,7 +14,7 @@ from piighost.detector.gliner2 import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.middleware import PIIAnonymizationMiddleware
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 load_dotenv()
@@ -70,7 +70,7 @@ extractor = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
 detector = Gliner2Detector(
     model=extractor, labels=["PERSON", "LOCATION"], threshold=0.5, flat_ner=True
 )
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     span_resolver=ConfidenceSpanConflictResolver(),

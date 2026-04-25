@@ -16,7 +16,7 @@ from piighost.detector import Gliner2Detector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 # 1. Charger le modèle NER
@@ -27,7 +27,7 @@ detector = Gliner2Detector(model=model, labels=["PERSON", "LOCATION"], threshold
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 # 3. Assembler le pipeline
 pipeline = AnonymizationPipeline(
@@ -45,7 +45,7 @@ async def main():
         "Patrick habite à Paris. Patrick aime Paris.",
     )
     print(anonymized)
-    # <<PERSON_1>> habite à <<LOCATION_1>>. <<PERSON_1>> aime <<LOCATION_1>>.
+    # <<PERSON:1>> habite à <<LOCATION:1>>. <<PERSON:1>> aime <<LOCATION:1>>.
 
     # 5. Désanonymiser
     original, _ = await pipeline.deanonymize(anonymized)

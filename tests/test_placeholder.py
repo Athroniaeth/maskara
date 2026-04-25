@@ -2,12 +2,13 @@
 
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import (
-    AnonymousHashPlaceholderFactory,
-    RedactPlaceholderFactory,
-    CounterPlaceholderFactory,
-    LabeledHashPlaceholderFactory,
-    MaskPlaceholderFactory,
+    LabelCounterPlaceholderFactory,
+    LabelHashPlaceholderFactory,
     LabelPlaceholderFactory,
+    MaskPlaceholderFactory,
+    RedactCounterPlaceholderFactory,
+    RedactHashPlaceholderFactory,
+    RedactPlaceholderFactory,
 )
 
 
@@ -23,81 +24,81 @@ def _entity(text: str, label: str, start: int = 0) -> Entity:
 
 
 # ---------------------------------------------------------------------------
-# CounterPlaceholderFactory
+# LabelCounterPlaceholderFactory
 # ---------------------------------------------------------------------------
 
 
-class TestCounterPlaceholderFactory:
-    """Generates <<LABEL_N>> tokens with per-label counters."""
+class TestLabelCounterPlaceholderFactory:
+    """Generates <<LABEL:N>> tokens with per-label counters."""
 
     def test_first_entity_gets_counter_one(self) -> None:
         e = _entity("Patrick", "PERSON")
-        result = CounterPlaceholderFactory().create([e])
-        assert result[e] == "<<PERSON_1>>"
+        result = LabelCounterPlaceholderFactory().create([e])
+        assert result[e] == "<<PERSON:1>>"
 
     def test_second_entity_same_label_gets_counter_two(self) -> None:
         e1 = _entity("Patrick", "PERSON")
         e2 = _entity("Henri", "PERSON", start=20)
-        result = CounterPlaceholderFactory().create([e1, e2])
-        assert result[e1] == "<<PERSON_1>>"
-        assert result[e2] == "<<PERSON_2>>"
+        result = LabelCounterPlaceholderFactory().create([e1, e2])
+        assert result[e1] == "<<PERSON:1>>"
+        assert result[e2] == "<<PERSON:2>>"
 
     def test_different_labels_have_separate_counters(self) -> None:
         e1 = _entity("Patrick", "PERSON")
         e2 = _entity("Paris", "LOCATION")
-        result = CounterPlaceholderFactory().create([e1, e2])
-        assert result[e1] == "<<PERSON_1>>"
-        assert result[e2] == "<<LOCATION_1>>"
+        result = LabelCounterPlaceholderFactory().create([e1, e2])
+        assert result[e1] == "<<PERSON:1>>"
+        assert result[e2] == "<<LOCATION:1>>"
 
     def test_empty_list(self) -> None:
-        assert CounterPlaceholderFactory().create([]) == {}
+        assert LabelCounterPlaceholderFactory().create([]) == {}
 
 
 # ---------------------------------------------------------------------------
-# LabeledHashPlaceholderFactory
+# LabelHashPlaceholderFactory
 # ---------------------------------------------------------------------------
 
 
-class TestLabeledHashPlaceholderFactory:
+class TestLabelHashPlaceholderFactory:
     """Generates <<LABEL:hash>> tokens using SHA-256."""
 
     def test_token_format(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = LabeledHashPlaceholderFactory().create([e])[e]
+        token = LabelHashPlaceholderFactory().create([e])[e]
         assert token.startswith("<<PERSON:")
         assert token.endswith(">>")
 
     def test_deterministic(self) -> None:
         e = _entity("Patrick", "PERSON")
-        t1 = LabeledHashPlaceholderFactory().create([e])[e]
-        t2 = LabeledHashPlaceholderFactory().create([e])[e]
+        t1 = LabelHashPlaceholderFactory().create([e])[e]
+        t2 = LabelHashPlaceholderFactory().create([e])[e]
         assert t1 == t2
 
     def test_different_entities_different_hashes(self) -> None:
         e1 = _entity("Patrick", "PERSON")
         e2 = _entity("Henri", "PERSON", start=20)
-        result = LabeledHashPlaceholderFactory().create([e1, e2])
+        result = LabelHashPlaceholderFactory().create([e1, e2])
         assert result[e1] != result[e2]
 
     def test_same_text_different_label_different_hash(self) -> None:
         e1 = _entity("Paris", "LOCATION")
         e2 = _entity("Paris", "PERSON")
-        result = LabeledHashPlaceholderFactory().create([e1, e2])
+        result = LabelHashPlaceholderFactory().create([e1, e2])
         assert result[e1] != result[e2]
 
     def test_custom_hash_length(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = LabeledHashPlaceholderFactory(hash_length=4).create([e])[e]
+        token = LabelHashPlaceholderFactory(hash_length=4).create([e])[e]
         hash_part = token.split(":")[1].rstrip(">")
         assert len(hash_part) == 4
 
     def test_double_angle_brackets(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = LabeledHashPlaceholderFactory().create([e])[e]
+        token = LabelHashPlaceholderFactory().create([e])[e]
         assert token.startswith("<<") and token.endswith(">>")
 
     def test_empty_list(self) -> None:
-        assert LabeledHashPlaceholderFactory().create([]) == {}
+        assert LabelHashPlaceholderFactory().create([]) == {}
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +236,7 @@ class TestGetPreservationTag:
     """Runtime tag recovery used by the pipeline's factory check."""
 
     def test_counter_is_labeled_identity_opaque(self) -> None:
-        from piighost.placeholder import CounterPlaceholderFactory
+        from piighost.placeholder import LabelCounterPlaceholderFactory
         from piighost.placeholder_tags import (
             PreservesIdentity,
             PreservesLabel,
@@ -243,14 +244,14 @@ class TestGetPreservationTag:
             get_preservation_tag,
         )
 
-        tag = get_preservation_tag(CounterPlaceholderFactory())
+        tag = get_preservation_tag(LabelCounterPlaceholderFactory())
         assert tag is PreservesLabeledIdentityOpaque
         # multi-inheritance: opaque labeled-identity is both a label tag and an identity tag
         assert issubclass(tag, PreservesIdentity)
         assert issubclass(tag, PreservesLabel)
 
     def test_hash_is_labeled_identity_opaque(self) -> None:
-        from piighost.placeholder import LabeledHashPlaceholderFactory
+        from piighost.placeholder import LabelHashPlaceholderFactory
         from piighost.placeholder_tags import (
             PreservesIdentity,
             PreservesLabel,
@@ -258,7 +259,7 @@ class TestGetPreservationTag:
             get_preservation_tag,
         )
 
-        tag = get_preservation_tag(LabeledHashPlaceholderFactory())
+        tag = get_preservation_tag(LabelHashPlaceholderFactory())
         assert tag is PreservesLabeledIdentityOpaque
         assert issubclass(tag, PreservesIdentity)
         assert issubclass(tag, PreservesLabel)
@@ -319,24 +320,24 @@ class TestRedactPlaceholderFactory:
 
 
 # ---------------------------------------------------------------------------
-# AnonymousHashPlaceholderFactory
+# RedactHashPlaceholderFactory
 # ---------------------------------------------------------------------------
 
 
-class TestAnonymousHashPlaceholderFactory:
+class TestRedactHashPlaceholderFactory:
     """Generates <<REDACT:hash>> tokens with no label."""
 
     def test_token_format(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = AnonymousHashPlaceholderFactory().create([e])[e]
+        token = RedactHashPlaceholderFactory().create([e])[e]
         assert token.startswith("<<REDACT:")
         assert token.endswith(">>")
         assert "PERSON" not in token
 
     def test_deterministic(self) -> None:
         e = _entity("Patrick", "PERSON")
-        t1 = AnonymousHashPlaceholderFactory().create([e])[e]
-        t2 = AnonymousHashPlaceholderFactory().create([e])[e]
+        t1 = RedactHashPlaceholderFactory().create([e])[e]
+        t2 = RedactHashPlaceholderFactory().create([e])[e]
         assert t1 == t2
 
     def test_same_text_different_label_different_token(self) -> None:
@@ -344,22 +345,22 @@ class TestAnonymousHashPlaceholderFactory:
         # are distinguished even if the label is hidden in the output.
         e1 = _entity("Paris", "PERSON")
         e2 = _entity("Paris", "LOCATION")
-        result = AnonymousHashPlaceholderFactory().create([e1, e2])
+        result = RedactHashPlaceholderFactory().create([e1, e2])
         assert result[e1] != result[e2]
 
     def test_custom_prefix(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = AnonymousHashPlaceholderFactory(prefix="HIDDEN").create([e])[e]
+        token = RedactHashPlaceholderFactory(prefix="HIDDEN").create([e])[e]
         assert token.startswith("<<HIDDEN:")
 
     def test_custom_hash_length(self) -> None:
         e = _entity("Patrick", "PERSON")
-        token = AnonymousHashPlaceholderFactory(hash_length=4).create([e])[e]
+        token = RedactHashPlaceholderFactory(hash_length=4).create([e])[e]
         hash_part = token.split(":")[1].rstrip(">")
         assert len(hash_part) == 4
 
     def test_empty_list(self) -> None:
-        assert AnonymousHashPlaceholderFactory().create([]) == {}
+        assert RedactHashPlaceholderFactory().create([]) == {}
 
     def test_preservation_tag(self) -> None:
         from piighost.placeholder_tags import (
@@ -368,6 +369,47 @@ class TestAnonymousHashPlaceholderFactory:
             get_preservation_tag,
         )
 
-        tag = get_preservation_tag(AnonymousHashPlaceholderFactory())
+        tag = get_preservation_tag(RedactHashPlaceholderFactory())
+        assert tag is PreservesIdentityOnly
+        assert issubclass(tag, PreservesIdentity)
+
+
+# ---------------------------------------------------------------------------
+# RedactCounterPlaceholderFactory
+# ---------------------------------------------------------------------------
+
+
+class TestRedactCounterPlaceholderFactory:
+    """Generates <<REDACT:N>> tokens with a global counter, no label."""
+
+    def test_first_entity_gets_counter_one(self) -> None:
+        e = _entity("Patrick", "PERSON")
+        assert RedactCounterPlaceholderFactory().create([e])[e] == "<<REDACT:1>>"
+
+    def test_global_counter_across_labels(self) -> None:
+        e1 = _entity("Patrick", "PERSON")
+        e2 = _entity("Paris", "LOCATION", start=20)
+        e3 = _entity("Henri", "PERSON", start=30)
+        result = RedactCounterPlaceholderFactory().create([e1, e2, e3])
+        assert result[e1] == "<<REDACT:1>>"
+        assert result[e2] == "<<REDACT:2>>"
+        assert result[e3] == "<<REDACT:3>>"
+
+    def test_custom_prefix(self) -> None:
+        e = _entity("Patrick", "PERSON")
+        token = RedactCounterPlaceholderFactory(prefix="HIDDEN").create([e])[e]
+        assert token == "<<HIDDEN:1>>"
+
+    def test_empty_list(self) -> None:
+        assert RedactCounterPlaceholderFactory().create([]) == {}
+
+    def test_preservation_tag(self) -> None:
+        from piighost.placeholder_tags import (
+            PreservesIdentity,
+            PreservesIdentityOnly,
+            get_preservation_tag,
+        )
+
+        tag = get_preservation_tag(RedactCounterPlaceholderFactory())
         assert tag is PreservesIdentityOnly
         assert issubclass(tag, PreservesIdentity)

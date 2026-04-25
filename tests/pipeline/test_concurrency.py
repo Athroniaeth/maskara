@@ -14,7 +14,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
 from piighost.linker.entity import ExactEntityLinker
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.resolver.entity import MergeEntityConflictResolver
 from piighost.resolver.span import ConfidenceSpanConflictResolver
 
@@ -29,7 +29,7 @@ def _pipeline() -> ThreadAnonymizationPipeline:
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
     )
 
 
@@ -54,8 +54,8 @@ class TestConcurrentAnonymize:
         }
         assert mem_a_texts == {"Patrick"}
         assert mem_b_texts == {"Marie"}
-        assert "<<PERSON_1>>" in result_a[0]
-        assert "<<PERSON_1>>" in result_b[0]
+        assert "<<PERSON:1>>" in result_a[0]
+        assert "<<PERSON:1>>" in result_b[0]
 
     async def test_cache_keys_stay_isolated_under_concurrency(self) -> None:
         """Concurrent anonymize() produces correct per-thread deanonymize lookups."""
@@ -78,7 +78,7 @@ class TestConcurrentAnonymize:
         ]
         results = await asyncio.gather(*tasks)
         for i, (anon, _) in enumerate(results):
-            assert "<<PERSON_1>>" in anon
+            assert "<<PERSON:1>>" in anon
             memory = pipeline.get_memory(f"t{i}")
             assert len(memory.all_entities) == 1
             assert memory.all_entities[0].detections[0].text == "Patrick"

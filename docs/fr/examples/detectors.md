@@ -22,14 +22,14 @@ from piighost.anonymizer import Anonymizer
 from piighost.linker.entity import ExactEntityLinker
 from piighost.entity_resolver import MergeEntityConflictResolver
 from piighost.pipeline import AnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from piighost.span_resolver import ConfidenceSpanConflictResolver
 
 detector = create_detector()
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -41,7 +41,7 @@ pipeline = AnonymizationPipeline(
 
 anonymized, _ = await pipeline.anonymize("Écrivez-moi à alice@example.com, serveur 192.168.1.42.")
 print(anonymized)
-# Écrivez-moi à <<EMAIL_1>>, serveur <<IP_V4_1>>.
+# Écrivez-moi à <<EMAIL:1>>, serveur <<IP_V4_1>>.
 ```
 
 ---
@@ -56,7 +56,7 @@ detector = create_full_detector()
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -70,7 +70,7 @@ anonymized, _ = await pipeline.anonymize(
     "IBAN FR7630006000011234567890189, email marie@exemple.fr, tel 06 12 34 56 78."
 )
 print(anonymized)
-# IBAN <<EU_IBAN_1>>, email <<EMAIL_1>>, tel <<FR_PHONE_1>>.
+# IBAN <<EU_IBAN:1>>, email <<EMAIL:1>>, tel <<FR_PHONE:1>>.
 ```
 
 ---
@@ -113,7 +113,7 @@ detector = CompositeDetector(detectors=[ner_detector, regex_detector])
 span_resolver = ConfidenceSpanConflictResolver()
 entity_linker = ExactEntityLinker()
 entity_resolver = MergeEntityConflictResolver()
-anonymizer = Anonymizer(CounterPlaceholderFactory())
+anonymizer = Anonymizer(LabelCounterPlaceholderFactory())
 
 pipeline = AnonymizationPipeline(
     detector=detector,
@@ -125,7 +125,7 @@ pipeline = AnonymizationPipeline(
 
 anonymized, _ = await pipeline.anonymize("Patrick à alice@example.com, IP 10.0.0.1.")
 print(anonymized)
-# <<PERSON_1>> à <<EMAIL_1>>, IP <<IP_V4_1>>.
+# <<PERSON:1>> à <<EMAIL:1>>, IP <<IP_V4_1>>.
 ```
 
 ---

@@ -15,7 +15,7 @@ from piighost.resolver.entity import (
     FuzzyEntityConflictResolver,
     MergeEntityConflictResolver,
 )
-from piighost.placeholder import CounterPlaceholderFactory, AnyPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory, AnyPlaceholderFactory
 from piighost.resolver.span import ConfidenceSpanConflictResolver
 
 pytestmark = pytest.mark.asyncio
@@ -32,7 +32,7 @@ def _pipeline(
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=entity_resolver or MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(factory or CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(factory or LabelCounterPlaceholderFactory()),
     )
 
 
@@ -50,7 +50,7 @@ class TestDeanonymizeWithEnt:
         await pipeline.anonymize("Patrick habite à Paris")
 
         # LLM generates a new sentence with known tokens
-        llm_output = "Il fait beau à <<LOCATION_1>>"
+        llm_output = "Il fait beau à <<LOCATION:1>>"
         result = await pipeline.deanonymize_with_ent(llm_output)
         assert result == "Il fait beau à Paris"
 
@@ -59,7 +59,7 @@ class TestDeanonymizeWithEnt:
         pipeline = _pipeline([("Patrick", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
 
-        result = await pipeline.deanonymize_with_ent("<<PERSON_1>>")
+        result = await pipeline.deanonymize_with_ent("<<PERSON:1>>")
         assert result == "Patrick"
 
     async def test_deanonymize_no_tokens_unchanged(self) -> None:
@@ -71,15 +71,15 @@ class TestDeanonymizeWithEnt:
 
     async def test_deanonymize_empty_memory(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
-        result = await pipeline.deanonymize_with_ent("<<PERSON_1>>")
-        assert result == "<<PERSON_1>>"
+        result = await pipeline.deanonymize_with_ent("<<PERSON:1>>")
+        assert result == "<<PERSON:1>>"
 
     async def test_deanonymize_multiple_tokens(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Paris", "LOCATION")])
         await pipeline.anonymize("Patrick habite à Paris")
 
         result = await pipeline.deanonymize_with_ent(
-            "<<PERSON_1>> est à <<LOCATION_1>>"
+            "<<PERSON:1>> est à <<LOCATION:1>>"
         )
         assert result == "Patrick est à Paris"
 
@@ -97,7 +97,7 @@ class TestAnonymizeWithEnt:
         await pipeline.anonymize("Bonjour Patrick")
 
         result = pipeline.anonymize_with_ent("Patrick est revenu")
-        assert result == "<<PERSON_1>> est revenu"
+        assert result == "<<PERSON:1>> est revenu"
 
     async def test_reanonymize_all_spelling_variants(self) -> None:
         """All detected forms of an entity are replaced, not just canonical."""
@@ -107,7 +107,7 @@ class TestAnonymizeWithEnt:
         result = pipeline.anonymize_with_ent("patric est là, Patrick aussi")
         assert "patric" not in result
         assert "Patrick" not in result
-        assert "<<PERSON_1>>" in result
+        assert "<<PERSON:1>>" in result
 
     async def test_reanonymize_no_known_values_unchanged(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
@@ -134,14 +134,14 @@ class TestCrossMessageConsistency:
         pipeline = _pipeline([("Patrick", "PERSON")])
         r1, _ = await pipeline.anonymize("Bonjour Patrick")
         r2, _ = await pipeline.anonymize("Au revoir Patrick")
-        assert "<<PERSON_1>>" in r1
-        assert "<<PERSON_1>>" in r2
+        assert "<<PERSON:1>>" in r1
+        assert "<<PERSON:1>>" in r2
 
     async def test_new_entity_gets_next_counter(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
         await pipeline.anonymize("Bonjour Patrick")
         r2, _ = await pipeline.anonymize("Bonjour Marie")
-        assert "<<PERSON_2>>" in r2
+        assert "<<PERSON:2>>" in r2
 
     async def test_mixed_labels_stable(self) -> None:
         pipeline = _pipeline(
@@ -150,8 +150,8 @@ class TestCrossMessageConsistency:
         await pipeline.anonymize("Patrick habite à Paris")
         r2, _ = await pipeline.anonymize("Marie habite à Paris")
         # Marie is the 2nd PERSON, Paris stays LOCATION_1
-        assert "<<PERSON_2>>" in r2
-        assert "<<LOCATION_1>>" in r2
+        assert "<<PERSON:2>>" in r2
+        assert "<<LOCATION:1>>" in r2
 
     async def test_memory_records_entities(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON")])
@@ -176,16 +176,16 @@ class TestFuzzyEntityResolution:
         r1, _ = await pipeline.anonymize("Bonjour Patrick")
         r2, _ = await pipeline.anonymize("Bonjour patric")
 
-        assert "<<PERSON_1>>" in r1
-        assert "<<PERSON_1>>" in r2
+        assert "<<PERSON:1>>" in r1
+        assert "<<PERSON:1>>" in r2
 
     async def test_without_fuzzy_keeps_separate(self) -> None:
         pipeline = _pipeline([("Patrick", "PERSON"), ("patric", "PERSON")])
         r1, _ = await pipeline.anonymize("Bonjour Patrick")
         r2, _ = await pipeline.anonymize("Bonjour patric")
 
-        assert "<<PERSON_1>>" in r1
-        assert "<<PERSON_2>>" in r2
+        assert "<<PERSON:1>>" in r1
+        assert "<<PERSON:2>>" in r2
 
     async def test_fuzzy_does_not_merge_different_labels(self) -> None:
         pipeline = _pipeline(
@@ -195,7 +195,7 @@ class TestFuzzyEntityResolution:
         await pipeline.anonymize("Bonjour Patrick")
         r2, _ = await pipeline.anonymize("A patric")
 
-        assert "<<LOCATION_1>>" in r2
+        assert "<<LOCATION:1>>" in r2
 
     async def test_fuzzy_deanonymize_with_ent(self) -> None:
         pipeline = _pipeline(
@@ -205,7 +205,7 @@ class TestFuzzyEntityResolution:
         await pipeline.anonymize("Bonjour Patrick")
         await pipeline.anonymize("Bonjour patric")
 
-        result = await pipeline.deanonymize_with_ent("<<PERSON_1>> est là")
+        result = await pipeline.deanonymize_with_ent("<<PERSON:1>> est là")
         assert result == "Patrick est là"
 
     async def test_fuzzy_anonymize_with_ent_replaces_all_variants(self) -> None:
@@ -219,7 +219,7 @@ class TestFuzzyEntityResolution:
         result = pipeline.anonymize_with_ent("patric et Patrick")
         assert "patric" not in result
         assert "Patrick" not in result
-        assert "<<PERSON_1>>" in result
+        assert "<<PERSON:1>>" in result
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +236,8 @@ class TestCrossMessageEntityLinking:
         r1, _ = await pipeline.anonymize("J'habite en France")
         r2, _ = await pipeline.anonymize("donne moi la meteo en france")
 
-        assert "<<LOCATION_1>>" in r1
-        assert "<<LOCATION_1>>" in r2
+        assert "<<LOCATION:1>>" in r1
+        assert "<<LOCATION:1>>" in r2
         assert "france" not in r2
 
     async def test_uppercase_variant_across_messages(self) -> None:
@@ -247,7 +247,7 @@ class TestCrossMessageEntityLinking:
         r2, _ = await pipeline.anonymize("je pars en FRANCE demain")
 
         assert "FRANCE" not in r2
-        assert "<<LOCATION_1>>" in r2
+        assert "<<LOCATION:1>>" in r2
 
     async def test_anonymize_with_ent_uses_variants(self) -> None:
         """anonymize_with_ent replaces case variants accumulated in memory."""
@@ -257,7 +257,7 @@ class TestCrossMessageEntityLinking:
 
         result = pipeline.anonymize_with_ent("patrick est revenu")
         assert "patrick" not in result
-        assert "<<PERSON_1>>" in result
+        assert "<<PERSON:1>>" in result
 
     async def test_cross_message_respects_word_boundaries(self) -> None:
         """Memory-based expansion does not create partial matches."""
@@ -285,9 +285,9 @@ class TestCrossMessageEntityLinking:
         r1, _ = await pipeline.anonymize("Bonjour je m'appelle Patrick")
         r2, _ = await pipeline.anonymize("Quel est la premiere lettre de patrick")
 
-        assert "<<PERSON_1>>" in r1
-        assert "<<PERSON_1>>" in r2
-        assert "<<PERSON_2>>" not in r2
+        assert "<<PERSON:1>>" in r1
+        assert "<<PERSON:1>>" in r2
+        assert "<<PERSON:2>>" not in r2
 
     async def test_gliner_detects_lowercase_variant(self) -> None:
         """GLiNER detects both 'Patrick' and 'patrick' → same PERSON_1."""
@@ -295,9 +295,9 @@ class TestCrossMessageEntityLinking:
         r1, _ = await pipeline.anonymize("Bonjour je m'appelle Patrick")
         r2, _ = await pipeline.anonymize("Quel est la premiere lettre de patrick")
 
-        assert "<<PERSON_1>>" in r1
-        assert "<<PERSON_1>>" in r2
-        assert "<<PERSON_2>>" not in r2
+        assert "<<PERSON:1>>" in r1
+        assert "<<PERSON:1>>" in r2
+        assert "<<PERSON:2>>" not in r2
 
     async def test_gliner_misses_lowercase_variant(self) -> None:
         """GLiNER only detects 'Patrick', not 'patrick' → not anonymized.
@@ -312,12 +312,12 @@ class TestCrossMessageEntityLinking:
             span_resolver=ConfidenceSpanConflictResolver(),
             entity_linker=ExactEntityLinker(),
             entity_resolver=MergeEntityConflictResolver(),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
         )
         r1, _ = await pipeline.anonymize("Bonjour je m'appelle Patrick")
         r2, _ = await pipeline.anonymize("Quel est la premiere lettre de patrick")
 
-        assert "<<PERSON_1>>" in r1
+        assert "<<PERSON:1>>" in r1
         # Detector missed "patrick" → link_entities gets [] → no linking
         # anonymize_with_ent only has "Patrick" variant → str.replace misses
         assert "patrick" in r2
@@ -335,8 +335,8 @@ class TestCrossMessageEntityLinking:
         r1, _ = await pipeline.anonymize(
             "Bonjour, je m'appelle Patrick, j'habite en France"
         )
-        assert "<<PERSON_1>>" in r1
-        assert "<<LOCATION_1>>" in r1
+        assert "<<PERSON:1>>" in r1
+        assert "<<LOCATION:1>>" in r1
 
         # aafter_model deanonymizes → state has original text again
         # LLM produces a response containing the original names
@@ -346,20 +346,20 @@ class TestCrossMessageEntityLinking:
         r1_again, _ = await pipeline.anonymize(
             "Bonjour, je m'appelle Patrick, j'habite en France"
         )
-        assert "<<PERSON_1>>" in r1_again
-        assert "<<LOCATION_1>>" in r1_again
+        assert "<<PERSON:1>>" in r1_again
+        assert "<<LOCATION:1>>" in r1_again
 
         # Anonymize AI response (contains deanonymized names)
         ai_anon, _ = await pipeline.anonymize(
             "Bonjour Patrick ! Vous habitez en France, tres bien."
         )
-        assert "<<PERSON_1>>" in ai_anon
-        assert "<<LOCATION_1>>" in ai_anon
+        assert "<<PERSON:1>>" in ai_anon
+        assert "<<LOCATION:1>>" in ai_anon
 
         # Anonymize new user message with lowercase variant
         r3, _ = await pipeline.anonymize("Quel est la premiere lettre de patrick")
-        assert "<<PERSON_1>>" in r3
-        assert "<<PERSON_2>>" not in r3
+        assert "<<PERSON:1>>" in r3
+        assert "<<PERSON:2>>" not in r3
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +374,7 @@ class TestThreadIsolation:
         """Without passing thread_id, everything uses 'default'."""
         pipeline = _pipeline([("Patrick", "PERSON")])
         r, _ = await pipeline.anonymize("Bonjour Patrick")
-        assert "<<PERSON_1>>" in r
+        assert "<<PERSON:1>>" in r
         assert len(pipeline.get_memory().all_entities) == 1
 
     async def test_different_threads_have_isolated_memory(self) -> None:
@@ -386,7 +386,7 @@ class TestThreadIsolation:
         assert pipeline.get_memory("thread-b").all_entities == []
 
         r, _ = await pipeline.anonymize("Bonjour Marie", thread_id="thread-b")
-        assert "<<PERSON_1>>" in r  # Marie is PERSON_1 in thread-b
+        assert "<<PERSON:1>>" in r  # Marie is PERSON_1 in thread-b
 
     async def test_switching_threads_preserves_memory(self) -> None:
         """Going back to thread A still finds Patrick."""
@@ -404,10 +404,10 @@ class TestThreadIsolation:
         pipeline = _pipeline([("Patrick", "PERSON"), ("Marie", "PERSON")])
 
         ra, _ = await pipeline.anonymize("Bonjour Patrick", thread_id="thread-a")
-        assert "<<PERSON_1>>" in ra
+        assert "<<PERSON:1>>" in ra
 
         rb, _ = await pipeline.anonymize("Bonjour Marie", thread_id="thread-b")
-        assert "<<PERSON_1>>" in rb
+        assert "<<PERSON:1>>" in rb
 
         original_a, _ = await pipeline.deanonymize(ra, thread_id="thread-a")
         assert original_a == "Bonjour Patrick"
@@ -422,7 +422,7 @@ class TestMemoryEviction:
     async def test_max_threads_evicts_least_recently_used(self) -> None:
         pipeline = ThreadAnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
             max_threads=2,
         )
         await pipeline.anonymize("Bonjour Patrick", thread_id="a")
@@ -433,7 +433,7 @@ class TestMemoryEviction:
     async def test_access_refreshes_lru_order(self) -> None:
         pipeline = ThreadAnonymizationPipeline(
             detector=ExactMatchDetector([("Patrick", "PERSON")]),
-            anonymizer=Anonymizer(CounterPlaceholderFactory()),
+            anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
             max_threads=2,
         )
         await pipeline.anonymize("Bonjour Patrick", thread_id="a")
@@ -447,7 +447,7 @@ class TestMemoryEviction:
         with pytest.raises(ValueError, match="max_threads must be positive"):
             ThreadAnonymizationPipeline(
                 detector=ExactMatchDetector([]),
-                anonymizer=Anonymizer(CounterPlaceholderFactory()),
+                anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
                 max_threads=0,
             )
 

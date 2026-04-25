@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     from piighost.linker.entity import ExactEntityLinker
     from piighost.pipeline.base import AnonymizationPipeline
-    from piighost.placeholder import CounterPlaceholderFactory
+    from piighost.placeholder import LabelCounterPlaceholderFactory
     from piighost.resolver.entity import MergeEntityConflictResolver
     from piighost.resolver.span import ConfidenceSpanConflictResolver
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         span_resolver=ConfidenceSpanConflictResolver(),
         entity_linker=ExactEntityLinker(),
         entity_resolver=MergeEntityConflictResolver(),
-        anonymizer=Anonymizer(CounterPlaceholderFactory()),
+        anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
     )
 
     async def main() -> None:

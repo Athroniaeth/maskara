@@ -1,6 +1,6 @@
 /* PIIGhost placeholder highlight.
-   Apply to inline code containing <<LABEL_N>> tokens via attr_list:
-     `<<PERSON_1>>`{ .placeholder }
+   Apply to inline code containing <<LABEL:N>> tokens via attr_list:
+     `<<PERSON:1>>`{ .placeholder }
 */
 code.placeholder,
 .placeholder {

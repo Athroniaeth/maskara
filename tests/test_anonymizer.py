@@ -6,8 +6,8 @@ from piighost.anonymizer import Anonymizer
 from piighost.exceptions import DeanonymizationError
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import (
-    CounterPlaceholderFactory,
-    LabeledHashPlaceholderFactory,
+    LabelCounterPlaceholderFactory,
+    LabelHashPlaceholderFactory,
     LabelPlaceholderFactory,
 )
 
@@ -30,11 +30,11 @@ class TestAnonymize:
 
     def test_single_entity_single_detection(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
-        result = Anonymizer(CounterPlaceholderFactory()).anonymize(
+        result = Anonymizer(LabelCounterPlaceholderFactory()).anonymize(
             "Patrick est gentil",
             entities,
         )
-        assert result == "<<PERSON_1>> est gentil"
+        assert result == "<<PERSON:1>> est gentil"
 
     def test_single_entity_multiple_detections(self) -> None:
         entities = [
@@ -46,30 +46,32 @@ class TestAnonymize:
             )
         ]
         text = "Patrick est gentil. Patrick habite ici."
-        result = Anonymizer(CounterPlaceholderFactory()).anonymize(text, entities)
-        assert result == "<<PERSON_1>> est gentil. <<PERSON_1>> habite ici."
+        result = Anonymizer(LabelCounterPlaceholderFactory()).anonymize(text, entities)
+        assert result == "<<PERSON:1>> est gentil. <<PERSON:1>> habite ici."
 
     def test_multiple_entities(self) -> None:
         entities = [
             Entity(detections=(_det("Patrick", "PERSON", 0, 7),)),
             Entity(detections=(_det("Paris", "LOCATION", 17, 22),)),
         ]
-        result = Anonymizer(CounterPlaceholderFactory()).anonymize(
+        result = Anonymizer(LabelCounterPlaceholderFactory()).anonymize(
             "Patrick habite à Paris",
             entities,
         )
-        assert "<<PERSON_1>>" in result
-        assert "<<LOCATION_1>>" in result
+        assert "<<PERSON:1>>" in result
+        assert "<<LOCATION:1>>" in result
         assert "Patrick" not in result
         assert "Paris" not in result
 
     def test_no_entities_returns_unchanged(self) -> None:
-        result = Anonymizer(CounterPlaceholderFactory()).anonymize("Hello world", [])
+        result = Anonymizer(LabelCounterPlaceholderFactory()).anonymize(
+            "Hello world", []
+        )
         assert result == "Hello world"
 
     def test_with_hash_factory(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
-        result = Anonymizer(LabeledHashPlaceholderFactory()).anonymize(
+        result = Anonymizer(LabelHashPlaceholderFactory()).anonymize(
             "Patrick est gentil",
             entities,
         )
@@ -99,7 +101,7 @@ class TestDeanonymize:
     def test_roundtrip_single_entity(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
         text = "Patrick est gentil"
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
@@ -110,7 +112,7 @@ class TestDeanonymize:
             Entity(detections=(_det("Paris", "LOCATION", 17, 22),)),
         ]
         text = "Patrick habite à Paris"
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
@@ -125,10 +127,10 @@ class TestDeanonymize:
             )
         ]
         text = "Patrick est gentil. Patrick habite ici."
-        ph_factory = CounterPlaceholderFactory()
+        ph_factory = LabelCounterPlaceholderFactory()
         anon = Anonymizer(ph_factory=ph_factory)
         anonymized = anon.anonymize(text, entities)
-        assert anonymized == "<<PERSON_1>> est gentil. <<PERSON_1>> habite ici."
+        assert anonymized == "<<PERSON:1>> est gentil. <<PERSON:1>> habite ici."
 
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
@@ -144,11 +146,11 @@ class TestDeanonymize:
             )
         ]
         text = "Patrick est gentil. patric habite ici."
-        ph_factory = CounterPlaceholderFactory()
+        ph_factory = LabelCounterPlaceholderFactory()
         anon = Anonymizer(ph_factory=ph_factory)
 
         anonymized = anon.anonymize(text, entities)
-        assert anonymized.count("<<PERSON_1>>") == 2
+        assert anonymized.count("<<PERSON:1>>") == 2
 
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
@@ -180,27 +182,27 @@ class TestDeanonymize:
     def test_roundtrip_with_hash(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
         text = "Patrick est gentil"
-        ph_factory = LabeledHashPlaceholderFactory()
+        ph_factory = LabelHashPlaceholderFactory()
         anon = Anonymizer(ph_factory=ph_factory)
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
 
     def test_roundtrip_token_shorter_than_text(self) -> None:
-        """Token (<<PER_1>> = 9 chars) shorter than original (Jean Dupont = 11 chars)."""
+        """Token (<<PER:1>> = 9 chars) shorter than original (Jean Dupont = 11 chars)."""
         text = "Jean Dupont et Bob habitent à Lyon."
         entities = [
             Entity(detections=(_det("Jean Dupont", "PER", 0, 11),)),
             Entity(detections=(_det("Bob", "PER", 15, 18),)),
             Entity(detections=(_det("Lyon", "LOC", 30, 34),)),
         ]
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
 
     def test_roundtrip_token_longer_than_text(self) -> None:
-        """Token (<<PERSON_1>> = 12 chars) longer than original (Bob = 3 chars)."""
+        """Token (<<PERSON:1>> = 12 chars) longer than original (Bob = 3 chars)."""
         #        0  3    8    13
         text = "Bob aime Lyon, Bob y vit."
         entities = [
@@ -212,7 +214,7 @@ class TestDeanonymize:
             ),
             Entity(detections=(_det("Lyon", "LOCATION", 9, 13),)),
         ]
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
@@ -224,9 +226,9 @@ class TestDeanonymize:
             Entity(detections=(_det("Charlotte", "PER", 0, 9),)),
             Entity(detections=(_det("Marseille", "LOC", 13, 22),)),
         ]
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         anonymized = anon.anonymize(text, entities)
-        assert len("<<PER_1>>") == len("Charlotte")
+        assert len("<<PER:1>>") == len("Charlotte")
         restored = anon.deanonymize(anonymized, entities)
         assert restored == text
 
@@ -237,7 +239,7 @@ class TestDeanonymize:
             Entity(detections=(_det("Paris", "LOCATION", 17, 22),)),
         ]
         # Text that doesn't contain the expected tokens
-        anon = Anonymizer(CounterPlaceholderFactory())
+        anon = Anonymizer(LabelCounterPlaceholderFactory())
         with pytest.raises(DeanonymizationError) as exc_info:
             anon.deanonymize("texte sans aucun placeholder", entities)
         assert isinstance(exc_info.value.partial_text, str)

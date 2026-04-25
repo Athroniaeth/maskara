@@ -251,7 +251,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                 f"ThreadAnonymizationPipeline, which requires a factory "
                 f"tagged 'PreservesIdentity' so tokens can be "
                 f"deanonymised per-entity. "
-                f"Use CounterPlaceholderFactory or LabeledHashPlaceholderFactory instead."
+                f"Use LabelCounterPlaceholderFactory or LabelHashPlaceholderFactory instead."
             )
 
     def get_memory(self, thread_id: str = "default") -> ConversationMemory:

@@ -16,7 +16,7 @@ from piighost.detector import ExactMatchDetector
 from piighost.models import Detection, Entity, Span
 from piighost.pipeline.base import AnonymizationPipeline
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 
 
 # ---------------------------------------------------------------------------
@@ -46,9 +46,9 @@ def make_entity(
 
 
 @pytest.fixture
-def counter_factory() -> CounterPlaceholderFactory:
+def counter_factory() -> LabelCounterPlaceholderFactory:
     """Deterministic placeholder factory used by most pipeline tests."""
-    return CounterPlaceholderFactory()
+    return LabelCounterPlaceholderFactory()
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ def patrick_paris_detector() -> ExactMatchDetector:
 @pytest.fixture
 def base_pipeline(
     patrick_paris_detector: ExactMatchDetector,
-    counter_factory: CounterPlaceholderFactory,
+    counter_factory: LabelCounterPlaceholderFactory,
     memory_cache: SimpleMemoryCache,
 ) -> AnonymizationPipeline:
     """Stateless pipeline backed by an isolated in-memory cache."""
@@ -86,7 +86,7 @@ def base_pipeline(
 @pytest.fixture
 def thread_pipeline(
     patrick_paris_detector: ExactMatchDetector,
-    counter_factory: CounterPlaceholderFactory,
+    counter_factory: LabelCounterPlaceholderFactory,
 ) -> ThreadAnonymizationPipeline:
     """Conversation-aware pipeline with default in-memory cache."""
     return ThreadAnonymizationPipeline(

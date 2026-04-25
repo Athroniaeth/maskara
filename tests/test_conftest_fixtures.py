@@ -6,7 +6,7 @@ from piighost.anonymizer import Anonymizer
 from piighost.detector import ExactMatchDetector
 from piighost.pipeline.base import AnonymizationPipeline
 from piighost.pipeline.thread import ThreadAnonymizationPipeline
-from piighost.placeholder import CounterPlaceholderFactory
+from piighost.placeholder import LabelCounterPlaceholderFactory
 from tests.conftest import make_entity
 
 
@@ -23,8 +23,10 @@ class TestHelpers:
 class TestFixtureTypes:
     """Each fixture hands back the expected concrete type."""
 
-    def test_counter_factory(self, counter_factory: CounterPlaceholderFactory) -> None:
-        assert isinstance(counter_factory, CounterPlaceholderFactory)
+    def test_counter_factory(
+        self, counter_factory: LabelCounterPlaceholderFactory
+    ) -> None:
+        assert isinstance(counter_factory, LabelCounterPlaceholderFactory)
 
     def test_memory_cache(self, memory_cache: SimpleMemoryCache) -> None:
         assert memory_cache is not None
@@ -46,14 +48,14 @@ class TestFixturesWorkEndToEnd:
         self, base_pipeline: AnonymizationPipeline
     ) -> None:
         result, _ = await base_pipeline.anonymize("Bonjour Patrick à Paris")
-        assert "<<PERSON_" in result
-        assert "<<LOCATION_" in result
+        assert "<<PERSON:" in result
+        assert "<<LOCATION:" in result
 
     async def test_thread_pipeline_anonymizes(
         self, thread_pipeline: ThreadAnonymizationPipeline
     ) -> None:
         result, _ = await thread_pipeline.anonymize("Bonjour Patrick", thread_id="t1")
-        assert "<<PERSON_1>>" in result
+        assert "<<PERSON:1>>" in result
 
     async def test_memory_cache_is_fresh_per_test_part_1(
         self, memory_cache: SimpleMemoryCache
@@ -69,7 +71,7 @@ class TestFixturesWorkEndToEnd:
 
     async def test_factory_rebuilt_for_isolation(
         self,
-        counter_factory: CounterPlaceholderFactory,
+        counter_factory: LabelCounterPlaceholderFactory,
         patrick_detector: ExactMatchDetector,
         memory_cache: SimpleMemoryCache,
     ) -> None:
@@ -81,4 +83,4 @@ class TestFixturesWorkEndToEnd:
             cache=memory_cache,
         )
         out, _ = await pipe.anonymize("Bonjour Patrick")
-        assert "<<PERSON_1>>" in out
+        assert "<<PERSON:1>>" in out

@@ -71,7 +71,7 @@ Each approach has its own shortcomings, and NER models add a few more:
 Even if these issues were fixed, several deeper problems remain:
 
 - **Placeholder consistency**: every occurrence of a given PII must be anonymized identically (e.g.
-  `<<PERSON_1>>`{ .placeholder } for `Patrick`{ .pii } throughout the text), in order to preserve the information
+  `<<PERSON:1>>`{ .placeholder } for `Patrick`{ .pii } throughout the text), in order to preserve the information
   that all occurrences refer to the same entity while still protecting privacy.
 - **Fuzzy linking**: detections that are not strictly identical must still be linked together, for instance
   `Patrick`{ .pii } and `patrick`{ .pii } (case difference), `Patric`{ .pii } (typo), or full vs partial mentions
@@ -163,7 +163,7 @@ Input:
 
 Output:
 
-> `<<PERSON_1>>`{ .placeholder } lives in `<<LOCATION_1>>`{ .placeholder }. `<<PERSON_1>>`{ .placeholder } loves `<<LOCATION_1>>`{ .placeholder }.
+> `<<PERSON:1>>`{ .placeholder } lives in `<<LOCATION:1>>`{ .placeholder }. `<<PERSON:1>>`{ .placeholder } loves `<<LOCATION:1>>`{ .placeholder }.
 
 Both occurrences of `Patrick`{ .pii } are linked, same for `Paris`{ .pii }. In a conversation, subsequent messages
 reuse the same placeholders, and deanonymization is automatic for the end user.
