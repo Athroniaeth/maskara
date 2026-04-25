@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.0 (2026-04-25)
+
+### BREAKING CHANGE
+
+- the four renames above plus the Counter separator
+change. Update class imports, factory references, and any code that
+parses ``<<LABEL_N>>`` tokens to expect ``<<LABEL:N>>``. The
+RealisticHash strategy helpers (``hashed_email``, ``hashed_with_prefix``,
+``hashed_template``) are removed; use base/template strings or the new
+``fake_*`` callables.
+- ConstantPlaceholderFactory (added in the previous
+commit) is renamed to RedactPlaceholderFactory, and the existing
+RedactPlaceholderFactory is renamed to LabelPlaceholderFactory.
+Update imports and class references.
+- HashPlaceholderFactory is renamed to
+LabeledHashPlaceholderFactory. Update imports and class references.
+- HashPlaceholderFactory and RedactPlaceholderFactory
+now produce tokens wrapped in <<...>> instead of <...>. Any cache or
+LLM prompt that referenced the old format will need to be cleared
+or updated. The change is purely cosmetic: the cache mapping logic,
+the type system, and the middleware constraint are unaffected.
+
+### Feat
+
+- **placeholder**: add Counter variants, restructure naming as Style+Mechanism
+- **placeholder**: add Constant, AnonymousHash, RealisticHash factories; rename Hash
+- **pipeline**: allow disabling NER compensator components
+- **placeholder**: wrap Hash and Redact tokens in <<...>>
+- **placeholder**: tag factories with preservation level for type-safe wiring
+- **middleware**: add ToolCallStrategy for tool-call handling
+- expose core Protocol types from the top-level package
+- expose piighost.labels module with common PII label constants
+- **pipeline**: bound ConversationMemory growth via LRU eviction
+- **pipeline**: add cache_ttl parameter to bound cache entry lifetime
+
+### Fix
+
+- **lint**: resolve pyrefly errors across src, tests, and examples
+- **tests**: replace re.NOFLAG with 0 for Python 3.10 compatibility
+- **pipeline**: make ThreadAnonymizationPipeline thread_id propagation concurrency-safe
+
+### Refactor
+
+- **placeholder**: swap Constant and Redact factory names
+- **placeholder**: split identity from label via multi-inheritance
+- **placeholder**: turn preservation tags into an inheritance hierarchy
+- **middleware**: expose tool_strategy as a public attribute
+- replace @dataclass with explicit __init__ on behavior classes
+- **models**: move Detection and Entity serialization into dataclasses
+- **pipeline**: name cache key prefixes as module constants
+- **similarity**: extract Jaro-Winkler magic numbers into named constants
+
+### Perf
+
+- **pipeline**: replace token loop with single-pass regex alternation
+- **memory**: O(1) canonical lookup in ConversationMemory
+- **chunked**: run chunk detections concurrently via asyncio.gather
+- pre-compile regex patterns in hot paths
+
 ## 0.8.0 (2026-04-24)
 
 ### Feat

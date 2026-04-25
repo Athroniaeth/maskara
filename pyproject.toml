@@ -1,6 +1,6 @@
 [project]
 name = "piighost"
-version = "0.8.0"
+version = "0.9.0"
 description = "PII anonymization middleware for AI agent conversations using LangChain integration."
 readme = "README.md"
 license = { text = "MIT" }
