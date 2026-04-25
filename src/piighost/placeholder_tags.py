@@ -17,24 +17,32 @@ a :class:`~piighost.placeholder.RedactPlaceholderFactory`-based
 pipeline to the middleware) becomes a static error instead of a
 runtime surprise.
 
-Taxonomy, from most to least information preserved:
+The taxonomy is **hierarchical** so the type-checker can apply
+Liskov substitution: every ``PreservesIdentity`` token also preserves
+the label, every ``PreservesIdentityOpaque`` token also preserves the
+identity, and so on.  A consumer asking for a weaker tag accepts any
+stronger one via covariance on
+:class:`~piighost.placeholder.AnyPlaceholderFactory`.
 
-* :class:`PreservesIdentity` — the token uniquely identifies an entity.
-  Safe for every tool-call strategy.
-  Examples: ``<<PERSON_1>>``, ``<PERSON:a1b2c3d4>``.
-* :class:`PreservesLabel` — the token only carries the label; two
-  different persons collide into ``<PERSON>``.  Unsafe for tool-call
-  strategies that deanonymise arguments.
-* :class:`PreservesShape` — the token keeps part of the original value
-  (e.g. ``p***@mail.com``).  Unsafe for the middleware because two
-  different originals can yield the same masked token, and the masked
-  token can collide with a real value in a tool response.
-* :class:`PreservesNothing` — the token is a constant marker
-  (e.g. ``[REDACT]``).  All entities collapse; deanonymisation is
-  impossible.
+Hierarchy, from weakest to strongest::
 
-Tags are disjoint: ``PreservesIdentity`` is not a subtype of
-``PreservesLabel``.  Factories pick exactly one.
+    PlaceholderPreservation
+    └── PreservesNothing                 -- ``[REDACT]`` (constant)
+        └── PreservesLabel               -- ``<PERSON>``
+            ├── PreservesShape           -- ``j***@mail.com``
+            └── PreservesIdentity        -- unique reversible id
+                ├── PreservesIdentityOpaque       -- ``<<PERSON_1>>``
+                └── PreservesIdentityRealistic    -- looks like real data
+                    ├── PreservesIdentityHashed   -- ``a1b2c3d4@anon.local``
+                    └── PreservesIdentityFaker    -- ``john.doe@example.com``
+
+A factory picks the **most specific** tag that matches its guarantees.
+``CounterPlaceholderFactory`` and ``HashPlaceholderFactory`` declare
+``PreservesIdentityOpaque``; ``FakerPlaceholderFactory`` declares
+``PreservesIdentityFaker``.  A consumer typed against
+``PreservesIdentity`` accepts all four sub-tags via covariance, while
+a consumer typed against ``PreservesIdentityOpaque`` rejects the
+realistic ones at type-check time.
 """
 
 
@@ -47,18 +55,18 @@ class PlaceholderPreservation:
     """
 
 
-class PreservesIdentity(PlaceholderPreservation):
-    """The placeholder uniquely identifies each entity.
+class PreservesNothing(PlaceholderPreservation):
+    """The placeholder is a constant marker carrying no information.
 
-    Two distinct entities always get distinct tokens, and the same
-    entity seen twice gets the same token.  This is the only level
-    safe with :class:`~piighost.middleware.ToolCallStrategy.FULL` and
-    :class:`~piighost.middleware.ToolCallStrategy.INBOUND_ONLY`.
+    Every entity collapses to the same token (e.g. ``[REDACT]``).
+    Deanonymisation is not possible; only use with
+    :class:`~piighost.middleware.ToolCallStrategy.PASSTHROUGH` or
+    outside the middleware entirely.
     """
 
 
-class PreservesLabel(PlaceholderPreservation):
-    """The placeholder preserves only the entity label.
+class PreservesLabel(PreservesNothing):
+    """The placeholder preserves the entity label.
 
     Different entities sharing a label collide into the same token
     (``<PERSON>``).  Suitable for one-shot redaction but cannot be
@@ -68,23 +76,68 @@ class PreservesLabel(PlaceholderPreservation):
     """
 
 
-class PreservesShape(PlaceholderPreservation):
+class PreservesShape(PreservesLabel):
     """The placeholder preserves part of the original value.
 
-    The masked form (``p***@mail.com``) can collide with other
-    entities and even with real values in a tool response, so it is
-    unsafe for deanonymisation and for tool-call strategies that rely
-    on token uniqueness.
+    The masked form (``p***@mail.com``) implicitly carries the label
+    via the format, but two distinct entities with similar shapes can
+    collide on the same token, and the masked token can also collide
+    with a real value in a tool response.  Unsafe for deanonymisation
+    that relies on token uniqueness.
     """
 
 
-class PreservesNothing(PlaceholderPreservation):
-    """The placeholder is a constant marker carrying no information.
+class PreservesIdentity(PreservesLabel):
+    """The placeholder uniquely identifies each entity.
 
-    Every entity collapses to the same token (e.g. ``[REDACT]``).
-    Deanonymisation is not possible; only use with
-    :class:`~piighost.middleware.ToolCallStrategy.PASSTHROUGH` or
-    outside the middleware entirely.
+    Two distinct entities always get distinct tokens, and the same
+    entity seen twice gets the same token.  This is the only level
+    safe with :class:`~piighost.middleware.ToolCallStrategy.FULL` and
+    :class:`~piighost.middleware.ToolCallStrategy.INBOUND_ONLY`.
+
+    Sub-tags refine the *realism* axis: opaque tokens are clearly not
+    real data, while realistic tokens look like the original format.
+    """
+
+
+class PreservesIdentityOpaque(PreservesIdentity):
+    """The placeholder is unique and clearly synthetic.
+
+    Tokens like ``<<PERSON_1>>`` or ``<PERSON:a1b2c3d4>`` cannot be
+    confused with real data, are easy to scan in logs, and never
+    coincidentally collide with a real value.
+    """
+
+
+class PreservesIdentityRealistic(PreservesIdentity):
+    """The placeholder is unique but looks like real data.
+
+    Realistic tokens pass downstream format validation (email regex,
+    name patterns, etc.) at the cost of looking indistinguishable
+    from genuine values.  Refined by :class:`PreservesIdentityHashed`
+    (collision-proof) and :class:`PreservesIdentityFaker` (collision
+    possible with real-world values).
+    """
+
+
+class PreservesIdentityHashed(PreservesIdentityRealistic):
+    """Realistic-format placeholder whose content is a hash.
+
+    The token mimics the original format (e.g.
+    ``a1b2c3d4@anonymized.local``) but its content is derived from a
+    hash, so it is **unique and impossible to coincidentally match**
+    a real-world value.
+    """
+
+
+class PreservesIdentityFaker(PreservesIdentityRealistic):
+    """Plausible-realistic placeholder produced by Faker.
+
+    Tokens like ``john.doe@example.com`` or ``Jean Dupont`` are
+    indistinguishable from genuine data.  Each entity still maps to a
+    unique token, but a Faker value can coincidentally land on a real
+    person's actual data, which the middleware cannot detect during
+    string replacement.
     """
 
 
@@ -123,6 +176,10 @@ def get_preservation_tag(factory: object) -> type[PlaceholderPreservation] | Non
 __all__ = [
     "PlaceholderPreservation",
     "PreservesIdentity",
+    "PreservesIdentityFaker",
+    "PreservesIdentityHashed",
+    "PreservesIdentityOpaque",
+    "PreservesIdentityRealistic",
     "PreservesLabel",
     "PreservesNothing",
     "PreservesShape",

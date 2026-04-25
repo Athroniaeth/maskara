@@ -227,17 +227,29 @@ class TestMaskPlaceholderFactory:
 class TestGetPreservationTag:
     """Runtime tag recovery used by the pipeline's factory check."""
 
-    def test_counter_is_preserves_identity(self) -> None:
+    def test_counter_is_preserves_identity_opaque(self) -> None:
         from piighost.placeholder import CounterPlaceholderFactory
-        from piighost.placeholder_tags import PreservesIdentity, get_preservation_tag
+        from piighost.placeholder_tags import (
+            PreservesIdentity,
+            PreservesIdentityOpaque,
+            get_preservation_tag,
+        )
 
-        assert get_preservation_tag(CounterPlaceholderFactory()) is PreservesIdentity
+        tag = get_preservation_tag(CounterPlaceholderFactory())
+        assert tag is PreservesIdentityOpaque
+        assert issubclass(tag, PreservesIdentity)  # hierarchy holds
 
-    def test_hash_is_preserves_identity(self) -> None:
+    def test_hash_is_preserves_identity_opaque(self) -> None:
         from piighost.placeholder import HashPlaceholderFactory
-        from piighost.placeholder_tags import PreservesIdentity, get_preservation_tag
+        from piighost.placeholder_tags import (
+            PreservesIdentity,
+            PreservesIdentityOpaque,
+            get_preservation_tag,
+        )
 
-        assert get_preservation_tag(HashPlaceholderFactory()) is PreservesIdentity
+        tag = get_preservation_tag(HashPlaceholderFactory())
+        assert tag is PreservesIdentityOpaque
+        assert issubclass(tag, PreservesIdentity)
 
     def test_redact_is_preserves_label(self) -> None:
         from piighost.placeholder import RedactPlaceholderFactory
