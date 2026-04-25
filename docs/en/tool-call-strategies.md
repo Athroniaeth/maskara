@@ -12,7 +12,7 @@ icon: lucide/wrench
 
 ### The LLM channel: cache-based, reliable
 
-In `abefore_model`, the middleware sends an *exact* anonymised text to the LLM and stores the mapping `hash(anonymized_text) → original` in cache. When the LLM replies, `aafter_model` looks up the reply by hash and restores the original. This is a deterministic key lookup, it cannot be ambiguous, and it works regardless of whether two entities share a token: the key is the full text, not the tokens themselves.
+In `abefore_model`, the middleware sends an *exact* anonymised text to the LLM and stores the mapping `hash(anonymized_text) → original` in cache. When the LLM replies, `aafter_model` looks up the reply by hash and restores the original. This is a deterministic key lookup, it cannot be ambiguous, and it works regardless of whether two entities share a placeholder: the key is the full text, not the placeholders themselves.
 
 As long as the LLM forwards back the exact anonymised string (which is the contract for inbound messages), this channel is reliable.
 
@@ -25,7 +25,7 @@ Both directions therefore fall back on **plain string replacement**:
 - *Tool args (LLM → tool)*: scan the args for known placeholders, replace each with the original value of its entity.
 - *Tool response (tool → LLM)*: scan the response for known PII values, replace each with the corresponding placeholder.
 
-Plain replacement only works when the mapping is **unambiguous**. If two entities share the placeholder `<<PERSON>>`{ .placeholder }, there is no way to decide which original to restore in the args. If two entities collapse onto the same masked token in the response, the conversation memory becomes lossy. This is the structural reason the middleware accepts only factories tagged `PreservesIdentity`. See [Placeholder factories](placeholder-factories.md).
+Plain replacement only works when the mapping is **unambiguous**. If two entities share the placeholder `<<PERSON>>`{ .placeholder }, there is no way to decide which original to restore in the args. If two entities collapse onto the same masked placeholder in the response, the conversation memory becomes lossy. This is the structural reason the middleware accepts only factories tagged `PreservesIdentity`. See [Placeholder factories](placeholder-factories.md).
 
 ---
 
@@ -37,7 +37,7 @@ Plain replacement only works when the mapping is **unambiguous**. If two entitie
 |---|---|---|---|
 | `FULL` (default) | real values (deanonymised args) | re-detected and re-anonymised through the full pipeline | tools that may emit new PII (DBs, CRMs, search APIs) |
 | `INBOUND_ONLY` | real values (deanonymised args) | passed through unchanged; lazily re-anonymised on the next `abefore_model` | tools whose response is known PII-free or already-anonymised |
-| `PASSTHROUGH` | placeholder tokens verbatim | passed through unchanged | tools that must never see real PII, or that don't need them |
+| `PASSTHROUGH` | placeholders verbatim | passed through unchanged | tools that must never see real PII, or that don't need them |
 
 ### `FULL`
 

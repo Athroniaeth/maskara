@@ -12,7 +12,7 @@ icon: lucide/wrench
 
 ### Le canal LLM : basé sur le cache, fiable
 
-Dans `abefore_model`, le middleware envoie au LLM un texte anonymisé *exact*, et stocke le mapping `hash(texte_anonymisé) → original` dans le cache. Quand le LLM répond, `aafter_model` cherche la réponse par hash et restaure l'original. C'est un lookup déterministe sur une clé, il ne peut pas être ambigu, et il fonctionne quel que soit le placeholder utilisé : la clé est le texte complet, pas les jetons en eux-mêmes.
+Dans `abefore_model`, le middleware envoie au LLM un texte anonymisé *exact*, et stocke le mapping `hash(texte_anonymisé) → original` dans le cache. Quand le LLM répond, `aafter_model` cherche la réponse par hash et restaure l'original. C'est un lookup déterministe sur une clé, il ne peut pas être ambigu, et il fonctionne quel que soit le placeholder utilisé : la clé est le texte complet, pas les placeholders en eux-mêmes.
 
 Tant que le LLM renvoie tel quel le texte anonymisé qu'il a reçu (le contrat des messages d'entrée), ce canal est fiable.
 
@@ -25,7 +25,7 @@ Les deux directions retombent donc sur du **remplacement de chaîne brut** :
 - *Arguments d'outil (LLM → outil)* : on parcourt les arguments à la recherche des placeholders connus, et on remplace chacun par la valeur originale de son entité.
 - *Réponse de l'outil (outil → LLM)* : on parcourt la réponse à la recherche des valeurs PII connues, et on remplace chacune par le placeholder correspondant.
 
-Le remplacement brut n'est correct que si le mapping est **non ambigu**. Si deux entités partagent le placeholder `<<PERSON>>`{ .placeholder }, impossible de savoir laquelle restaurer dans les arguments. Si deux entités se confondent dans le même jeton masqué dans la réponse, la mémoire de conversation devient lacunaire. C'est la raison structurelle pour laquelle le middleware n'accepte que des factories taguées `PreservesIdentity`. Voir [Placeholder factories](placeholder-factories.md).
+Le remplacement brut n'est correct que si le mapping est **non ambigu**. Si deux entités partagent le placeholder `<<PERSON>>`{ .placeholder }, impossible de savoir laquelle restaurer dans les arguments. Si deux entités se confondent dans le même placeholder masqué dans la réponse, la mémoire de conversation devient lacunaire. C'est la raison structurelle pour laquelle le middleware n'accepte que des factories taguées `PreservesIdentity`. Voir [Placeholder factories](placeholder-factories.md).
 
 ---
 
@@ -37,7 +37,7 @@ Le remplacement brut n'est correct que si le mapping est **non ambigu**. Si deux
 |---|---|---|---|
 | `FULL` (défaut) | les vraies valeurs (arguments désanonymisés) | re-détectée et ré-anonymisée par le pipeline complet | outils qui peuvent émettre de nouvelles PII (BDD, CRM, recherche) |
 | `INBOUND_ONLY` | les vraies valeurs (arguments désanonymisés) | renvoyée telle quelle, ré-anonymisée paresseusement au prochain `abefore_model` | outils dont la réponse est connue sans PII ou déjà anonymisée |
-| `PASSTHROUGH` | les jetons placeholder tels quels | renvoyée telle quelle | outils qui ne doivent jamais voir de PII réelles, ou qui n'en ont pas besoin |
+| `PASSTHROUGH` | les placeholders tels quels | renvoyée telle quelle | outils qui ne doivent jamais voir de PII réelles, ou qui n'en ont pas besoin |
 
 ### `FULL`
 

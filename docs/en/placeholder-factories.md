@@ -4,32 +4,32 @@ icon: lucide/replace
 
 # Placeholder factories
 
-A **placeholder** is the synthetic token that takes the place of a detected PII before the text is handed to the LLM. Instead of sending `"Patrick lives in Paris"` to the LLM, the pipeline sends `"<<PERSON_1>> lives in <<LOCATION_1>>"`. The original values stay in the cache and the conversation memory; the LLM never sees them.
+A **placeholder** is the synthetic placeholder that takes the place of a detected PII before the text is handed to the LLM. Instead of sending `"Patrick lives in Paris"` to the LLM, the pipeline sends `"<<PERSON_1>> lives in <<LOCATION_1>>"`. The original values stay in the cache and the conversation memory; the LLM never sees them.
 
 !!! note "Why the name 'placeholder factory'?"
 
-    "Placeholder" because the token holds the place of the original value. We could have called it a "token", but that term is already overloaded in the LLM context (language tokens). "Factory" because the component generates these tokens on the fly, based on the entities detected in each message.
+    "Placeholder" because the token holds the place of the original value. We could have called it a "token", but that term is already overloaded in the LLM context (language tokens). "Factory" because the component generates these placeholders on the fly, based on the entities detected in each message.
 
-!!! note "Token format convention"
+!!! note "Placeholder format convention"
 
-    Tokens used throughout this documentation and produced by the built-in factories follow a simple convention:
+    Placeholders used throughout this documentation and produced by the built-in factories follow a simple convention:
 
-    - **Synthetic token** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<a1b2c3d4>>`{ .placeholder }. The delimiters guarantee that an LLM (or a human re-reading) will never mistake the token for a regular word or for an HTML/XML tag the model might emit.
-    - **Token that replicates a PII format** (Faker, realistic hashed, masked): no delimiters. Examples: `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. The absence of delimiters is deliberate: the goal is precisely to look natural so a downstream tool that validates a format (email regex, card length) still accepts the placeholder.
+    - **Synthetic placeholder** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<a1b2c3d4>>`{ .placeholder }. The delimiters serve two purposes: an LLM (or a human re-reading) will never mistake the placeholder for a regular word or for an HTML/XML tag the model might emit; and the middleware can perform `str.replace` reliably during deanonymisation (see [Tool-call strategies](tool-call-strategies.md) for why this matters).
+    - **Placeholder that replicates a PII format** (Faker, realistic hashed, masked): no delimiters. Examples: `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. The absence of delimiters is deliberate: the goal is precisely to look natural so a downstream tool that validates a format (email regex, card length) still accepts the placeholder.
 
-    The rule also applies to any factory you write yourself: purely opaque token? wrap it. Token that mimics a real value? leave it raw.
+    The rule also applies to any factory you write yourself: purely opaque placeholder? wrap it. Placeholder that mimics a real value? leave it raw.
 
-A **placeholder factory** decides what those tokens look like and how much information they carry. Two questions structure the choice:
+A **placeholder factory** decides what those placeholders look like and how much information they carry. Two questions structure the choice:
 
-1. *Are tokens unique per entity?* `Patrick`{ .pii } and `Marie`{ .pii } should not both collapse onto a generic `<<PERSON>>`{ .placeholder }, otherwise the LLM cannot tell them apart. A unique token per entity lets the LLM reason about relations between entities: *"is the manager the same person as `Patrick`{ .pii }?"* becomes *"is `<<PERSON_1>>`{ .placeholder } the same as `<<PERSON_2>>`{ .placeholder }?"* and gets a clear answer.
-2. *Are tokens reversible?* Given a token alone, can the original value be recovered without consulting the cache? This is the precondition for the middleware's string-replacement step on tool arguments. If two placeholders collapse onto the same `<<PERSON>>`{ .placeholder }, there is no way to know which original to restore.
+1. *Are placeholders unique per entity?* `Patrick`{ .pii } and `Marie`{ .pii } should not both collapse onto a generic `<<PERSON>>`{ .placeholder }, otherwise the LLM cannot tell them apart. A unique placeholder per entity lets the LLM reason about relations between entities: *"is the manager the same person as `Patrick`{ .pii }?"* becomes *"is `<<PERSON_1>>`{ .placeholder } the same as `<<PERSON_2>>`{ .placeholder }?"* and gets a clear answer.
+2. *Are placeholders reversible?* Given a placeholder alone, can the original value be recovered without consulting the cache? This is the precondition for the middleware's string-replacement step on tool arguments. If two placeholders collapse onto the same `<<PERSON>>`{ .placeholder }, there is no way to know which original to restore.
 
 Seven families of factories sit at different points on that spectrum, and the choice has direct consequences on which `ToolCallStrategy` you can use safely. See [Tool-call strategies](tool-call-strategies.md) for the runtime side.
 
-- **No information** (`<<REDACT>>`{ .placeholder }): a constant token that reveals nothing to the LLM. Classic redaction. No reasoning possible on entities (the LLM cannot tell that the value was a city, so it cannot decide to call `get_weather`).
+- **No information** (`<<REDACT>>`{ .placeholder }): a constant placeholder that reveals nothing to the LLM. Classic redaction. No reasoning possible on entities (the LLM cannot tell that the value was a city, so it cannot decide to call `get_weather`).
 - **Id only** (`<<a1b2c3d4>>`{ .placeholder }): a unique hash per entity, without revealing the type. The LLM sees that two distinct entities exist but cannot tell whether they are persons, emails, or credit cards. Keeps reversibility on the tool side without giving any semantic hint to the model.
-- **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }): the type is revealed but not the identity. Multiple persons in the same conversation collapse onto the same `<<PERSON>>`{ .placeholder } token, so cross-references break.
-- **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }): type revealed, stable identity, clearly synthetic token. The LLM can tell that `<<PERSON_1>>`{ .placeholder } and `<<PERSON_2>>`{ .placeholder } are different people. Unique, so reversible by string replacement.
+- **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }): the type is revealed but not the identity. Multiple persons in the same conversation collapse onto the same `<<PERSON>>`{ .placeholder } placeholder, so cross-references break.
+- **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }): type revealed, stable identity, clearly synthetic placeholder. The LLM can tell that `<<PERSON_1>>`{ .placeholder } and `<<PERSON_2>>`{ .placeholder } are different people. Unique, so reversible by string replacement.
 - **Type + partial value** (`p***@mail.com`{ .placeholder }): the format is preserved but real content is partially visible. The LLM sees that it is an email, may guess the domain, but cannot recover the full address. Riskier on privacy (real fragments leak) and reversibility (collisions possible).
 - **Type + id (Faker)** (`john.doe@gmail.com`{ .placeholder }): a fully plausible fake value. Natural-looking output, but exposes a coincidental-collision risk with a real-world value.
 - **Type + id (realistic hashed)** (`a1b2c3d4@anonymized.local`{ .placeholder }): a realistic fake value with a hash guaranteeing uniqueness. Combines the realistic format with a guarantee of non-collision.
@@ -40,31 +40,31 @@ Seven families of factories sit at different points on that spectrum, and the ch
 
 ### No information: total destruction
 
-The token is a fixed string (e.g. `<<REDACT>>`{ .placeholder }). The LLM learns *that* something was redacted but nothing about its type, count, or relations. The conversation loses every internal reference: an agent trying to act on *"send the invoice to the client"* cannot tell whether the client is the one mentioned earlier or someone new. Useful for archival redaction, useless when an agent has to reason.
+The placeholder is a fixed string (e.g. `<<REDACT>>`{ .placeholder }). The LLM learns *that* something was redacted but nothing about its type, count, or relations. The conversation loses every internal reference: an agent trying to act on *"send the invoice to the client"* cannot tell whether the client is the one mentioned earlier or someone new. Useful for archival redaction, useless when an agent has to reason.
 
 No built-in factory ships with this level. It exists in the taxonomy so that a user-defined factory can declare it explicitly (tag `PreservesNothing`).
 
 ### Id only: identity without type
 
-`<<a1b2c3d4>>`{ .placeholder }. Original trade-off: the token keeps the synthetic `<<...>>` shape but does not reveal the label; it does carry a unique hash per entity. The LLM cannot tell whether the entity is a person, an email, or a credit card, but it can see that `<<a1b2c3d4>>`{ .placeholder } and `<<ef98abcd>>`{ .placeholder } are two distinct entities. One of the most protective levels while remaining usable on the tool side (the hash is unique, so string replacement works).
+`<<a1b2c3d4>>`{ .placeholder }. Original trade-off: the placeholder keeps the synthetic `<<...>>` shape but does not reveal the label; it does carry a unique hash per entity. The LLM cannot tell whether the entity is a person, an email, or a credit card, but it can see that `<<a1b2c3d4>>`{ .placeholder } and `<<ef98abcd>>`{ .placeholder } are two distinct entities. One of the most protective levels while remaining usable on the tool side (the hash is unique, so string replacement works).
 
 No built-in factory ships this scheme. Dedicated tag: `PreservesIdentityOnly` (under `PreservesIdentity`). The middleware accepts this factory like any other identity-preserving factory through covariance.
 
 ### Type only: known type, identities collapsed
 
-`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }. The LLM knows that something is a person, an email, a credit card, and can answer questions that depend on the type alone. But two different persons in the same conversation collapse onto the same token. The classic failure mode is cross-reference: *"is `Patrick`{ .pii } the same person as the manager mentioned earlier?"* becomes *"is `<<PERSON>>`{ .placeholder } the same as `<<PERSON>>`{ .placeholder }?"*, which has no answer.
+`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }. The LLM knows that something is a person, an email, a credit card, and can answer questions that depend on the type alone. But two different persons in the same conversation collapse onto the same placeholder. The classic failure mode is cross-reference: *"is `Patrick`{ .pii } the same person as the manager mentioned earlier?"* becomes *"is `<<PERSON>>`{ .placeholder } the same as `<<PERSON>>`{ .placeholder }?"*, which has no answer.
 
 Built-in: `RedactPlaceholderFactory` (output: `<<PERSON>>`{ .placeholder }). Tag `PreservesLabel`.
 
 ### Type + id (opaque)
 
-`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }. The string clearly is *not* a person, an email, or a card number, it's a placeholder. The LLM cannot mistake it for real data, audit logs are easy to scan, and there is **zero chance** of collision with a real value. Trade-off: a strict downstream prompt or tool that validates "argument must look like an email" will reject these tokens.
+`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }. The string clearly is *not* a person, an email, or a card number, it's a placeholder. The LLM cannot mistake it for real data, audit logs are easy to scan, and there is **zero chance** of collision with a real value. Trade-off: a strict downstream prompt or tool that validates "argument must look like an email" will reject these placeholders.
 
 Built-in: `CounterPlaceholderFactory` (`<<PERSON_1>>`{ .placeholder }), `HashPlaceholderFactory` (`<<PERSON:a1b2c3d4>>`{ .placeholder }). Tag `PreservesLabeledIdentityOpaque`.
 
 ### Type + id (realistic hashed)
 
-A custom factory can produce values that **look like the original format** but whose content is driven by a hash, e.g. `a1b2c3d4@anonymized.local`{ .placeholder } for an email, or `Patient_a1b2c3d4`{ .placeholder } for a name. The token passes basic format validation (email regex, length, allowed characters), so downstream tools and prompt templates that expect a real-looking value still work. Because the content is a hash, the token is **unique and impossible to coincidentally match** an existing real value.
+A custom factory can produce values that **look like the original format** but whose content is driven by a hash, e.g. `a1b2c3d4@anonymized.local`{ .placeholder } for an email, or `Patient_a1b2c3d4`{ .placeholder } for a name. The placeholder passes basic format validation (email regex, length, allowed characters), so downstream tools and prompt templates that expect a real-looking value still work. Because the content is a hash, the placeholder is **unique and impossible to coincidentally match** an existing real value.
 
 No built-in factory ships this pattern; it is the recommended approach when format matters. Subclass `AnyPlaceholderFactory[PreservesLabeledIdentityHashed]` and emit a hash inside the desired shape (see *Writing your own* below).
 
@@ -75,22 +75,22 @@ No built-in factory ships this pattern; it is the recommended approach when form
 1. **Coincidental collision with real values.** A Faker email could land on a real person's actual email address. If a tool response then contains that real address, the deanonymisation step cannot tell whether it should be replaced or left alone.
 2. **The agent may reason on the value as if it were real.** If a downstream tool routes on the email domain, it will route on the *fake* domain, a feature in `PASSTHROUGH`-style flows but a footgun in `FULL` flows where real PII flows back to the LLM.
 
-Use Faker for archival, demo, or one-shot redaction. Prefer opaque or format-preserving hash tokens when the agent has tool calls that touch real systems. Tag `PreservesLabeledIdentityFaker`.
+Use Faker for archival, demo, or one-shot redaction. Prefer opaque or format-preserving hash placeholders when the agent has tool calls that touch real systems. Tag `PreservesLabeledIdentityFaker`.
 
 ### Type + partial value: partial value leak
 
-`j***@mail.com`{ .placeholder }, `****4567`{ .placeholder }, `P******`{ .placeholder }. The token preserves *part* of the original value: the email domain, the last four digits of a card, the first letter of a name. The LLM can reason on more than the type: *"the email is on the company domain"*, *"the card ends in 4567"*, *"the name starts with P"*. Two trade-offs come with this:
+`j***@mail.com`{ .placeholder }, `****4567`{ .placeholder }, `P******`{ .placeholder }. The placeholder preserves *part* of the original value: the email domain, the last four digits of a card, the first letter of a name. The LLM can reason on more than the type: *"the email is on the company domain"*, *"the card ends in 4567"*, *"the name starts with P"*. Two trade-offs come with this:
 
 1. **Real fragments of the PII reach the LLM.** It cannot reconstruct the full value, but `j***@mail.com`{ .placeholder } already places the user inside a known mail provider.
 2. **Collisions are possible.** Two different cards ending in `4567` collapse onto `****4567`{ .placeholder }; two emails sharing the first letter and domain end up identical. The id is "mostly unique" but not guaranteed.
 
-Built-in: `MaskPlaceholderFactory`. Tag `PreservesShape`. The middleware refuses it for the same reason as `PreservesLabel`: an ambiguous token cannot be deanonymised through string replacement.
+Built-in: `MaskPlaceholderFactory`. Tag `PreservesShape`. The middleware refuses it for the same reason as `PreservesLabel`: an ambiguous placeholder cannot be deanonymised through string replacement.
 
 ---
 
 ## Preservation tags
 
-Every factory carries a **phantom type** that summarises the preservation level of its tokens. The type-checker reads this tag to validate a factory against its consumers.
+Every factory carries a **phantom type** that summarises the preservation level of its placeholders. The type-checker reads this tag to validate a factory against its consumers.
 
 **Identity of each family.**
 
@@ -204,7 +204,7 @@ classDiagram
     PreservesLabeledIdentityRealistic <|-- PreservesLabeledIdentityFaker
 ```
 
-`PreservesLabeledIdentity` inherits from both `PreservesLabel` and `PreservesIdentity` (multiple inheritance). This expresses the **"A is a B but not every B is an A"** relation: every `PreservesLabeledIdentity` is also a `PreservesLabel` and a `PreservesIdentity`, but the reverse is false. A consumer typed against `Pipeline[PreservesIdentity]` therefore accepts factories *with or without* labels, as long as they produce unique tokens per entity.
+`PreservesLabeledIdentity` inherits from both `PreservesLabel` and `PreservesIdentity` (multiple inheritance). This expresses the **"A is a B but not every B is an A"** relation: every `PreservesLabeledIdentity` is also a `PreservesLabel` and a `PreservesIdentity`, but the reverse is false. A consumer typed against `Pipeline[PreservesIdentity]` therefore accepts factories *with or without* labels, as long as they produce unique placeholders per entity.
 
 A factory declares the **most specific** tag that matches its guarantees:
 
@@ -230,7 +230,7 @@ class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
 | `RedactPlaceholderFactory` | `<<PERSON>>`{ .placeholder } | `PreservesLabel` | no (label only) | no |
 | `MaskPlaceholderFactory` | `p***@mail.com`{ .placeholder } | `PreservesShape` | partial | yes (with collision risk) |
 
-`CounterPlaceholderFactory` and `HashPlaceholderFactory` are the safe defaults. `FakerPlaceholderFactory` is reversible but its tokens can collide with real values in tool responses. `RedactPlaceholderFactory` and `MaskPlaceholderFactory` are one-shot redaction tools and cannot be reversed.
+`CounterPlaceholderFactory` and `HashPlaceholderFactory` are the safe defaults. `FakerPlaceholderFactory` is reversible but its placeholders can collide with real values in tool responses. `RedactPlaceholderFactory` and `MaskPlaceholderFactory` are one-shot redaction tools and cannot be reversed.
 
 ---
 
@@ -268,7 +268,7 @@ To avoid in an agent:
 - `RedactPlaceholderFactory` and `MaskPlaceholderFactory` are rejected by the middleware (no uniqueness guarantee). Usable outside the middleware, or in `ToolCallStrategy.PASSTHROUGH` mode (the agent never receives the real values).
 - `FakerPlaceholderFactory` when the pipeline runs `FULL` or `INBOUND_ONLY` *and* tools may return real emails or names: undetectable external collision risk.
 
-The preservation tag exists so this choice is visible to the type-checker, not buried in token-format trivia. A factory tagged `PreservesShape` cannot be plugged into the middleware *by accident*: it will fail at type-check time, not on the first tool call in production.
+The preservation tag exists so this choice is visible to the type-checker, not buried in placeholder-format trivia. A factory tagged `PreservesShape` cannot be plugged into the middleware *by accident*: it will fail at type-check time, not on the first tool call in production.
 
 ---
 
@@ -276,9 +276,9 @@ The preservation tag exists so this choice is visible to the type-checker, not b
 
 The middleware operates on three boundaries: **input messages** (LLM in), **output messages** (LLM out), and **tool calls**. The first two go through the cache; the tool calls cannot.
 
-**Input/output messages.** When `abefore_model` anonymises a message, it stores `hash(anonymized_text) → original` in the cache. The reply from the LLM is looked up by exact hash, so deanonymisation is a clean key lookup. This works for any factory, regardless of whether tokens are unique.
+**Input/output messages.** When `abefore_model` anonymises a message, it stores `hash(anonymized_text) → original` in the cache. The reply from the LLM is looked up by exact hash, so deanonymisation is a clean key lookup. This works for any factory, regardless of whether placeholders are unique.
 
-**Tool calls.** The LLM produces tool arguments by *combining* and *paraphrasing* the placeholders it received. The exact text was never anonymised by the pipeline, so it is not in the cache. The only way to deanonymise is **string replacement**: scan the args for known placeholders and substitute the original value of each. The same is true in reverse for the tool response, which is re-anonymised by replacing known PII values with their tokens.
+**Tool calls.** The LLM produces tool arguments by *combining* and *paraphrasing* the placeholders it received. The exact text was never anonymised by the pipeline, so it is not in the cache. The only way to deanonymise is **string replacement**: scan the args for known placeholders and substitute the original value of each. The same is true in reverse for the tool response, which is re-anonymised by replacing known PII values with their placeholders.
 
 That string-replacement step is unambiguous **only if every entity maps to a unique placeholder**. If two entities collapse onto `<<PERSON>>`{ .placeholder }, there is no way to know which original to restore. The middleware therefore narrows its accepted type to `ThreadAnonymizationPipeline[PreservesIdentity]`, which through covariance encompasses both `PreservesIdentityOnly` (hashed redact, no label) and every `PreservesLabeledIdentity*` (with label). Wiring a `PreservesLabel` / `PreservesShape` / `PreservesNothing` factory into the middleware is caught by `pyrefly` / `mypy` *before* the program runs.
 
@@ -305,7 +305,7 @@ Subclass `AnyPlaceholderFactory[<tag>]` with the right preservation tag for your
 
         def create(self, entities: list[Entity]) -> dict[Entity, str]:
             result: dict[Entity, str] = {}
-            seen: dict[str, str] = {}  # canonical → token
+            seen: dict[str, str] = {}  # canonical → placeholder
 
             for entity in entities:
                 canonical = entity.detections[0].text.lower()
