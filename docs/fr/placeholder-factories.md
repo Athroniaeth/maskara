@@ -10,6 +10,15 @@ Un **placeholder** est le jeton synthétique qui remplace une PII détectée dan
 
     "Placeholder" parce que c'est un substitut qui tient la place de la valeur originale. On aurait pu parler de "token" ou "jeton", mais ces termes sont déjà surchargés dans le contexte des LLM (tokens de langage). "Factory" parce que c'est un composant qui génère ces jetons à la volée, en fonction des entités détectées dans chaque message.
 
+!!! note "Convention de format des jetons"
+
+    Les jetons utilisés dans cette documentation et produits par les factories built-in suivent une convention simple :
+
+    - **Jeton synthétique** (qui ne ressemble à aucune PII réelle) : encadré par `<<` et `>>`. Exemples : `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<a1b2c3d4>>`{ .placeholder }. Les délimiteurs garantissent qu'un LLM (ou un humain qui relit) ne confondra jamais le jeton avec un mot du texte ou une balise HTML/XML générée par le modèle.
+    - **Jeton qui réplique un format de PII** (Faker, réaliste hashé, masqué) : pas de délimiteur. Exemples : `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. L'absence de délimiteur est délibérée : le but est précisément de paraître naturel pour qu'un outil aval qui valide le format (regex email, longueur de carte) accepte le placeholder.
+
+    La règle s'applique aussi à toute factory que vous écrirez : jeton purement opaque ? encadrez-le. Jeton qui imite une vraie valeur ? laissez-le brut.
+
 Une **placeholder factory** est le composant qui décide à quoi ressemblent ces jetons et combien d'information ils transportent. Deux questions structurent le choix :
 
 1. *Les jetons sont-ils uniques par entité ?* `Patrick`{ .pii } et `Marie`{ .pii } ne doivent pas se ramener au même placeholder générique `<<PERSON>>`{ .placeholder }, sinon le LLM ne peut pas faire la distinction entre les deux. Un jeton unique par entité permet au LLM de raisonner sur les relations entre les entités : *"le manager est-il la même personne que `Patrick`{ .pii } ?"* devient *"`<<PERSON_1>>`{ .placeholder } est-il la même que `<<PERSON_2>>`{ .placeholder } ?"* et a une réponse claire.

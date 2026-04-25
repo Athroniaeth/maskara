@@ -10,6 +10,15 @@ A **placeholder** is the synthetic token that takes the place of a detected PII 
 
     "Placeholder" because the token holds the place of the original value. We could have called it a "token", but that term is already overloaded in the LLM context (language tokens). "Factory" because the component generates these tokens on the fly, based on the entities detected in each message.
 
+!!! note "Token format convention"
+
+    Tokens used throughout this documentation and produced by the built-in factories follow a simple convention:
+
+    - **Synthetic token** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<a1b2c3d4>>`{ .placeholder }. The delimiters guarantee that an LLM (or a human re-reading) will never mistake the token for a regular word or for an HTML/XML tag the model might emit.
+    - **Token that replicates a PII format** (Faker, realistic hashed, masked): no delimiters. Examples: `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. The absence of delimiters is deliberate: the goal is precisely to look natural so a downstream tool that validates a format (email regex, card length) still accepts the placeholder.
+
+    The rule also applies to any factory you write yourself: purely opaque token? wrap it. Token that mimics a real value? leave it raw.
+
 A **placeholder factory** decides what those tokens look like and how much information they carry. Two questions structure the choice:
 
 1. *Are tokens unique per entity?* `Patrick`{ .pii } and `Marie`{ .pii } should not both collapse onto a generic `<<PERSON>>`{ .placeholder }, otherwise the LLM cannot tell them apart. A unique token per entity lets the LLM reason about relations between entities: *"is the manager the same person as `Patrick`{ .pii }?"* becomes *"is `<<PERSON_1>>`{ .placeholder } the same as `<<PERSON_2>>`{ .placeholder }?"* and gets a clear answer.
