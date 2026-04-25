@@ -42,13 +42,13 @@ Sept grandes familles de factories se positionnent à des points différents de 
 
 Le placeholder est un marqueur fixe (par exemple `<<REDACT>>`{ .placeholder }). Le LLM apprend *qu'une* information a été retirée mais rien sur son type, son nombre, ni ses relations. La conversation perd toutes ses références internes : un agent qui doit traiter *"envoyer la facture au client"* ne peut pas savoir si le client est celui mentionné plus tôt ou un nouveau. Utile pour la rédaction d'archive, inutile dès qu'un agent a besoin de raisonner.
 
-Aucune factory built-in ne porte ce niveau. Il existe dans la taxonomie pour qu'une factory utilisateur puisse le déclarer explicitement (tag `PreservesNothing`).
+Built-in : `ConstantPlaceholderFactory` (sortie : `<<REDACT>>`{ .placeholder } par défaut, paramétrable via l'argument `value`). Tag `PreservesNothing`.
 
 ### Id seul : identité sans type
 
 `<<REDACT:a1b2c3d4>>`{ .placeholder }. Compromis original : le placeholder garde la forme synthétique `<<...>>` mais ne révèle pas le label ; en revanche il contient un hash unique par entité. Le LLM ne sait pas si l'entité est une personne, un email ou une carte bancaire, mais voit que `<<REDACT:a1b2c3d4>>`{ .placeholder } et `<<REDACT:ef98abcd>>`{ .placeholder } sont deux entités différentes. C'est l'un des points les plus protecteurs tout en restant utilisable côté outil (le hash est unique, donc le remplacement de chaîne fonctionne).
 
-Aucune factory built-in ne propose ce schéma. Tag dédié : `PreservesIdentityOnly` (sous `PreservesIdentity`). Le middleware accepte cette factory comme n'importe quelle autre factory identité-préservante via la covariance.
+Built-in : `AnonymousHashPlaceholderFactory` (sortie : `<<REDACT:a1b2c3d4>>`{ .placeholder }, préfixe paramétrable). Tag `PreservesIdentityOnly` (sous `PreservesIdentity`). Le middleware accepte cette factory comme n'importe quelle autre factory identité-préservante via la covariance.
 
 ### Type seul : type connu, identités confondues
 
@@ -60,13 +60,13 @@ Built-in : `RedactPlaceholderFactory` (sortie : `<<PERSON>>`{ .placeholder }). T
 
 `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }. La chaîne n'est manifestement *pas* une personne, un email ou un numéro de carte, c'est un placeholder. Le LLM ne peut pas la confondre avec une donnée réelle, les logs d'audit sont faciles à parcourir, et il y a **zéro chance** de collision avec une vraie valeur. Compromis : un prompt ou un outil aval strict qui valide "l'argument doit ressembler à un email" rejettera ces placeholders.
 
-Built-in : `CounterPlaceholderFactory` (`<<PERSON_1>>`{ .placeholder }), `HashPlaceholderFactory` (`<<PERSON:a1b2c3d4>>`{ .placeholder }). Tag `PreservesLabeledIdentityOpaque`.
+Built-in : `CounterPlaceholderFactory` (`<<PERSON_1>>`{ .placeholder }), `LabeledHashPlaceholderFactory` (`<<PERSON:a1b2c3d4>>`{ .placeholder }). Tag `PreservesLabeledIdentityOpaque`.
 
 ### Type + id (réaliste hashé)
 
 Une factory utilisateur peut produire des valeurs **qui ressemblent au format d'origine** mais dont le contenu est piloté par un hash, par exemple `a1b2c3d4@anonymized.local`{ .placeholder } pour un email, ou `Patient_a1b2c3d4`{ .placeholder } pour un nom. Le placeholder passe la validation de format de base (regex email, longueur, caractères autorisés), donc les outils et les templates de prompts aval qui attendent une valeur d'apparence réelle continuent de fonctionner. Comme le contenu est un hash, le placeholder est **unique et impossible à faire coïncider par hasard** avec une vraie valeur existante.
 
-Aucune factory built-in ne propose ce schéma ; c'est l'approche recommandée quand le format compte. Sous-classer `AnyPlaceholderFactory[PreservesLabeledIdentityHashed]` et produire un hash à l'intérieur de la forme désirée (voir la section *Écrire la sienne* plus bas).
+Built-in : `RealisticHashPlaceholderFactory` (à configurer avec un mapping `label -> stratégie` couvrant chaque label émis par votre détecteur, **sans fallback** : un label inconnu lève `ValueError`). Tag `PreservesLabeledIdentityHashed`. Voir la section *Écrire la sienne* plus bas pour un exemple complet.
 
 ### Type + id (Faker)
 
@@ -210,7 +210,7 @@ Une factory déclare le tag **le plus spécifique** qui matche ses garanties :
 
 ```python
 class CounterPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
-class HashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
+class LabeledHashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]): ...
 class FakerPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityFaker]): ...
 class RedactPlaceholderFactory(AnyPlaceholderFactory[PreservesLabel]): ...
 class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
@@ -224,13 +224,16 @@ class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
 
 | Factory | Exemple de sortie | Tag | Unique par entité ? | Réversible ? |
 |---|---|---|---|---|
-| `CounterPlaceholderFactory` (défaut) | `<<PERSON_1>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | oui (par thread) | oui |
-| `HashPlaceholderFactory` | `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | oui (déterministe) | oui |
-| `FakerPlaceholderFactory` | valeur plausible aléatoire | `PreservesLabeledIdentityFaker` | oui (mais peut collisionner avec une vraie valeur) | oui |
+| `ConstantPlaceholderFactory` | `<<REDACT>>`{ .placeholder } | `PreservesNothing` | non (constant) | non |
 | `RedactPlaceholderFactory` | `<<PERSON>>`{ .placeholder } | `PreservesLabel` | non (label seul) | non |
+| `AnonymousHashPlaceholderFactory` | `<<REDACT:a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` | oui (déterministe) | oui |
+| `CounterPlaceholderFactory` (défaut) | `<<PERSON_1>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | oui (par thread) | oui |
+| `LabeledHashPlaceholderFactory` | `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` | oui (déterministe) | oui |
+| `RealisticHashPlaceholderFactory` | dépend des stratégies (ex. `a1b2c3d4@anonymized.local`{ .placeholder }) | `PreservesLabeledIdentityHashed` | oui (déterministe) | oui |
+| `FakerPlaceholderFactory` | valeur plausible aléatoire | `PreservesLabeledIdentityFaker` | oui (mais peut collisionner avec une vraie valeur) | oui |
 | `MaskPlaceholderFactory` | `p***@mail.com`{ .placeholder } | `PreservesShape` | partielle | oui (avec risque de collision) |
 
-`CounterPlaceholderFactory` et `HashPlaceholderFactory` sont les valeurs sûres par défaut. `FakerPlaceholderFactory` est réversible mais ses placeholders peuvent collisionner avec de vraies valeurs dans les réponses d'outils. `RedactPlaceholderFactory` et `MaskPlaceholderFactory` sont des outils de redaction one-shot, non réversibles.
+`CounterPlaceholderFactory` et `LabeledHashPlaceholderFactory` sont les valeurs sûres par défaut. `AnonymousHashPlaceholderFactory` ajoute la même unicité sans révéler le label (utile pour la réduction des biais). `RealisticHashPlaceholderFactory` produit un format réaliste avec un hash : il faut **fournir explicitement une stratégie pour chaque label** que votre détecteur émet (pas de fallback). `FakerPlaceholderFactory` est réversible mais ses placeholders peuvent collisionner avec de vraies valeurs dans les réponses d'outils. `ConstantPlaceholderFactory`, `RedactPlaceholderFactory` et `MaskPlaceholderFactory` sont des outils de caviardage non réversibles (rejetés par le middleware).
 
 ---
 
@@ -246,7 +249,7 @@ Le but est de produire une version assainie d'un document : caviardage d'un juge
 |---|---|---|
 | Effacer toute trace, sans réversibilité | **Aucune information** (`<<REDACT>>`{ .placeholder }) | Le plus protecteur, aucune fuite sémantique. Le document devient lisible mais le LLM ne peut rien en inférer. |
 | Garder un texte lisible (le lecteur humain voit "[email]" plutôt que "<<REDACT>>") | **Type seul** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }) | Le type aide la lecture humaine sans rien fuiter de la valeur. Built-in : `RedactPlaceholderFactory`. |
-| Permettre une désanonymisation côté serveur (cache local) | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }) | Réversible via le cache, audit trivial, aucune collision. Built-in : `CounterPlaceholderFactory` ou `HashPlaceholderFactory`. |
+| Permettre une désanonymisation côté serveur (cache local) | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }) | Réversible via le cache, audit trivial, aucune collision. Built-in : `CounterPlaceholderFactory` ou `LabeledHashPlaceholderFactory`. |
 | Suivre "qui est qui" sans révéler le type (sensible : médical, RH) | **Id seul** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Distingue les entités sans aucun indice sémantique. À implémenter (pas de built-in). |
 
 ### Cas 2 : anonymisation pour LLM / agent avec outils
@@ -257,7 +260,7 @@ Conséquence directe : seules les familles avec identité préservée (`Id seul`
 
 | Besoin | Famille recommandée | Pourquoi |
 |---|---|---|
-| **Cas par défaut** | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }) | Réversible, opaque, zéro collision. La valeur sûre. Built-in : `CounterPlaceholderFactory` (par thread) ou `HashPlaceholderFactory` (déterministe). |
+| **Cas par défaut** | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }) | Réversible, opaque, zéro collision. La valeur sûre. Built-in : `CounterPlaceholderFactory` (par thread) ou `LabeledHashPlaceholderFactory` (déterministe). |
 | L'outil aval valide un format (regex email, longueur de carte) | **Type + id (réaliste hashé)** (`a1b2c3d4@anonymized.local`{ .placeholder }) | Le placeholder passe la validation tout en gardant unicité et zéro collision. À implémenter (pas de built-in). |
 | Sortie utilisateur doit paraître naturelle (brouillons, démos) | **Type + id (Faker)** (`john.doe@example.com`{ .placeholder }) | Texte fluide, aucun `<<PERSON_1>>`{ .placeholder } visible côté utilisateur. **Risque** : collision avec une vraie valeur dans une réponse d'outil. À éviter en `ToolCallStrategy.FULL`. Built-in : `FakerPlaceholderFactory`. |
 | Réduction des biais (CV, candidature) | **Id seul** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Le LLM ne voit pas le type, donc pas le genre/origine inférables d'un prénom. Distingue les candidats sans biaiser le raisonnement. |
@@ -338,6 +341,30 @@ Il suffit d'hériter de `AnyPlaceholderFactory[<tag>]` avec le bon tag de prése
 
             return result
     ```
+
+??? example "Configurer `RealisticHashPlaceholderFactory` (réaliste hashé, sans fallback)"
+
+    Comme Faker, vous fournissez un mapping `label -> stratégie`. Contrairement à Faker, **chaque label émis par votre détecteur doit y figurer**, sinon `create()` lève `ValueError`. Trois helpers couvrent les cas usuels :
+
+    ```python
+    from piighost.ph_factory.realistic import (
+        RealisticHashPlaceholderFactory,
+        hashed_email,
+        hashed_with_prefix,
+        hashed_template,
+    )
+
+    factory = RealisticHashPlaceholderFactory(
+        strategies={
+            "email":    hashed_email("anonymized.local"),    # a1b2c3d4@anonymized.local
+            "person":   hashed_with_prefix("Patient"),       # Patient_a1b2c3d4
+            "location": hashed_template("city-{hash}"),      # city-a1b2c3d4
+        },
+        hash_length=8,
+    )
+    ```
+
+    Si le détecteur émet un label `PHONE` non couvert par les stratégies, `factory.create([entity])` lève une `ValueError` listant les labels connus. C'est volontaire : on évite de produire silencieusement un placeholder mal formé.
 
 ---
 

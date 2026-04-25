@@ -98,7 +98,7 @@ The project normalises placeholder examples along a single rule:
 - **Realistic placeholders that replicate a PII format** (Realistic-hashed, Faker, masked) keep no delimiters — the whole point is to look like a real value.
   Examples: `Patient_a1b2c3d4`, `a1b2c3d4@anonymized.local`, `john.doe@example.com`, `Jean Dupont`, `j***@mail.com`, `****4567`.
 
-The built-in factories follow this rule: `RedactPlaceholderFactory` emits `<<PERSON>>`, `HashPlaceholderFactory` emits `<<PERSON:a1b2c3d4>>`, `CounterPlaceholderFactory` emits `<<PERSON_1>>`, `MaskPlaceholderFactory` emits `j***@mail.com`, `FakerPlaceholderFactory` emits `john.doe@example.com`. Apply the same convention in any new doc example or new factory.
+The built-in factories follow this rule: `RedactPlaceholderFactory` emits `<<PERSON>>`, `LabeledHashPlaceholderFactory` emits `<<PERSON:a1b2c3d4>>`, `CounterPlaceholderFactory` emits `<<PERSON_1>>`, `MaskPlaceholderFactory` emits `j***@mail.com`, `FakerPlaceholderFactory` emits `john.doe@example.com`. Apply the same convention in any new doc example or new factory.
 
 ## Highlighting PII and placeholders inline
 
@@ -120,7 +120,7 @@ When to tag:
 | Synthetic placeholder that does **not** replicate a real PII (use `<<...>>` delimiters): `<<PERSON_1>>`, `<<PERSON:a1b2c3d4>>`, `<<PERSON>>`, `<<EMAIL>>`, `<<REDACT>>`, `<<REDACT:a1b2c3d4>>` | `{ .placeholder }` |
 | Placeholder that **replicates** a real PII format (no delimiters): `j***@mail.com`, `john.doe@example.com`, `Jean Dupont`, `+33 6 12 34 56 78`, `a1b2c3d4@anonymized.local`, `Patient_a1b2c3d4` | `{ .placeholder }` |
 | Raw PII example: `Patrick`, `Marie`, `Paris` (when used as a value to anonymise) | `{ .pii }` |
-| Class / tag / method / parameter name: `HashPlaceholderFactory`, `PreservesIdentity`, `abefore_model`, `tool_strategy` | none — plain inline code |
+| Class / tag / method / parameter name: `LabeledHashPlaceholderFactory`, `PreservesIdentity`, `abefore_model`, `tool_strategy` | none — plain inline code |
 
 ## Mermaid diagrams
 

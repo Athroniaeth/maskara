@@ -201,14 +201,14 @@ tokens = factory.create([person, location])
 # {person: '<<PERSON_1>>', location: '<<LOCATION_1>>'}
 ```
 
-### `HashPlaceholderFactory`
+### `LabeledHashPlaceholderFactory`
 
 Generates deterministic, opaque hash-based tags.
 
 ```python
-from piighost.placeholder import HashPlaceholderFactory
+from piighost.placeholder import LabeledHashPlaceholderFactory
 
-factory = HashPlaceholderFactory(hash_length=8)
+factory = LabeledHashPlaceholderFactory(hash_length=8)
 tokens = factory.create([person])
 # {person: '<<PERSON:a1b2c3d4>>'}
 ```

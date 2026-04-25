@@ -151,12 +151,12 @@ asyncio.run(conversation())
 Par defaut, `CounterPlaceholderFactory` genere des tags `<<LABEL_N>>`. Vous pouvez changer de strategie :
 
 ```python
-from piighost.placeholder import HashPlaceholderFactory, RedactPlaceholderFactory
+from piighost.placeholder import LabeledHashPlaceholderFactory, RedactPlaceholderFactory
 
 # Hash : tags opaques deterministes
 pipeline_hash = AnonymizationPipeline(
     ...,
-    anonymizer=Anonymizer(HashPlaceholderFactory()),
+    anonymizer=Anonymizer(LabeledHashPlaceholderFactory()),
 )
 # Produit : <<PERSON:a1b2c3d4>>
 

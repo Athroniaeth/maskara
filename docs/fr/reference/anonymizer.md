@@ -137,12 +137,12 @@ tokens = factory.create([person, location])
 # {person: '<<PERSON_1>>', location: '<<LOCATION_1>>'}
 ```
 
-### `HashPlaceholderFactory`
+### `LabeledHashPlaceholderFactory`
 
 Tags opaques deterministes bases sur SHA-256.
 
 ```python
-factory = HashPlaceholderFactory(hash_length=8)
+factory = LabeledHashPlaceholderFactory(hash_length=8)
 tokens = factory.create([person])
 # {person: '<<PERSON:a1b2c3d4>>'}
 ```

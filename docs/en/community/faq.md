@@ -8,7 +8,7 @@ icon: lucide/message-circle-question
     Yes, and this holds regardless of `piighost`. The stakes (exfiltration to providers, legal requisition, training on conversations, GDPR compliance, leaks via RAG and tools) are covered in [Why anonymize?](../why-anonymize.md). The page is library-agnostic: it explains why the problem exists before justifying a solution like `piighost`.
 
 ??? question "Do my placeholders have to look like `<<PERSON_1>>`?"
-    No. The format is driven by `AnyPlaceholderFactory`. By default `CounterPlaceholderFactory` produces `<<LABEL_N>>`, but `HashPlaceholderFactory` yields `<<LABEL:hash>>`, `RedactPlaceholderFactory` produces `<<LABEL>>` without a counter, and you can write your own factory. See [Placeholder factories](../placeholder-factories.md).
+    No. The format is driven by `AnyPlaceholderFactory`. By default `CounterPlaceholderFactory` produces `<<LABEL_N>>`, but `LabeledHashPlaceholderFactory` yields `<<LABEL:hash>>`, `RedactPlaceholderFactory` produces `<<LABEL>>` without a counter, and you can write your own factory. See [Placeholder factories](../placeholder-factories.md).
 
 ??? question "Does the LLM see raw PII when it calls a tool?"
     No. The middleware deanonymizes arguments right before the tool executes, then re-anonymizes the tool response before it flows back to the LLM. The tool sees real values; the LLM only sees placeholders. See the sequence diagram in [Architecture](../architecture.md).
