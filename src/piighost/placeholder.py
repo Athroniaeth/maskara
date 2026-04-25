@@ -9,8 +9,10 @@ from typing_extensions import TypeVar
 from piighost.models import Entity
 from piighost.placeholder_tags import (
     PlaceholderPreservation,
+    PreservesIdentityOnly,
     PreservesLabel,
     PreservesLabeledIdentityOpaque,
+    PreservesNothing,
     PreservesShape,
 )
 
@@ -53,6 +55,43 @@ class AnyPlaceholderFactory(Protocol[PreservationT_co]):
         ...
 
 
+class ConstantPlaceholderFactory(AnyPlaceholderFactory[PreservesNothing]):
+    """Factory that emits the same constant token for every entity.
+
+    The token is wrapped in ``<<...>>`` so it stays visually distinct
+    from natural text. Every entity collapses to the same string, so
+    the LLM learns *that* something was redacted but nothing about
+    its type, count, or relations.
+
+    Args:
+        value: The bare token text (without delimiters). Defaults to
+            ``"REDACT"``.
+
+    Example:
+        >>> from piighost.models import Detection, Entity, Span
+        >>> factory = ConstantPlaceholderFactory()
+        >>> e = Entity(detections=(Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),))
+        >>> factory.create([e])[e]
+        '<<REDACT>>'
+    """
+
+    _token: str
+
+    def __init__(self, value: str = "REDACT") -> None:
+        self._token = f"<<{value}>>"
+
+    def create(self, entities: list[Entity]) -> dict[Entity, str]:
+        """Create the same constant token for all entities.
+
+        Args:
+            entities: The entities to create tokens for.
+
+        Returns:
+            A dict mapping every entity to the same token.
+        """
+        return {entity: self._token for entity in entities}
+
+
 class CounterPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]):
     """Factory that generates tokens like ``<<PERSON_1>>``, ``<<PERSON_2>>``.
 
@@ -90,7 +129,9 @@ class CounterPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOp
         return result
 
 
-class HashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]):
+class LabeledHashPlaceholderFactory(
+    AnyPlaceholderFactory[PreservesLabeledIdentityOpaque]
+):
     """Factory that generates tokens like ``<<PERSON:a1b2c3d4>>``.
 
     Uses SHA-256 of the canonical text + label to produce a deterministic,
@@ -104,7 +145,7 @@ class HashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaqu
 
     Example:
         >>> from piighost.models import Detection, Entity, Span
-        >>> factory = HashPlaceholderFactory()
+        >>> factory = LabeledHashPlaceholderFactory()
         >>> e = Entity(detections=(Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),))
         >>> token = factory.create([e])[e]
         >>> token.startswith('<<PERSON:') and token.endswith('>>')
@@ -133,6 +174,64 @@ class HashPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityOpaqu
             raw = f"{canonical_text}:{label}"
             digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
             result[entity] = f"<<{label}:{digest}>>"
+
+        return result
+
+
+class AnonymousHashPlaceholderFactory(AnyPlaceholderFactory[PreservesIdentityOnly]):
+    """Factory that generates tokens like ``<<REDACT:a1b2c3d4>>``.
+
+    Like :class:`LabeledHashPlaceholderFactory` but **without** the
+    entity label in the token. Two distinct PERSON entities and two
+    distinct LOCATION entities all carry the ``REDACT:`` prefix; only
+    the hash distinguishes them. The LLM learns the entities are
+    different but cannot tell whether they are persons, emails, or
+    credit cards.
+
+    Useful for bias reduction (CV screening: same prefix erases the
+    gender / origin signal a name carries) and for sensitive types
+    where the type itself is a PII (medical category, clearance level).
+
+    Args:
+        prefix: Bare prefix before the hash. Defaults to ``"REDACT"``.
+        hash_length: Number of hex characters from the SHA-256 digest.
+            Defaults to ``8``.
+
+    Example:
+        >>> from piighost.models import Detection, Entity, Span
+        >>> factory = AnonymousHashPlaceholderFactory()
+        >>> e = Entity(detections=(Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9),))
+        >>> token = factory.create([e])[e]
+        >>> token.startswith('<<REDACT:') and token.endswith('>>')
+        True
+    """
+
+    _prefix: str
+    _hash_length: int
+
+    def __init__(self, prefix: str = "REDACT", hash_length: int = 8) -> None:
+        self._prefix = prefix
+        self._hash_length = hash_length
+
+    def create(self, entities: list[Entity]) -> dict[Entity, str]:
+        """Create label-less hash tokens for all entities.
+
+        Args:
+            entities: The entities to create tokens for.
+
+        Returns:
+            A dict mapping each entity to a token like
+            ``"<<REDACT:a1b2c3d4>>"``.
+        """
+        result: dict[Entity, str] = {}
+
+        for entity in entities:
+            # Hash on (text + label) so two entities with the same
+            # surface text but different labels still get distinct ids.
+            canonical_text = entity.detections[0].text.lower()
+            raw = f"{canonical_text}:{entity.label}"
+            digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
+            result[entity] = f"<<{self._prefix}:{digest}>>"
 
         return result
 

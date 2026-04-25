@@ -67,7 +67,7 @@ class ToolCallStrategy(Enum):
 
     Notes:
         The choice of :class:`AnyPlaceholderFactory` interacts with
-        this setting. ``HashPlaceholderFactory`` is the safest because
+        this setting. ``LabeledHashPlaceholderFactory`` is the safest because
         placeholders are deterministic and collision-resistant.
         ``CounterPlaceholderFactory`` is safe within a thread.
         ``RedactPlaceholderFactory`` and ``MaskPlaceholderFactory`` are

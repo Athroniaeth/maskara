@@ -4,10 +4,13 @@ from piighost.detector.base import AnyDetector, ExactMatchDetector
 from piighost.exceptions import CacheMissError, PIIGhostException
 from piighost.linker.entity import AnyEntityLinker, DisabledEntityLinker
 from piighost.models import Detection, Entity, Span
+from piighost.ph_factory.realistic import RealisticHashPlaceholderFactory
 from piighost.placeholder import (
+    AnonymousHashPlaceholderFactory,
     AnyPlaceholderFactory,
+    ConstantPlaceholderFactory,
     CounterPlaceholderFactory,
-    HashPlaceholderFactory,
+    LabeledHashPlaceholderFactory,
     MaskPlaceholderFactory,
     RedactPlaceholderFactory,
 )
@@ -31,6 +34,7 @@ from piighost.resolver.entity import (
 from piighost.resolver.span import AnySpanConflictResolver, DisabledSpanConflictResolver
 
 __all__ = [
+    "AnonymousHashPlaceholderFactory",
     "AnyAnonymizer",
     "AnyDetector",
     "AnyEntityConflictResolver",
@@ -39,6 +43,7 @@ __all__ = [
     "AnySpanConflictResolver",
     "Anonymizer",
     "CacheMissError",
+    "ConstantPlaceholderFactory",
     "CounterPlaceholderFactory",
     "Detection",
     "DisabledEntityConflictResolver",
@@ -46,7 +51,7 @@ __all__ = [
     "DisabledSpanConflictResolver",
     "Entity",
     "ExactMatchDetector",
-    "HashPlaceholderFactory",
+    "LabeledHashPlaceholderFactory",
     "MaskPlaceholderFactory",
     "PIIGhostException",
     "PlaceholderPreservation",
@@ -60,6 +65,7 @@ __all__ = [
     "PreservesLabeledIdentityRealistic",
     "PreservesNothing",
     "PreservesShape",
+    "RealisticHashPlaceholderFactory",
     "RedactPlaceholderFactory",
     "Span",
     "labels",

@@ -7,7 +7,7 @@ from piighost.exceptions import DeanonymizationError
 from piighost.models import Detection, Entity, Span
 from piighost.placeholder import (
     CounterPlaceholderFactory,
-    HashPlaceholderFactory,
+    LabeledHashPlaceholderFactory,
     RedactPlaceholderFactory,
 )
 
@@ -69,7 +69,7 @@ class TestAnonymize:
 
     def test_with_hash_factory(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
-        result = Anonymizer(HashPlaceholderFactory()).anonymize(
+        result = Anonymizer(LabeledHashPlaceholderFactory()).anonymize(
             "Patrick est gentil",
             entities,
         )
@@ -180,7 +180,7 @@ class TestDeanonymize:
     def test_roundtrip_with_hash(self) -> None:
         entities = [Entity(detections=(_det("Patrick", "PERSON", 0, 7),))]
         text = "Patrick est gentil"
-        ph_factory = HashPlaceholderFactory()
+        ph_factory = LabeledHashPlaceholderFactory()
         anon = Anonymizer(ph_factory=ph_factory)
         anonymized = anon.anonymize(text, entities)
         restored = anon.deanonymize(anonymized, entities)
