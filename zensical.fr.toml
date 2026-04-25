@@ -49,6 +49,7 @@ nav = [
     { "Code de conduite" = "community/code-of-conduct.md" },
     { "Signaler un bug" = "community/bug-reports.md" },
     { "FAQ" = "community/faq.md" },
+    { "Roadmap" = "roadmap.md" },
   ]},
 ]
 
