@@ -77,6 +77,13 @@ Even if these issues were fixed, several deeper problems remain:
   `Patrick`{ .pii } and `patrick`{ .pii } (case difference), `Patric`{ .pii } (typo), or full vs partial mentions
   (`Patrick Dupont`{ .pii } and `Patrick`{ .pii }).
 
+`piighost` addresses each of these issues with three pipeline components (span conflict resolution, entity
+linking, entity merging). Each component has a **trade-off**: span resolution may discard a legitimate
+detection on a false conflict, fuzzy linking may group two distinct entities by mistake, and so on. If your
+detections are already clean (or if you prefer to handle these cases yourself), each component can be
+**disabled individually** via a `Disabled*` instance that turns it into a passthrough. See
+[Extending PIIGhost](extending.md) for the per-section details.
+
 ### The conversational case (AI agents)
 
 Using anonymization inside AI agents introduces several additional constraints:

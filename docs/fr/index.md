@@ -78,6 +78,13 @@ Même en corrigeant ces défauts, il reste plusieurs problèmes de fond :
   `Patrick`{ .pii } et `patrick`{ .pii } (différence de casse), `Patric`{ .pii } (faute d'orthographe), ou encore
   mention complète vs partielle (`Patrick Dupont`{ .pii } et `Patrick`{ .pii }).
 
+`piighost` adresse chacun de ces problèmes via trois composants du pipeline (résolution de spans, liaison
+d'entités, fusion d'entités). Chaque composant a une **contrepartie** : la résolution de spans peut écarter
+une détection légitime sur un faux conflit, la liaison floue peut grouper à tort deux entités distinctes, etc.
+Si vos détections sont déjà propres (ou si vous préférez gérer ces cas vous-même), chaque composant est
+**désactivable individuellement** via une instance `Disabled*` qui le transforme en passe-plat. Voir
+[Étendre PIIGhost](extending.md) pour le détail de chaque section.
+
 ### Le cas conversationnel (agents IA)
 
 Pour utiliser l'anonymisation dans des agents IA, plusieurs contraintes supplémentaires apparaissent :
