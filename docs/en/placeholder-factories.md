@@ -14,7 +14,7 @@ A **placeholder** is the synthetic placeholder that takes the place of a detecte
 
     Placeholders used throughout this documentation and produced by the built-in factories follow a simple convention:
 
-    - **Synthetic placeholder** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<a1b2c3d4>>`{ .placeholder }. The delimiters serve two purposes: an LLM (or a human re-reading) will never mistake the placeholder for a regular word or for an HTML/XML tag the model might emit; and the middleware can perform `str.replace` reliably during deanonymisation (see [Tool-call strategies](tool-call-strategies.md) for why this matters).
+    - **Synthetic placeholder** (does not look like any real PII): wrapped in `<<` and `>>`. Examples: `<<REDACT>>`{ .placeholder }, `<<PERSON>>`{ .placeholder }, `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }, `<<REDACT:a1b2c3d4>>`{ .placeholder }. The delimiters serve two purposes: an LLM (or a human re-reading) will never mistake the placeholder for a regular word or for an HTML/XML tag the model might emit; and the middleware can perform `str.replace` reliably during deanonymisation (see [Tool-call strategies](tool-call-strategies.md) for why this matters).
     - **Placeholder that replicates a PII format** (Faker, realistic hashed, masked): no delimiters. Examples: `john.doe@example.com`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder }, `a1b2c3d4@anonymized.local`{ .placeholder }, `j***@mail.com`{ .placeholder }. The absence of delimiters is deliberate: the goal is precisely to look natural so a downstream tool that validates a format (email regex, card length) still accepts the placeholder.
 
     The rule also applies to any factory you write yourself: purely opaque placeholder? wrap it. Placeholder that mimics a real value? leave it raw.
@@ -27,7 +27,7 @@ A **placeholder factory** decides what those placeholders look like and how much
 Seven families of factories sit at different points on that spectrum, and the choice has direct consequences on which `ToolCallStrategy` you can use safely. See [Tool-call strategies](tool-call-strategies.md) for the runtime side.
 
 - **No information** (`<<REDACT>>`{ .placeholder }): a constant placeholder that reveals nothing to the LLM. Classic redaction. No reasoning possible on entities (the LLM cannot tell that the value was a city, so it cannot decide to call `get_weather`).
-- **Id only** (`<<a1b2c3d4>>`{ .placeholder }): a unique hash per entity, without revealing the type. The LLM sees that two distinct entities exist but cannot tell whether they are persons, emails, or credit cards. Keeps reversibility on the tool side without giving any semantic hint to the model.
+- **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }): a unique hash per entity, without revealing the type. The LLM sees that two distinct entities exist but cannot tell whether they are persons, emails, or credit cards. Keeps reversibility on the tool side without giving any semantic hint to the model.
 - **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }): the type is revealed but not the identity. Multiple persons in the same conversation collapse onto the same `<<PERSON>>`{ .placeholder } placeholder, so cross-references break.
 - **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }): type revealed, stable identity, clearly synthetic placeholder. The LLM can tell that `<<PERSON_1>>`{ .placeholder } and `<<PERSON_2>>`{ .placeholder } are different people. Unique, so reversible by string replacement.
 - **Type + partial value** (`p***@mail.com`{ .placeholder }): the format is preserved but real content is partially visible. The LLM sees that it is an email, may guess the domain, but cannot recover the full address. Riskier on privacy (real fragments leak) and reversibility (collisions possible).
@@ -46,7 +46,7 @@ No built-in factory ships with this level. It exists in the taxonomy so that a u
 
 ### Id only: identity without type
 
-`<<a1b2c3d4>>`{ .placeholder }. Original trade-off: the placeholder keeps the synthetic `<<...>>` shape but does not reveal the label; it does carry a unique hash per entity. The LLM cannot tell whether the entity is a person, an email, or a credit card, but it can see that `<<a1b2c3d4>>`{ .placeholder } and `<<ef98abcd>>`{ .placeholder } are two distinct entities. One of the most protective levels while remaining usable on the tool side (the hash is unique, so string replacement works).
+`<<REDACT:a1b2c3d4>>`{ .placeholder }. Original trade-off: the placeholder keeps the synthetic `<<...>>` shape but does not reveal the label; it does carry a unique hash per entity. The LLM cannot tell whether the entity is a person, an email, or a credit card, but it can see that `<<REDACT:a1b2c3d4>>`{ .placeholder } and `<<REDACT:ef98abcd>>`{ .placeholder } are two distinct entities. One of the most protective levels while remaining usable on the tool side (the hash is unique, so string replacement works).
 
 No built-in factory ships this scheme. Dedicated tag: `PreservesIdentityOnly` (under `PreservesIdentity`). The middleware accepts this factory like any other identity-preserving factory through covariance.
 
@@ -97,7 +97,7 @@ Every factory carries a **phantom type** that summarises the preservation level 
 | Family | Example | Tag |
 |---|---|---|
 | No information | `<<REDACT>>`{ .placeholder } | `PreservesNothing` |
-| Id only | `<<a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` |
+| Id only | `<<REDACT:a1b2c3d4>>`{ .placeholder } | `PreservesIdentityOnly` |
 | Type only | `<<PERSON>>`{ .placeholder } | `PreservesLabel` |
 | Type + id (opaque) | `<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder } | `PreservesLabeledIdentityOpaque` |
 | Type + id (realistic hashed) | `a1b2c3d4@anonymized.local`{ .placeholder }, `Patient_a1b2c3d4`{ .placeholder } | `PreservesLabeledIdentityHashed` |
@@ -170,7 +170,7 @@ classDiagram
         abstraction
     }
     class PreservesIdentityOnly {
-        <<a1b2c3d4>>
+        <<REDACT:a1b2c3d4>>
     }
     class PreservesLabeledIdentity {
         abstraction
@@ -215,7 +215,7 @@ class FakerPlaceholderFactory(AnyPlaceholderFactory[PreservesLabeledIdentityFake
 class RedactPlaceholderFactory(AnyPlaceholderFactory[PreservesLabel]): ...
 class MaskPlaceholderFactory(AnyPlaceholderFactory[PreservesShape]): ...
 # No built-in for the id-only branch: implement your own with
-# PreservesIdentityOnly for a hashed redact like <<a1b2c3d4>>.
+# PreservesIdentityOnly for a hashed redact like <<REDACT:a1b2c3d4>>.
 ```
 
 ---
@@ -247,7 +247,7 @@ The goal is to produce a sanitised version of a document: redacting a court ruli
 | Erase every trace, no reversibility needed | **No information** (`<<REDACT>>`{ .placeholder }) | The most protective, no semantic leak. The document is readable but the LLM cannot infer anything. |
 | Keep the text readable (a human reader sees "[email]" rather than "<<REDACT>>") | **Type only** (`<<PERSON>>`{ .placeholder }, `<<EMAIL>>`{ .placeholder }) | The type aids human reading without leaking the value. Built-in: `RedactPlaceholderFactory`. |
 | Allow server-side de-anonymisation (local cache) | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }) | Reversible via cache, trivial to audit, no collisions. Built-in: `CounterPlaceholderFactory` or `HashPlaceholderFactory`. |
-| Track "who is who" without revealing the type (sensitive: medical, HR) | **Id only** (`<<a1b2c3d4>>`{ .placeholder }) | Distinguishes entities without any semantic hint. Custom factory (no built-in). |
+| Track "who is who" without revealing the type (sensitive: medical, HR) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Distinguishes entities without any semantic hint. Custom factory (no built-in). |
 
 ### Case 2: anonymisation for an LLM / agent with tools
 
@@ -260,8 +260,8 @@ Direct consequence: only families with preserved identity (`Id only`, every `Typ
 | **Default** | **Type + id (opaque)** (`<<PERSON_1>>`{ .placeholder }, `<<PERSON:a1b2c3d4>>`{ .placeholder }) | Reversible, opaque, zero collision. The safe default. Built-in: `CounterPlaceholderFactory` (per thread) or `HashPlaceholderFactory` (deterministic). |
 | Downstream tool validates a format (email regex, card length) | **Type + id (realistic hashed)** (`a1b2c3d4@anonymized.local`{ .placeholder }) | The placeholder passes validation while keeping uniqueness and zero collision. Custom factory (no built-in). |
 | User-facing output must read naturally (drafts, demos) | **Type + id (Faker)** (`john.doe@example.com`{ .placeholder }) | Fluent text, no `<<PERSON_1>>`{ .placeholder } leaking to the user. **Risk**: collision with a real value in a tool response. Avoid in `ToolCallStrategy.FULL`. Built-in: `FakerPlaceholderFactory`. |
-| Bias reduction (CV screening, hiring) | **Id only** (`<<a1b2c3d4>>`{ .placeholder }) | The LLM does not see the type, so genre/origin inferable from a first name vanishes. Distinguishes candidates without biasing reasoning. |
-| Sensitive type (medical category, clearance level) | **Id only** (`<<a1b2c3d4>>`{ .placeholder }) | Same reason: the type itself is a PII and must not reach the LLM. |
+| Bias reduction (CV screening, hiring) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | The LLM does not see the type, so genre/origin inferable from a first name vanishes. Distinguishes candidates without biasing reasoning. |
+| Sensitive type (medical category, clearance level) | **Id only** (`<<REDACT:a1b2c3d4>>`{ .placeholder }) | Same reason: the type itself is a PII and must not reach the LLM. |
 
 To avoid in an agent:
 
