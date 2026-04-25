@@ -25,8 +25,8 @@ nav = [
     { "LangChain integration" = "examples/langchain.md" },
     { "Pre-built detectors" = "examples/detectors.md" },
     { "Extending PIIGhost" = "extending.md" },
-    { "Testing" = "examples/testing.md" },
     { "Deployment" = "deployment.md" },
+    { "Testing" = "examples/testing.md" },
   ]},
   { "Reference" = [
     { "Anonymizer" = "reference/anonymizer.md" },
@@ -35,20 +35,20 @@ nav = [
     { "Detectors" = "reference/detectors.md" },
   ]},
   { "Concepts" = [
-    { "Why anonymize?" = "why-anonymize.md" },
+    { "Glossary" = "glossary.md" },
     { "Architecture" = "architecture.md" },
     { "Placeholder factories" = "placeholder-factories.md" },
     { "Tool-call strategies" = "tool-call-strategies.md" },
-    { "Glossary" = "glossary.md" },
-    { "Limitations" = "limitations.md" },
+    { "Why anonymize?" = "why-anonymize.md" },
     { "Security" = "security.md" },
+    { "Limitations" = "limitations.md" },
   ]},
   { "Community" = [
     { "Contributing" = "community/contributing.md" },
     { "Code of conduct" = "community/code-of-conduct.md" },
     { "Bug reports" = "community/bug-reports.md" },
-    { "FAQ" = "community/faq.md" },
     { "Roadmap" = "roadmap.md" },
+    { "FAQ" = "community/faq.md" },
   ]},
 ]
 
