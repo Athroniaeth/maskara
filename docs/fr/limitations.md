@@ -9,10 +9,10 @@ atténuer.
 
 ## La couverture linguistique dépend du modèle
 
-L'ensemble des langues que `piighost` peut anonymiser est déterminé par le modèle NER branché sur le détecteur NER
-(`GlinerDetector` dans la configuration par défaut, qui encapsule GLiNER2). Par exemple, `fastino/gliner2-multi-v1`
-couvre plusieurs langues mais pas toutes avec la même précision. Avant de déployer sur une nouvelle locale, lisez
-la fiche du modèle et exécutez un petit jeu de validation.
+L'ensemble des langues que `piighost` peut anonymiser est déterminé par le modèle NER branché sur le détecteur
+choisi. La couverture varie d'un modèle à l'autre, et toutes les langues ne sont pas supportées avec la même
+précision. Avant de déployer sur une nouvelle locale, lisez la fiche du modèle et exécutez un petit jeu de
+validation.
 
 **Mitigation** : chargez un modèle spécifique à la locale pour une meilleure précision, ou combinez plusieurs
 détecteurs via le détecteur composite (`CompositeDetector`).

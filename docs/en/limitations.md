@@ -9,9 +9,8 @@ icon: lucide/triangle-alert
 ## Language coverage is model-dependent
 
 The set of languages `piighost` can anonymize is determined by the NER model you plug into the NER detector
-(`GlinerDetector` in the default setup, wrapping GLiNER2). For instance, `fastino/gliner2-multi-v1` covers multiple
-languages but not every language equally. Before deploying on a new locale, read the model card and run a small
-validation set.
+you choose. Coverage varies from model to model, and not every language is supported equally. Before deploying
+on a new locale, read the model card and run a small validation set.
 
 **Mitigation**: load a locale-specific model for best accuracy, or combine multiple detectors via the composite
 detector (`CompositeDetector`).

@@ -18,12 +18,12 @@ LLM
 
 NER
 :   **N**amed **E**ntity **R**ecognition. A machine-learning task that finds named entities (persons, locations,
-    organizations, dates, etc.) in text. `piighost` ships detectors for several backends (`Gliner2Detector`,
-    `SpacyDetector`, `TransformersDetector`), all interchangeable behind the `AnyDetector` protocol.
+    organizations, dates, etc.) in text. `piighost` ships detectors for several backends (`SpacyDetector`,
+    `Gliner2Detector`, `TransformersDetector`), all interchangeable behind the `AnyDetector` protocol.
 
 Detector
 :   A component that finds PII in text. Detectors implement the `AnyDetector` protocol. Built-in implementations:
-    `GlinerDetector` (NER), `RegexDetector` (patterns), `ExactMatchDetector` (fixed dictionary),
+    `ExactMatchDetector` (fixed dictionary), `RegexDetector` (patterns), `GlinerDetector` (NER),
     `CompositeDetector` (chain of detectors).
 
 Span

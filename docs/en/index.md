@@ -103,8 +103,8 @@ Using anonymization inside AI agents introduces several additional constraints:
 `piighost` combines existing building blocks to offer PII detection and anonymization that is at once accurate,
 consistent, and easy to integrate:
 
-- **Hybrid detection**: compose one or more NER models (GLiNER2, spaCy, Transformers…) and regex via
-  `CompositeDetector` to get the best of both worlds.
+- **Hybrid detection**: compose one or more NER backends and regex via `CompositeDetector` to get the best of
+  both worlds.
 - **Entity linking**: automatically groups variants (case, typos, partial mentions) to guarantee consistent
   placeholders.
 - **Bidirectional anonymization**: every anonymization is cached and can be reversed on the fly, including on

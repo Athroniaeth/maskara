@@ -104,8 +104,8 @@ Pour utiliser l'anonymisation dans des agents IA, plusieurs contraintes supplém
 `piighost` combine les briques existantes pour offrir une détection et une anonymisation des PII à la fois précises,
 cohérentes et faciles à intégrer :
 
-- **Détection hybride** : composez un ou plusieurs NER (GLiNER2, spaCy, Transformers…) et des regex via
-  `CompositeDetector` pour tirer parti des deux mondes.
+- **Détection hybride** : composez un ou plusieurs backends NER et des regex via `CompositeDetector` pour
+  tirer parti des deux mondes.
 - **Liaison d'entités** : regroupe automatiquement les variantes (casse, fautes, mentions partielles) pour
   garantir des placeholders cohérents.
 - **Anonymisation bidirectionnelle** : chaque anonymisation est cachée et peut être inversée à la volée, y compris

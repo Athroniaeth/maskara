@@ -143,9 +143,9 @@ async def main():
 asyncio.run(main())
 ```
 
-### Pipeline autonome avec GLiNER2
+### Pipeline NER autonome
 
-Vraie détection NER. Télécharge le modèle GLiNER2 depuis HuggingFace lors de la première utilisation.
+Vraie détection NER. L'exemple ci-dessous utilise `Gliner2Detector` ; remplacez-le par n'importe quelle autre implémentation de `AnyDetector` si besoin.
 
 ```python
 import asyncio
@@ -268,7 +268,7 @@ flowchart LR
     ANONYMIZE --> OUTPUT
 
     P_DETECT["`GlinerDetector
-    _(GLiNER2 NER)_`"]:::protocol
+    _(ou RegexDetector, ExactMatchDetector, CompositeDetector…)_`"]:::protocol
     P_RESOLVE_SPANS["`ConfidenceSpanConflictResolver
     _(plus haute confiance gagne)_`"]:::protocol
     P_LINK["`ExactEntityLinker
@@ -318,7 +318,7 @@ sequenceDiagram
 
 `piighost` n'est pas une solution miracle. Limites connues à garder en tête avant de déployer :
 
-- **La couverture linguistique** dépend du modèle GLiNER2 chargé. Vérifiez la fiche du modèle avant de supposer qu'une langue est supportée.
+- **La couverture linguistique** dépend du modèle NER branché sur le pipeline. Vérifiez la fiche du modèle avant de supposer qu'une langue est supportée.
 - **Les faux négatifs NER** sont inhérents. Pour les entités critiques (emails, numéros de téléphone, identifiants), combinez `GlinerDetector` avec un détecteur regex via `CompositeDetector`.
 - **Les PII générées par le LLM dans ses réponses** (entités jamais vues en entrée) ne sont pas couvertes par la liaison d'entités. Gérez-les avec une étape de validation post-réponse au niveau applicatif.
 - **Le cache est local** (en mémoire via `aiocache`). Les déploiements multi-instances nécessitent un backend externe (Redis, Memcached) à configurer explicitement.
@@ -355,7 +355,6 @@ uv run pytest tests/ -k "test_name"  # Lancer un test précis
 
 ## Notes complémentaires
 
-- Le modèle GLiNER2 est téléchargé depuis HuggingFace lors de la première utilisation (~500 Mo)
 - Tous les modèles de données sont des dataclasses gelées, sûres à partager entre threads
-- Les tests utilisent `ExactMatchDetector` pour éviter de charger le vrai modèle GLiNER2 en CI
+- Les tests utilisent `ExactMatchDetector` pour éviter de charger un modèle NER lourd en CI
 - Pour le modèle de menaces, ce que `piighost` protège et ce qu'il ne protège pas, ainsi que les considérations de stockage du cache, voir [SECURITY.md](SECURITY.md)

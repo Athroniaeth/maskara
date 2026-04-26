@@ -122,7 +122,7 @@ flowchart LR
     ANONYMIZE --> OUTPUT
 
     P_DETECT["`GlinerDetector
-    _(GLiNER2 NER)_`"]:::protocol
+    _(ou RegexDetector, ExactMatchDetector, CompositeDetector…)_`"]:::protocol
     P_RESOLVE_SPANS["`ConfidenceSpanConflictResolver
     _(plus haute confiance gagne)_`"]:::protocol
     P_LINK["`ExactEntityLinker
@@ -143,7 +143,7 @@ flowchart LR
 
 `AnyDetector` execute la detection NER async sur le texte source et retourne une liste d'objets `Detection` (text, label, position, confidence).
 
-Les implementations fournies incluent `GlinerDetector` (GLiNER2), `ExactMatchDetector` (regex word-boundary), `RegexDetector` (patterns), et `CompositeDetector` (chaine plusieurs detecteurs).
+Les implementations fournies incluent `ExactMatchDetector` (regex word-boundary), `RegexDetector` (patterns), `GlinerDetector` (NER), et `CompositeDetector` (chaine plusieurs detecteurs).
 
 ### Etape 2 Resolve Spans
 

@@ -20,13 +20,13 @@ LLM
 NER
 :   **N**amed **E**ntity **R**ecognition, reconnaissance d'entités nommées. Tâche de machine learning qui identifie
     les entités nommées dans un texte (personnes, lieux, organisations, dates, etc.). `piighost` fournit des
-    détecteurs pour plusieurs backends (`Gliner2Detector`, `SpacyDetector`, `TransformersDetector`), tous
+    détecteurs pour plusieurs backends (`SpacyDetector`, `Gliner2Detector`, `TransformersDetector`), tous
     interchangeables via le protocole `AnyDetector`.
 
 Détecteur
 :   Composant qui trouve les PII dans un texte. Les détecteurs implémentent le protocole `AnyDetector`.
-    Implémentations fournies : `GlinerDetector` (NER), `RegexDetector` (patterns), `ExactMatchDetector` (dictionnaire
-    fixe), `CompositeDetector` (chaîne de détecteurs).
+    Implémentations fournies : `ExactMatchDetector` (dictionnaire fixe), `RegexDetector` (patterns),
+    `GlinerDetector` (NER), `CompositeDetector` (chaîne de détecteurs).
 
 Span
 :   Intervalle de positions caractères dans un texte : `(start_pos, end_pos)`. Chaque détection porte un `Span` qui
