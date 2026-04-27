@@ -13,6 +13,7 @@ from aiocache import BaseCache, SimpleMemoryCache
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.exceptions import CacheMissError
+from piighost.guard import AnyGuardRail, DisabledGuardRail
 from piighost.linker.entity import AnyEntityLinker, ExactEntityLinker
 from piighost.models import Detection, Entity
 from piighost.placeholder import AnyPlaceholderFactory
@@ -59,6 +60,11 @@ class AnonymizationPipeline(Generic[PreservationT]):
         entity_linker: Expands and groups detections into entities.
         entity_resolver: Merges conflicting entities.
         anonymizer: Performs text replacement and deanonymization.
+        guard_rail: Optional final stage that re-validates the
+            anonymized text. Defaults to ``DisabledGuardRail`` (no-op).
+            Pass a ``DetectorGuardRail`` (or any ``AnyGuardRail``) to
+            raise ``PIIRemainingError`` whenever residual PII is found
+            in the output.
         cache: Optional aiocache instance. If ``None``, no caching
             is performed and deanonymize will raise KeyError.
         cache_ttl: Time-to-live in seconds applied to every cache entry
@@ -73,6 +79,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
     _entity_linker: AnyEntityLinker
     _entity_resolver: AnyEntityConflictResolver
     _anonymizer: AnyAnonymizer[PreservationT]
+    _guard_rail: AnyGuardRail
     _cache: BaseCache
     _cache_ttl: int | None
 
@@ -83,18 +90,21 @@ class AnonymizationPipeline(Generic[PreservationT]):
         span_resolver: AnySpanConflictResolver | None = None,
         entity_linker: AnyEntityLinker | None = None,
         entity_resolver: AnyEntityConflictResolver | None = None,
+        guard_rail: AnyGuardRail | None = None,
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
     ) -> None:
         span_resolver = span_resolver or ConfidenceSpanConflictResolver()
         entity_linker = entity_linker or ExactEntityLinker()
         entity_resolver = entity_resolver or MergeEntityConflictResolver()
+        guard_rail = guard_rail or DisabledGuardRail()
 
         self._detector = detector
         self._span_resolver = span_resolver
         self._entity_linker = entity_linker
         self._entity_resolver = entity_resolver
         self._anonymizer = anonymizer
+        self._guard_rail = guard_rail
         self._cache = cache or SimpleMemoryCache()
         self._cache_ttl = cache_ttl
 
@@ -125,11 +135,20 @@ class AnonymizationPipeline(Generic[PreservationT]):
 
         Returns:
             A tuple of (anonymized text, entities used for anonymization).
+
+        Raises:
+            PIIRemainingError: If a non-default guard rail detects
+                residual PII in the anonymized output.
         """
         entities = await self.detect_entities(text)
 
         # Replace detections with placeholder tokens.
         anonymized = self._anonymizer.anonymize(text, entities)
+
+        # Final binary check on the anonymized output. The default
+        # DisabledGuardRail is a no-op, so existing pipelines keep
+        # their behaviour untouched.
+        await self._guard_rail.check(anonymized)
 
         # Store both directions for deanonymization lookup.
         await self._store_mapping(text, anonymized, entities)

@@ -77,9 +77,10 @@ ajoutent un filet de sécurité optionnel en fin de pipeline.
   quel `AnyDetector`) sur le texte anonymisé et lève une
   `PIIRemainingError` si quelque chose est encore identifié. API
   minimale, pas de seuil à régler. Implémentations prévues :
-  `DetectorGuardRail` (réutilise un `AnyDetector` quelconque),
-  `LLMGuardRail` (petit LLM local), et `DisabledGuardRail` par défaut
-  pour rester cohérent avec les autres étages du pipeline.
+    - [x] `DetectorGuardRail` (réutilise un `AnyDetector` quelconque)
+    - [ ] `LLMGuardRail` (petit LLM local)
+    - [x] `DisabledGuardRail` par défaut pour rester cohérent avec
+      les autres étages du pipeline
 
 - [ ] **Protocole `AnyRiskAssessor` et implémentations.** Étage
   optionnel qui retourne un score continu de risque de

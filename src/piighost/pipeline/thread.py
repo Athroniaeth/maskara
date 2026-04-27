@@ -26,6 +26,7 @@ from aiocache import BaseCache, SimpleMemoryCache
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.exceptions import PIIGhostConfigWarning
+from piighost.guard import AnyGuardRail
 from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity
 from piighost.pipeline.base import (
@@ -217,6 +218,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         entity_linker: AnyEntityLinker | None = None,
         entity_resolver: AnyEntityConflictResolver | None = None,
         span_resolver: AnySpanConflictResolver | None = None,
+        guard_rail: AnyGuardRail | None = None,
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
         max_threads: int | None = None,
@@ -231,6 +233,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             entity_linker=entity_linker,
             entity_resolver=entity_resolver,
             anonymizer=anonymizer,
+            guard_rail=guard_rail,
             cache=cache,
             cache_ttl=cache_ttl,
         )
@@ -479,6 +482,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             )
             memory.record(hash_sha256(text), entities)
             result = self.anonymize_with_ent(text, thread_id=thread_id)
+
+            await self._guard_rail.check(result)
 
             await self._store_mapping(text, result, entities)
             return result, entities

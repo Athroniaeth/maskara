@@ -5,7 +5,9 @@ from piighost.exceptions import (
     CacheMissError,
     PIIGhostConfigWarning,
     PIIGhostException,
+    PIIRemainingError,
 )
+from piighost.guard import AnyGuardRail, DetectorGuardRail, DisabledGuardRail
 from piighost.linker.entity import AnyEntityLinker, DisabledEntityLinker
 from piighost.models import Detection, Entity, Span
 from piighost.ph_factory.faker_hash import (
@@ -46,13 +48,16 @@ __all__ = [
     "AnyDetector",
     "AnyEntityConflictResolver",
     "AnyEntityLinker",
+    "AnyGuardRail",
     "AnyPlaceholderFactory",
     "AnySpanConflictResolver",
     "Anonymizer",
     "CacheMissError",
     "Detection",
+    "DetectorGuardRail",
     "DisabledEntityConflictResolver",
     "DisabledEntityLinker",
+    "DisabledGuardRail",
     "DisabledSpanConflictResolver",
     "Entity",
     "ExactMatchDetector",
@@ -64,6 +69,7 @@ __all__ = [
     "MaskPlaceholderFactory",
     "PIIGhostConfigWarning",
     "PIIGhostException",
+    "PIIRemainingError",
     "PlaceholderPreservation",
     "PreservesIdentity",
     "PreservesIdentityOnly",
