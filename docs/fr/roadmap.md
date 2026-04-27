@@ -18,7 +18,7 @@ Le mapping `placeholder ↔ PII` est aujourd'hui conservé en clair dans
 le backend `aiocache` configuré. Les chantiers ci-dessous renforcent
 les garanties offertes lorsque le backend lui-même est compromis.
 
-- [ ] **Sel et poivre sur le hash des placeholders.** Aujourd'hui,
+- [x] **Sel et poivre sur le hash des placeholders.** Aujourd'hui,
   `LabelHashPlaceholderFactory` et `FakerHashPlaceholderFactory`
   dérivent un SHA-256 déterministe de la PII. Sur un espace de
   valeurs réduit (prénoms, villes), un attaquant peut reconstruire la

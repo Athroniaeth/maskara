@@ -1,4 +1,5 @@
 import hashlib
+import os
 import re
 from collections import defaultdict
 from collections.abc import Callable
@@ -15,6 +16,56 @@ from piighost.placeholder_tags import (
     PreservesNothing,
     PreservesShape,
 )
+
+PEPPER_ENV_VAR = "PIIGHOST_HASH_PEPPER"
+"""Environment variable read when a hash factory's ``pepper`` is left
+to its default ``None``.  Lets operators inject a process-wide secret
+without changing pipeline construction code."""
+
+
+def _resolve_pepper(pepper: str | None) -> str:
+    """Resolve the pepper value, falling back to the env var.
+
+    ``None`` means "use the env var if set, otherwise none".  An empty
+    string is treated as an explicit "no pepper" and skips the env-var
+    lookup.
+    """
+    if pepper is not None:
+        return pepper
+    return os.environ.get(PEPPER_ENV_VAR, "")
+
+
+def hash_canonical(
+    canonical_text: str,
+    label: str,
+    salt: str,
+    pepper: str,
+    hash_length: int,
+) -> str:
+    """SHA-256 digest of a ``(text, label)`` pair, optionally salted/peppered.
+
+    When both ``salt`` and ``pepper`` are empty, the digest input is the
+    legacy ``"{canonical_text}:{label}"`` layout, so existing tokens
+    stay stable.  As soon as either is non-empty, the layout switches
+    to ``"{canonical_text}:{label}:{salt}:{pepper}"`` with both fields
+    always present (even if empty) so a value cannot collide between
+    the salt slot and the pepper slot.
+
+    Args:
+        canonical_text: Lower-cased entity text.
+        label: Entity label.
+        salt: Per-instance salt (empty string disables it).
+        pepper: Process-wide secret (empty string disables it).
+        hash_length: Number of hex characters to keep from the digest.
+
+    Returns:
+        The truncated hex digest.
+    """
+    raw = f"{canonical_text}:{label}"
+    if salt or pepper:
+        raw = f"{raw}:{salt}:{pepper}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:hash_length]
+
 
 PreservationT_co = TypeVar(
     "PreservationT_co",
@@ -144,6 +195,16 @@ class LabelHashPlaceholderFactory(
     Args:
         hash_length: Number of hex characters to use from the hash.
             Defaults to 8.
+        salt: Per-instance string mixed into the hash.  Two instances
+            with different salts produce different placeholders for the
+            same input.  Defaults to ``""`` (no salt).
+        pepper: Process-wide secret mixed into the hash on top of
+            ``salt``.  Defaults to ``None``, which falls back to the
+            ``PIIGHOST_HASH_PEPPER`` environment variable; pass an
+            empty string to opt out explicitly.  Together with the
+            salt, the pepper makes the derivation non-replayable
+            outside the process and defeats rainbow-table attacks on
+            small-cardinality inputs (first names, cities).
 
     Example:
         >>> from piighost.models import Detection, Entity, Span
@@ -155,9 +216,18 @@ class LabelHashPlaceholderFactory(
     """
 
     _hash_length: int
+    _salt: str
+    _pepper: str
 
-    def __init__(self, hash_length: int = 8) -> None:
+    def __init__(
+        self,
+        hash_length: int = 8,
+        salt: str = "",
+        pepper: str | None = None,
+    ) -> None:
         self._hash_length = hash_length
+        self._salt = salt
+        self._pepper = _resolve_pepper(pepper)
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Create hash-based tokens for all entities.
@@ -173,8 +243,13 @@ class LabelHashPlaceholderFactory(
         for entity in entities:
             canonical_text = entity.detections[0].text.lower()
             label = entity.label
-            raw = f"{canonical_text}:{label}"
-            digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
+            digest = hash_canonical(
+                canonical_text,
+                label,
+                self._salt,
+                self._pepper,
+                self._hash_length,
+            )
             result[entity] = f"<<{label}:{digest}>>"
 
         return result
@@ -241,6 +316,11 @@ class RedactHashPlaceholderFactory(AnyPlaceholderFactory[PreservesIdentityOnly])
         prefix: Bare prefix before the hash. Defaults to ``"REDACT"``.
         hash_length: Number of hex characters from the SHA-256 digest.
             Defaults to ``8``.
+        salt: Per-instance string mixed into the hash.  See
+            :class:`LabelHashPlaceholderFactory` for details.
+        pepper: Process-wide secret mixed into the hash, sourced from
+            the ``PIIGHOST_HASH_PEPPER`` environment variable when left
+            to ``None``.  See :class:`LabelHashPlaceholderFactory`.
 
     Example:
         >>> from piighost.models import Detection, Entity, Span
@@ -253,10 +333,20 @@ class RedactHashPlaceholderFactory(AnyPlaceholderFactory[PreservesIdentityOnly])
 
     _prefix: str
     _hash_length: int
+    _salt: str
+    _pepper: str
 
-    def __init__(self, prefix: str = "REDACT", hash_length: int = 8) -> None:
+    def __init__(
+        self,
+        prefix: str = "REDACT",
+        hash_length: int = 8,
+        salt: str = "",
+        pepper: str | None = None,
+    ) -> None:
         self._prefix = prefix
         self._hash_length = hash_length
+        self._salt = salt
+        self._pepper = _resolve_pepper(pepper)
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Create label-less hash tokens for all entities.
@@ -274,8 +364,13 @@ class RedactHashPlaceholderFactory(AnyPlaceholderFactory[PreservesIdentityOnly])
             # Hash on (text + label) so two entities with the same
             # surface text but different labels still get distinct ids.
             canonical_text = entity.detections[0].text.lower()
-            raw = f"{canonical_text}:{entity.label}"
-            digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
+            digest = hash_canonical(
+                canonical_text,
+                entity.label,
+                self._salt,
+                self._pepper,
+                self._hash_length,
+            )
             result[entity] = f"<<{self._prefix}:{digest}>>"
 
         return result

@@ -35,12 +35,15 @@ misconfigured pipeline immediately instead of silently producing
 garbage tokens.
 """
 
-import hashlib
 import importlib.util
 from collections.abc import Callable
 
 from piighost.models import Entity
-from piighost.placeholder import AnyPlaceholderFactory
+from piighost.placeholder import (
+    AnyPlaceholderFactory,
+    _resolve_pepper,
+    hash_canonical,
+)
 from piighost.placeholder_tags import PreservesLabeledIdentityHashed
 
 StrategyFn = Callable[[str], str]
@@ -272,6 +275,13 @@ class FakerHashPlaceholderFactory(
             ``{hash}``, or callable). Must be non-empty.
         hash_length: Number of hex characters from the SHA-256 digest.
             Defaults to ``8``.
+        salt: Per-instance string mixed into the hash before truncation.
+            See :class:`~piighost.placeholder.LabelHashPlaceholderFactory`
+            for details.
+        pepper: Process-wide secret mixed into the hash, sourced from
+            the ``PIIGHOST_HASH_PEPPER`` environment variable when left
+            to ``None``.  See
+            :class:`~piighost.placeholder.LabelHashPlaceholderFactory`.
 
     Raises:
         ValueError: If ``strategies`` is empty, or at ``create()`` time
@@ -293,11 +303,15 @@ class FakerHashPlaceholderFactory(
 
     _strategies: dict[str, StrategyValue]
     _hash_length: int
+    _salt: str
+    _pepper: str
 
     def __init__(
         self,
         strategies: dict[str, StrategyValue] | None = None,
         hash_length: int = 8,
+        salt: str = "",
+        pepper: str | None = None,
     ) -> None:
         if strategies is None:
             strategies = _default_strategies()
@@ -309,6 +323,8 @@ class FakerHashPlaceholderFactory(
             )
         self._strategies = {k.lower(): v for k, v in strategies.items()}
         self._hash_length = hash_length
+        self._salt = salt
+        self._pepper = _resolve_pepper(pepper)
 
     def create(self, entities: list[Entity]) -> dict[Entity, str]:
         """Apply per-entity hashed tokens to all entities.
@@ -325,8 +341,13 @@ class FakerHashPlaceholderFactory(
                 _raise_unknown(entity.label, self._strategies)
             strategy = self._strategies[label]
             canonical_text = entity.detections[0].text.lower()
-            raw = f"{canonical_text}:{entity.label}"
-            digest = hashlib.sha256(raw.encode()).hexdigest()[: self._hash_length]
+            digest = hash_canonical(
+                canonical_text,
+                entity.label,
+                self._salt,
+                self._pepper,
+                self._hash_length,
+            )
             result[entity] = _apply_strategy(strategy, digest, "{hash}")
 
         return result
