@@ -4,7 +4,29 @@ icon: lucide/messages-square
 
 # Pipeline conversationnel
 
-`ThreadAnonymizationPipeline` encapsule le pipeline de base avec une `ConversationMemory` pour accumuler les entités entre les messages et fournir désanonymisation / réanonymisation par remplacement de chaîne.
+## Pourquoi pas juste `AnonymizationPipeline` ?
+
+Le pipeline standard fonctionne sur un message isolé. Dans une conversation multi-messages, trois problèmes apparaissent :
+
+- **Compteurs non partagés.** Chaque appel à `anonymize` repart de zéro. Le mapping `Patrick → <<PERSON:1>>`{ .placeholder } du message 1 n'est pas réutilisé au message 2.
+- **Détections manquées entre messages.** Le NER détecte `Patrick`{ .pii } dans le message 1 mais le rate dans le message 5. Sans mémoire des entités déjà vues, on ne peut pas combler le trou.
+- **Conversations concurrentes.** Si plusieurs utilisateurs partagent la même instance de pipeline, leurs entités se mélangent et leurs `<<PERSON:1>>`{ .placeholder } deviennent indiscernables.
+
+Démonstration du bug avec le pipeline standard :
+
+```python
+# Avec un AnonymizationPipeline (sans mémoire de conversation)
+
+m1, _ = await pipeline.anonymize("Patrick habite à Paris.")
+# <<PERSON:1>> habite à <<LOCATION:1>>.
+
+m2, _ = await pipeline.anonymize("Bob est content.")
+# <<PERSON:1>> est content.   ← le compteur est reparti à 1
+# Bob hérite donc du même placeholder que Patrick → collision :
+# le LLM pense que c'est la même personne.
+```
+
+`ThreadAnonymizationPipeline` encapsule le pipeline de base avec une `ConversationMemory` pour accumuler les entités entre les messages et fournir désanonymisation / réanonymisation par remplacement de chaîne. La mémoire et le cache sont scopés par `thread_id`, ce qui isole chaque conversation et permet de réutiliser les entités déjà vues pour rester cohérent au fil des messages.
 
 ```python
 import asyncio

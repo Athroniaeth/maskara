@@ -141,25 +141,110 @@ flowchart LR
 
 ### Etape 1 Detect
 
-`AnyDetector` execute la detection NER async sur le texte source et retourne une liste d'objets `Detection` (text, label, position, confidence).
+`AnyDetector` execute la detection async sur le texte source et retourne une liste d'objets `Detection` (text, label, position, confidence).
 
-Les implementations fournies incluent `ExactMatchDetector` (regex word-boundary), `RegexDetector` (patterns), `GlinerDetector` (NER), et `CompositeDetector` (chaine plusieurs detecteurs).
+Les implementations fournies incluent `ExactMatchDetector` (regex word-boundary), `RegexDetector` (patterns), `Gliner2Detector` (NER), et `CompositeDetector` (chaine plusieurs detecteurs).
+
+**Exemple :**
+
+```text
+Texte : "Patrick habite a Paris."
+
+Détections :
+  - PERSON   "Patrick"  [0:7]   confidence=0.95
+  - LOCATION "Paris"    [17:22] confidence=0.92
+```
+
+A ce stade, on a une liste brute de detections. Pas encore d'anonymisation ni de gestion de doublons : juste « voici ce qui ressemble a des PII et ou elles sont ».
 
 ### Etape 2 Resolve Spans
 
-`AnySpanConflictResolver` gere les detections qui se chevauchent en gardant celle avec la plus haute confiance.
+**Le probleme.** Quand on chaine plusieurs detecteurs sur le meme texte, ils peuvent revendiquer le meme morceau avec des labels differents. Sans arbitrage, le remplacement final tape deux fois sur la meme position et casse le texte.
+
+`AnySpanConflictResolver` gere les detections qui se chevauchent (totalement ou partiellement) en gardant celle avec la plus haute confiance.
+
+**Exemple :**
+
+```text
+Texte : "Patrick travaille chez Orange depuis 2015."
+
+Détections en entrée :
+  - PERSON "Patrick" [0:7] confidence=0.95   (NER A)
+  - ORG    "Patrick" [0:7] confidence=0.60   (NER B, confond avec un nom d'entreprise)
+
+Après ConfidenceSpanConflictResolver :
+  - PERSON "Patrick" [0:7] confidence=0.95
+```
 
 ### Etape 3 Link Entities
 
-`AnyEntityLinker` etend et groupe les detections en objets `Entity`. `ExactEntityLinker` trouve toutes les occurrences de chaque texte detecte par recherche word-boundary et les groupe par texte normalise.
+**Le probleme.** Le NER rate des occurrences. Il trouve `Patrick Dupont` dans la phrase 1, mais rate `Patrick` tout seul dans la phrase 3. Si on s'arrete a la detection brute, `Patrick` reste en clair dans le texte anonymise.
+
+`AnyEntityLinker` etend et groupe les detections en objets `Entity`. `ExactEntityLinker` cherche toutes les occurrences de chaque texte detecte par recherche word-boundary, puis les groupe par texte normalise.
+
+**Exemple :**
+
+```text
+Texte : "Patrick Dupont habite à Paris. Patrick adore Paris."
+
+Détections brutes du NER :
+  - PERSON   "Patrick Dupont"  (phrase 1)
+  - LOCATION "Paris"            (phrase 1)
+  # "Patrick" et "Paris" de la phrase 2 ont été ratés par le NER
+
+Après ExactEntityLinker :
+  - Entity(label=PERSON,   detections=["Patrick Dupont", "Patrick"])
+  - Entity(label=LOCATION, detections=["Paris", "Paris"])
+```
+
+Le matching est strict sur la chaine. Pour rattraper les variantes de casse ou les fautes (`patrick`, `Patriick`), il faut un linker fuzzy custom (voir [Etendre PIIGhost](extending.md)).
 
 ### Etape 4 Resolve Entities
 
-`AnyEntityConflictResolver` fusionne les entites qui referent au meme PII. `MergeEntityConflictResolver` utilise un algorithme union-find pour fusionner les entites partageant des detections communes. `FuzzyEntityConflictResolver` fusionne les entites avec un texte canonique similaire via similarite Jaro-Winkler.
+**Le probleme.** Apres le linker, deux entites distinctes peuvent referer a la meme personne (le NER detecte `Patrick Dupont`, un dictionnaire metier detecte `Patrick` tout seul). Sans fusion, `Patrick Dupont` devient `<<PERSON:1>>` et `Patrick` devient `<<PERSON:2>>`, et le LLM pense qu'il s'agit de deux personnes differentes.
+
+`AnyEntityConflictResolver` fusionne ces entites. `MergeEntityConflictResolver` utilise un algorithme union-find pour fusionner les entites partageant des detections communes (matching strict). `FuzzyEntityConflictResolver` fusionne les entites avec un texte canonique similaire via similarite Jaro-Winkler (plus tolerant, faux positifs plus eleves).
+
+**Exemple :**
+
+```text
+Avant fusion :
+  - Entity(label=PERSON, detections=["Patrick Dupont"])
+  - Entity(label=PERSON, detections=["Patrick"])
+  # Les deux entités partagent une détection sur la chaîne "Patrick"
+
+Après MergeEntityConflictResolver :
+  - Entity(label=PERSON, detections=["Patrick Dupont", "Patrick"])
+```
 
 ### Etape 5 Anonymize
 
-`AnyAnonymizer` utilise un `AnyPlaceholderFactory` pour generer les tokens (`<<PERSON:1>>`{ .placeholder }, `<<LOCATION:1>>`{ .placeholder }) et effectue le remplacement par spans de droite a gauche.
+`AnyAnonymizer` utilise un `AnyPlaceholderFactory` pour generer un placeholder unique par entite, puis remplace les spans dans le texte de droite a gauche (pour ne pas decaler les positions des spans suivants).
+
+**Exemple :**
+
+```text
+Entrée : "Patrick Dupont habite à Paris. Patrick adore Paris."
+
+Après Anonymizer + LabelCounterPlaceholderFactory :
+  "<<PERSON:1>> habite à <<LOCATION:1>>. <<PERSON:1>> adore <<LOCATION:1>>."
+```
+
+Le format `<<LABEL:N>>`{ .placeholder } par defaut a quatre proprietes utiles : il est unique comme token, le LLM voit immediatement de quel type de PII il s'agit, il n'est pas ambigu dans du texte normal, et il distingue plusieurs personnes entre elles (contrairement a `<<PERSON>>` tout court). Pour les autres formats disponibles (hash, faker, mask), voir [Placeholder Factories](placeholder-factories.md).
+
+---
+
+## Recapitulatif des composants
+
+| Etape | Protocole | Defaut | Passe-plat | Quand l'utiliser |
+|-------|-----------|--------|------------|------------------|
+| 1. Detect | `AnyDetector` | `Gliner2Detector` | — (toujours requis) | Detection NER, regex, exact match, ou composite. Voir [Detecteurs](examples/detectors.md). |
+| 2. Resolve Spans | `AnySpanConflictResolver` | `ConfidenceSpanConflictResolver` | `DisabledSpanConflictResolver` | Garde la detection la plus confiante en cas de chevauchement. Desactiver si vos detections sont deja propres. |
+| 3. Link Entities | `AnyEntityLinker` | `ExactEntityLinker` | `DisabledEntityLinker` | Rattrape les occurrences ratees par le detecteur via word-boundary. Desactiver si vous voulez vous limiter aux detections brutes. |
+| 4. Resolve Entities | `AnyEntityConflictResolver` | `MergeEntityConflictResolver` | `DisabledEntityConflictResolver` | Fusionne les entites distinctes referant a la meme PII. `FuzzyEntityConflictResolver` (Jaro-Winkler) tolere les fautes mais augmente le risque de faux positifs. |
+| 5. Anonymize | `AnyAnonymizer` (+ `AnyPlaceholderFactory`) | `Anonymizer` + `LabelCounterPlaceholderFactory` | — (toujours requis) | Le choix du `PlaceholderFactory` pilote le format de sortie. Voir [Placeholder Factories](placeholder-factories.md). |
+
+Chaque variante `Disabled*` est un passe-plat strict (entree = sortie). Utile en test, ou pour brancher un pipeline minimal qui se contente d'un detecteur deja parfait. Voir [Etendre PIIGhost](extending.md) pour brancher votre propre implementation.
 
 ---
 

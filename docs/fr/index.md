@@ -54,32 +54,19 @@ permet de profiter des modèles les plus capables tout en gardant la main sur le
 !!! tip "Première fois sur ces termes ?"
     Consultez le [Glossaire](glossary.md) pour les définitions de NER, span, liaison d'entités, middleware, placeholder et plus.
 
-Il existe actuellement deux familles de solutions pour détecter les PII, les regex et les modèles NER
-(Named Entity Recognition) :
+Sur le papier, anonymiser des PII est simple : on prend un détecteur (regex pour les emails, modèle NER pour les noms), on remplace ce qui matche par des placeholders, et on envoie au LLM. En pratique, quatre problèmes apparaissent presque immédiatement.
 
-- **Regex** : rapide et prédictible, mais limité aux formats structurés (emails, numéros de téléphone) et incapable
-  de capturer des noms ou lieux arbitraires.
-- **Modèles NER** : détection étendue (personnes, lieux, organisations, etc.), mais plus lente et sujette à des
-  imprécisions selon le modèle.
+**Cohérence des placeholders.** Le but est de remplacer `Patrick`{ .pii } par un placeholder du type `<<PERSON:1>>`{ .placeholder }, qui dit deux choses au LLM : on a caché une personne ici, et toutes les occurrences de `<<PERSON:1>>`{ .placeholder } parlent de la même personne. Si `Patrick`{ .pii } devient `<<PERSON:1>>`{ .placeholder } au début et `<<PERSON:3>>`{ .placeholder } à la fin, le LLM ne peut plus raisonner sur le fait qu'il s'agit du même individu.
 
-Chaque approche a ses failles propres, et les modèles NER en ajoutent quelques-unes :
+**Variantes ratées par le détecteur.** Le NER détecte `Patrick Dupont`{ .pii } en début de texte mais rate `Patrick`{ .pii } tout seul deux phrases plus loin. Ou il détecte `Patrick`{ .pii } mais pas `patrick`{ .pii } en bas de casse. Ou pas `Patriick`{ .pii } avec une faute d'orthographe.
 
-- **Faux positifs** : un mot est détecté comme PII alors qu'il n'en est pas un.
-- **Faux négatifs** : un PII bien réel n'est pas détecté.
-- **Détection incohérente** : le modèle détecte une occurrence d'un PII mais manque les autres occurrences du même
-  PII dans le texte, ce qui rend l'anonymisation incohérente.
+**Chevauchement entre détecteurs.** Deux NER chaînés pour augmenter le rappel peuvent revendiquer le même span avec des labels différents (l'un dit `PERSON`, l'autre dit `ORG` parce qu'il a confondu avec un nom d'entreprise). Sans arbitrage, le remplacement final tape sur la même position deux fois et casse le texte.
 
-Même en corrigeant ces défauts, il reste plusieurs problèmes de fond :
+**Persistance entre messages.** Une fois que le LLM a vu `<<PERSON:1>>`{ .placeholder } dans le message 1, il faut que le message 2 utilise le même placeholder. Sans mémoire partagée, `Patrick`{ .pii } devient `<<PERSON:1>>`{ .placeholder } puis `<<PERSON:7>>`{ .placeholder } selon le moment, et le LLM perd le fil.
 
-- **Cohérence des placeholders** : toutes les occurrences d'un même PII doivent être anonymisées de la même manière
-  (ex. `<<PERSON:1>>`{ .placeholder } pour `Patrick`{ .pii } dans tout le texte), afin de préserver l'information
-  qu'il s'agit de la même entité tout en protégeant la confidentialité.
-- **Liaison floue** : il faut pouvoir lier des détections qui ne sont pas strictement identiques, par exemple
-  `Patrick`{ .pii } et `patrick`{ .pii } (différence de casse), `Patric`{ .pii } (faute d'orthographe), ou encore
-  mention complète vs partielle (`Patrick Dupont`{ .pii } et `Patrick`{ .pii }).
-
-`piighost` adresse chacun de ces problèmes via trois composants du pipeline (résolution de spans, liaison
-d'entités, fusion d'entités). Chaque composant a une **contrepartie** : la résolution de spans peut écarter
+`piighost` adresse les trois premiers via trois composants du pipeline (résolution de spans, liaison
+d'entités, fusion d'entités), et le quatrième via la couche conversationnelle (`ThreadAnonymizationPipeline`).
+Chaque composant a une **contrepartie** : la résolution de spans peut écarter
 une détection légitime sur un faux conflit, la liaison floue peut grouper à tort deux entités distinctes, etc.
 Si vos détections sont déjà propres (ou si vous préférez gérer ces cas vous-même), chaque composant est
 **désactivable individuellement** via une instance `Disabled*` qui le transforme en passe-plat. Voir
