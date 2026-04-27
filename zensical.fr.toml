@@ -27,6 +27,7 @@ nav = [
         { "Détecteurs prêts à l'emploi" = "examples/detectors.md" },
         { "Étendre PIIGhost" = "extending.md" },
         { "Déploiement" = "deployment.md" },
+        { "Déploiement multi-instance" = "multi-instance.md" },
         { "Tests" = "examples/testing.md" },
     ] },
     { "Référence" = [

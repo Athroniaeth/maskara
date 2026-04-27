@@ -50,7 +50,7 @@ même `thread_id` routé vers deux workers verra Patrick assigné à
 `<<PERSON:1>>` au tour 1 puis `<<PERSON:2>>` au tour 2, cassant la
 cohérence du placeholder en pleine conversation.
 
-- [ ] **Warning à la première instanciation sans backend explicite.**
+- [x] **Warning à la première instanciation sans backend explicite.**
   Émettre un `PIIGhostConfigWarning` (catégorie custom, filtrable via
   `warnings.filterwarnings`) une seule fois par processus quand
   `ThreadAnonymizationPipeline` est créé sans backend partagé. Le
@@ -58,7 +58,7 @@ cohérence du placeholder en pleine conversation.
   cross-worker) et pas seulement de performance, pour que
   l'utilisateur comprenne le vrai risque.
 
-- [ ] **Page « Déploiement multi-instance » dans la doc.** Une section
+- [x] **Page « Déploiement multi-instance » dans la doc.** Une section
   dédiée qui explique le piège, montre le warning, et donne un exemple
   Redis copy-pasteable. À aligner sur la formulation de LangGraph
   (`MemorySaver` vs `PostgresSaver` / `RedisSaver`) pour parler
