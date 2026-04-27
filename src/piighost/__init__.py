@@ -1,7 +1,11 @@
 from piighost import labels
 from piighost.anonymizer import AnyAnonymizer, Anonymizer
 from piighost.detector.base import AnyDetector, ExactMatchDetector
-from piighost.exceptions import CacheMissError, PIIGhostException
+from piighost.exceptions import (
+    CacheMissError,
+    PIIGhostConfigWarning,
+    PIIGhostException,
+)
 from piighost.linker.entity import AnyEntityLinker, DisabledEntityLinker
 from piighost.models import Detection, Entity, Span
 from piighost.ph_factory.faker_hash import (
@@ -58,6 +62,7 @@ __all__ = [
     "LabelHashPlaceholderFactory",
     "LabelPlaceholderFactory",
     "MaskPlaceholderFactory",
+    "PIIGhostConfigWarning",
     "PIIGhostException",
     "PlaceholderPreservation",
     "PreservesIdentity",

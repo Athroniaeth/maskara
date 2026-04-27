@@ -127,6 +127,9 @@ asyncio_mode = "auto"
 markers = [
     "integration: tests that load heavy optional dependencies (torch, transformers, gliner2, spacy). Deselected by default.",
 ]
+filterwarnings = [
+    "ignore::piighost.exceptions.PIIGhostConfigWarning",
+]
 
 [tool.coverage.report]
 show_missing = true

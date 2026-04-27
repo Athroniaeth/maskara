@@ -14,16 +14,18 @@ pipeline to recreate consistent placeholder tokens across messages.
 """
 
 import re
+import warnings
 from collections import OrderedDict
 from contextvars import ContextVar
 from typing import Protocol
 
 from typing_extensions import TypeVar
 
-from aiocache import BaseCache
+from aiocache import BaseCache, SimpleMemoryCache
 
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
+from piighost.exceptions import PIIGhostConfigWarning
 from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity
 from piighost.pipeline.base import (
@@ -54,6 +56,13 @@ _current_thread_id: ContextVar[str] = ContextVar(
 Used by :class:`ThreadAnonymizationPipeline` to propagate the ``thread_id``
 argument down to the cache-key helpers without mutating instance state,
 which would be unsafe when several coroutines share one pipeline.
+"""
+
+_multi_instance_warning_emitted: bool = False
+"""Process-wide flag so the unshared-cache warning fires at most once.
+
+Module-level rather than class-level: the semantics are "has any pipeline
+in this process already warned?", which is module state, not class state.
 """
 
 
@@ -228,6 +237,38 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
 
         self._memories: OrderedDict[str, ConversationMemory] = OrderedDict()
         self._max_threads = max_threads
+        self._maybe_warn_unshared_cache()
+
+    def _maybe_warn_unshared_cache(self) -> None:
+        """Warn once per process when the active cache is process-local.
+
+        Multi-instance deployments behind a load balancer need a shared
+        backend, otherwise the same ``thread_id`` routed to two workers
+        sees inconsistent placeholders mid-conversation.  The warning
+        focuses on correctness (cross-worker placeholder consistency),
+        not performance.
+        """
+        global _multi_instance_warning_emitted
+        if _multi_instance_warning_emitted:
+            return
+        if not isinstance(self._cache, SimpleMemoryCache):
+            return
+        _multi_instance_warning_emitted = True
+        warnings.warn(
+            "ThreadAnonymizationPipeline is using a process-local cache "
+            "(SimpleMemoryCache). In a multi-instance deployment behind a "
+            "load balancer, the placeholder mapping is not shared across "
+            "workers: the same thread_id routed to two workers will see "
+            "Patrick assigned to <<PERSON:1>> on one worker and "
+            "<<PERSON:2>> on the next, breaking placeholder consistency "
+            "mid-conversation. For multi-worker deployments, configure a "
+            "shared cache backend (e.g. RedisCache). See the "
+            "'Multi-instance deployment' page in the documentation. "
+            "Silence this warning with "
+            "warnings.filterwarnings('ignore', category=PIIGhostConfigWarning).",
+            PIIGhostConfigWarning,
+            stacklevel=3,
+        )
 
     @staticmethod
     def _reject_non_identity_factory(factory: object) -> None:
