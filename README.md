@@ -93,9 +93,17 @@ async def main() -> None:
     print(anonymized)
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
-    pp(entities)
-    # [Entity(detections=(Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=1.0),)),
-    #  Entity(detections=(Detection(text=<redacted:5>, label='LOCATION', position=Span(start_pos=17, end_pos=22), confidence=1.0),))]
+    pp([entity.to_dict() for entity in entities], sort_dicts=False)
+    # [{'detections': [{'text': 'Patrick',
+    #                   'label': 'PERSON',
+    #                   'start_pos': 0,
+    #                   'end_pos': 7,
+    #                   'confidence': 1.0}]},
+    #  {'detections': [{'text': 'Paris',
+    #                   'label': 'LOCATION',
+    #                   'start_pos': 17,
+    #                   'end_pos': 22,
+    #                   'confidence': 1.0}]}]
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
@@ -105,7 +113,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-> The raw `text` is masked as `<redacted:N>` in `repr()` to prevent accidental leaks through `print` or `logger`. Access the real value via `entity.detections[0].text` when you need it.
+> Each `Entity` wraps a tuple of `Detection`s (text, label, position, confidence). `to_dict()` exposes the raw values; `repr(detection)` deliberately masks the `text` field to prevent accidental leaks through logs.
 
 > **How does `deanonymize` know the original?** It does not re-run the detector. The pipeline keeps an in-memory cache (`aiocache.SimpleMemoryCache` by default) that maps `sha256(anonymized_text) → (original_text, entities)`. Calling `deanonymize` is just a lookup. For multi-instance deployments, swap in a Redis or Memcached backend, see [docs/en/deployment.md](docs/en/deployment.md).
 
