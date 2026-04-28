@@ -17,7 +17,7 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    actor U as You
+    participant U as User
     participant M as piighost
     participant L as LLM
     participant T as Tool
@@ -27,7 +27,9 @@ sequenceDiagram
     L->>M: tool_call(send_email, to=<<EMAIL:1>>)
     M->>T: send_email(to="patrick@acme.com")
     T-->>M: "Sent."
-    M-->>U: "Sent."
+    M-->>L: "Sent."
+    L-->>M: "Done, your email to <<PERSON:1>> went out."
+    M-->>U: "Done, your email to Patrick went out."
 ```
 
 > The LLM only ever sees `<<PERSON:1>>` and `<<EMAIL:1>>`. Your `send_email` tool still receives the real address. The end user receives a deanonymized response. Zero changes to your agent code.
@@ -51,17 +53,17 @@ sequenceDiagram
 
 ## Why piighost?
 
-|                                           | **piighost**                                | LangChain `PIIMiddleware` (built-in) | Microsoft Presidio | Regex / hand-rolled |
-|-------------------------------------------|---------------------------------------------|--------------------------------------|--------------------|---------------------|
-| Pluggable detectors (NER, regex, LLM, …)  | ✅ via `AnyDetector` protocol               | ⚠️ regex / Presidio only             | ⚠️ tied to spaCy/recognizers | ❌                  |
-| Compose multiple detectors                | ✅ `CompositeDetector` + span resolver      | ❌ one strategy per instance         | ⚠️ partial         | ❌                  |
-| Cross-message entity linking              | ✅ `ThreadAnonymizationPipeline` + memory   | ❌                                   | ❌                 | ❌                  |
-| Tolerates case / typo variants            | ✅ `ExactEntityLinker` + `FuzzyEntityResolver` | ❌                                | ❌                 | ❌                  |
-| Reversible anonymization (deanonymize)    | ✅ cache-backed                             | ❌ block / mask only                 | ⚠️ separate API    | ❌                  |
-| LangChain / LangGraph middleware          | ✅ `PIIAnonymizationMiddleware`             | ✅ `PIIMiddleware`                   | ❌                 | ❌                  |
-| Per-tool deanonymize / re-anonymize       | ✅ `awrap_tool_call`                        | ❌                                   | ❌                 | ❌                  |
-| Async-first API                           | ✅                                          | ⚠️                                   | ⚠️                 | ❌                  |
-| Bring-your-own placeholder format         | ✅ `AnyPlaceholderFactory`                  | ⚠️ template-only                     | ⚠️ template-only   | depends             |
+|                                           | **piighost**                                | LangChain                            | Microsoft Presidio | Regex              |
+|-------------------------------------------|---------------------------------------------|--------------------------------------|--------------------|--------------------|
+| Pluggable detectors (NER, regex, LLM, …)  | ✅ via `AnyDetector` protocol               | ⚠️ regex / Presidio only             | ⚠️ tied to spaCy/recognizers | ❌                |
+| Compose multiple detectors                | ✅ `CompositeDetector` + span resolver      | ❌ one strategy per instance         | ⚠️ partial         | ❌                |
+| Cross-message entity linking              | ✅ `ThreadAnonymizationPipeline` + memory   | ❌                                   | ❌                 | ❌                |
+| Tolerates case / typo variants            | ✅ `ExactEntityLinker` + `FuzzyEntityResolver` | ❌                                | ❌                 | ❌                |
+| Reversible anonymization (deanonymize)    | ✅ cache-backed                             | ❌ block / mask only                 | ⚠️ separate API    | ❌                |
+| LangChain / LangGraph middleware          | ✅ `PIIAnonymizationMiddleware`             | ✅ `PIIMiddleware`                   | ❌                 | ❌                |
+| Per-tool deanonymize / re-anonymize       | ✅ `awrap_tool_call`                        | ❌                                   | ❌                 | ❌                |
+| Async-first API                           | ✅                                          | ⚠️                                   | ⚠️                 | ❌                |
+| Bring-your-own placeholder format         | ✅ `AnyPlaceholderFactory`                  | ⚠️ template-only                     | ⚠️ template-only   | depends           |
 
 LangChain's built-in [`PIIMiddleware`](https://docs.langchain.com/oss/python/langchain/middleware#pii-middleware) is the closest neighbour: it wires anonymization into the agent loop, but it is one-shot (block / redact / mask / hash) and can't deanonymize for end users or pass real values to tools. `piighost` keeps the same hook point and adds the round trip, the cross-message memory, and the swappable detection stack, so the LLM sees placeholders while the rest of the system keeps working with real data.
 
@@ -77,6 +79,7 @@ Anonymize and deanonymize without downloading any model. The `ExactMatchDetector
 
 ```python
 import asyncio
+from pprint import pp
 
 from piighost import Anonymizer, ExactMatchDetector
 from piighost.pipeline import AnonymizationPipeline
@@ -90,8 +93,9 @@ async def main() -> None:
     print(anonymized)
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
-    print([entity.detections[0].position for entity in entities])
-    # [Span(start_pos=0, end_pos=7), Span(start_pos=17, end_pos=22)]
+    pp(entities)
+    # [Entity(detections=(Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=1.0),)),
+    #  Entity(detections=(Detection(text=<redacted:5>, label='LOCATION', position=Span(start_pos=17, end_pos=22), confidence=1.0),))]
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
@@ -100,6 +104,8 @@ async def main() -> None:
 
 asyncio.run(main())
 ```
+
+> The raw `text` is masked as `<redacted:N>` in `repr()` to prevent accidental leaks through `print` or `logger`. Access the real value via `entity.detections[0].text` when you need it.
 
 > **How does `deanonymize` know the original?** It does not re-run the detector. The pipeline keeps an in-memory cache (`aiocache.SimpleMemoryCache` by default) that maps `sha256(anonymized_text) → (original_text, entities)`. Calling `deanonymize` is just a lookup. For multi-instance deployments, swap in a Redis or Memcached backend, see [docs/en/deployment.md](docs/en/deployment.md).
 
