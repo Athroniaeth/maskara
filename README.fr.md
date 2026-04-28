@@ -15,31 +15,22 @@
 `piighost` est un **pipeline d'anonymisation de PII composable** pour les agents LLM. Chaque étape (détection, liaison, résolution, anonymisation) est un `Protocol` Python que vous pouvez remplacer, vous gardez la main sur vos détecteurs (NER, regex, LLM, votre propre API) pendant que `piighost` s'occupe du reste : liaison d'entités inter-messages, cohérence des placeholders, et un middleware LangChain qui anonymise avant le LLM et désanonymise pour les outils et l'utilisateur final.
 
 ```mermaid
-flowchart LR
-    classDef user fill:#A5D6A7,stroke:#2E7D32,color:#000
-    classDef pii fill:#FFCDD2,stroke:#C62828,color:#000
-    classDef ph fill:#FFF9C4,stroke:#F9A825,color:#000
+sequenceDiagram
+    autonumber
+    actor U as Vous
+    participant M as piighost
+    participant L as LLM
+    participant T as Outil
 
-    U(["`👤 **Utilisateur**
-    'Envoie un email à Patrick à Paris'`"]):::user
-    M["`🛡️ **piighost**
-    middleware`"]
-    L(["`🤖 **LLM**
-    ne voit que des placeholders`"]):::ph
-    T(["`🔧 **Outil**
-    reçoit les vraies valeurs`"]):::user
-
-    U -- "Patrick / Paris" --> M
-    M -- "&lt;&lt;PERSON:1&gt;&gt; / &lt;&lt;LOCATION:1&gt;&gt;" --> L
-    L -- "tool_call(to=&lt;&lt;PERSON:1&gt;&gt;)" --> M
-    M -- "send_email(to='Patrick')" --> T
-    T -- "'Email envoyé à Patrick'" --> M
-    M -- "'Email envoyé à &lt;&lt;PERSON:1&gt;&gt;'" --> L
-    L -- "'C''est fait!'" --> M
-    M -- "réponse désanonymisée" --> U
+    U->>M: "Email Patrick à patrick@acme.com"
+    M->>L: "Email <<PERSON:1>> à <<EMAIL:1>>"
+    L->>M: tool_call(send_email, to=<<EMAIL:1>>)
+    M->>T: send_email(to="patrick@acme.com")
+    T-->>M: "Envoyé."
+    M-->>U: "Envoyé."
 ```
 
-> Le LLM ne voit jamais `Patrick` ni `Paris`, mais votre outil `send_email` reçoit bien les vraies valeurs. L'utilisateur reçoit une réponse entièrement désanonymisée. Aucune modification de votre code agent.
+> Le LLM ne voit que `<<PERSON:1>>` et `<<EMAIL:1>>`. Votre outil `send_email` reçoit bien la vraie adresse. L'utilisateur final reçoit une réponse désanonymisée. Aucune modification de votre code agent.
 
 ## Table des matières
 
@@ -49,7 +40,6 @@ flowchart LR
 - [Cas d'usage](#cas-dusage)
 - [Fonctionnement](#fonctionnement)
   - [Pipeline](#pipeline)
-  - [Glossaire : detection, span, entity](#glossaire--detection-span-entity)
   - [Middleware](#intégration-du-middleware)
 - [Installation](#installation)
 - [Composants du pipeline](#composants-du-pipeline)
@@ -61,19 +51,19 @@ flowchart LR
 
 ## Pourquoi piighost ?
 
-|                                                  | **piighost**                                | Microsoft Presidio | Regex maison        |
-|--------------------------------------------------|---------------------------------------------|--------------------|---------------------|
-| Détecteurs interchangeables (NER, regex, LLM…)   | ✅ via le protocole `AnyDetector`           | ⚠️ lié à spaCy / recognizers | ❌                  |
-| Composer plusieurs détecteurs                    | ✅ `CompositeDetector` + résolveur de spans | ⚠️ partiel         | ❌                  |
-| Liaison d'entités inter-messages                 | ✅ `ThreadAnonymizationPipeline` + mémoire  | ❌                 | ❌                  |
-| Tolérance casse / fautes de frappe               | ✅ `ExactEntityLinker` + `FuzzyEntityResolver` | ❌              | ❌                  |
-| Anonymisation réversible (deanonymize)           | ✅ avec cache                               | ⚠️ API séparée     | ❌                  |
-| Middleware LangChain / LangGraph natif           | ✅ `PIIAnonymizationMiddleware`             | ❌                 | ❌                  |
-| Désanonymise / réanonymise à l'appel d'outil     | ✅ `awrap_tool_call`                        | ❌                 | ❌                  |
-| API async-first                                  | ✅                                          | ⚠️                 | ❌                  |
-| Format de placeholder personnalisable            | ✅ `AnyPlaceholderFactory`                  | ⚠️ template seulement | dépend           |
+|                                                  | **piighost**                                | LangChain `PIIMiddleware` (intégré)  | Microsoft Presidio | Regex maison        |
+|--------------------------------------------------|---------------------------------------------|--------------------------------------|--------------------|---------------------|
+| Détecteurs interchangeables (NER, regex, LLM…)   | ✅ via le protocole `AnyDetector`           | ⚠️ regex / Presidio uniquement        | ⚠️ lié à spaCy / recognizers | ❌                  |
+| Composer plusieurs détecteurs                    | ✅ `CompositeDetector` + résolveur de spans | ❌ une stratégie par instance         | ⚠️ partiel         | ❌                  |
+| Liaison d'entités inter-messages                 | ✅ `ThreadAnonymizationPipeline` + mémoire  | ❌                                    | ❌                 | ❌                  |
+| Tolérance casse / fautes de frappe               | ✅ `ExactEntityLinker` + `FuzzyEntityResolver` | ❌                                 | ❌                 | ❌                  |
+| Anonymisation réversible (deanonymize)           | ✅ avec cache                               | ❌ block / mask uniquement            | ⚠️ API séparée     | ❌                  |
+| Middleware LangChain / LangGraph                 | ✅ `PIIAnonymizationMiddleware`             | ✅ `PIIMiddleware`                    | ❌                 | ❌                  |
+| Désanonymise / réanonymise à l'appel d'outil     | ✅ `awrap_tool_call`                        | ❌                                    | ❌                 | ❌                  |
+| API async-first                                  | ✅                                          | ⚠️                                    | ⚠️                 | ❌                  |
+| Format de placeholder personnalisable            | ✅ `AnyPlaceholderFactory`                  | ⚠️ template seulement                 | ⚠️ template seulement | dépend           |
 
-Le vrai différenciateur n'est **pas le NER sous-jacent** : c'est le pipeline modulaire et le middleware natif LangGraph qui transforment n'importe quel détecteur en couche d'anonymisation prête pour la production.
+Le voisin le plus proche, c'est le [`PIIMiddleware`](https://docs.langchain.com/oss/python/langchain/middleware#pii-middleware) intégré à LangChain : il branche l'anonymisation dans la boucle d'agent, mais il fonctionne en sens unique (block / redact / mask / hash) et ne sait ni désanonymiser pour l'utilisateur final, ni passer les vraies valeurs aux outils. `piighost` reprend le même point d'accroche et y ajoute le voyage retour, la mémoire inter-messages et la pile de détection interchangeable, le LLM voit des placeholders pendant que le reste du système continue à travailler avec les vraies données.
 
 ## Démarrage rapide
 
@@ -96,18 +86,22 @@ pipeline = AnonymizationPipeline(detector=detector, anonymizer=Anonymizer())
 
 
 async def main() -> None:
-    text, entities = await pipeline.anonymize("Patrick lives in Paris.")
-    print(text)
+    anonymized, entities = await pipeline.anonymize("Patrick lives in Paris.")
+    print(anonymized)
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
-    for entity in entities:
-        print(f"  {entity.label}: {entity.detections[0].text}")
-    # PERSON: Patrick
-    # LOCATION: Paris
+    print([entity.detections[0].position for entity in entities])
+    # [Span(start_pos=0, end_pos=7), Span(start_pos=17, end_pos=22)]
+
+    original, _ = await pipeline.deanonymize(anonymized)
+    print(original)
+    # Patrick lives in Paris.
 
 
 asyncio.run(main())
 ```
+
+> **Comment `deanonymize` retrouve-t-il le texte original ?** Il ne relance pas le détecteur. Le pipeline garde un cache en mémoire (`aiocache.SimpleMemoryCache` par défaut) qui mappe `sha256(texte_anonymisé) → (texte_original, entités)`. Appeler `deanonymize` est juste un lookup. Pour les déploiements multi-instances, branchez un backend Redis ou Memcached, voir [docs/fr/deployment.md](docs/fr/deployment.md).
 
 Pour la production, branchez un modèle NER ou votre propre détecteur ci-dessous.
 
@@ -189,17 +183,15 @@ Le middleware intercepte chaque tour de l'agent. Le LLM ne voit que le texte ano
 
 ## Apportez votre propre détecteur
 
-L'étape de détection est juste un `Protocol`. Tout objet async exposant une méthode `detect(text) -> list[Detection]` fonctionne. Le pipeline ne fait pas de différence entre un modèle, une regex, un appel HTTP, ou tout cela à la fois.
+L'étape de détection est juste un `Protocol`. Tout objet async exposant une méthode `detect(text) -> list[Detection]` fonctionne. Le pipeline ne fait pas de différence entre un modèle, une regex, ou un appel HTTP.
 
 ```python
-import re
 import httpx
 
 from piighost.detector.base import AnyDetector  # protocole, sous-typage structurel
 from piighost.models import Detection, Span
 
 
-# 1. Encapsuler une API distante
 class RemoteNERDetector:
     """Calls a hosted NER service and maps its response to Detection objects."""
 
@@ -224,27 +216,11 @@ class RemoteNERDetector:
         ]
 
 
-# 2. Ou une simple regex que vous maîtrisez
-class IbanDetector:
-    _PATTERN = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}([A-Z0-9]?){0,16}\b")
-
-    async def detect(self, text: str) -> list[Detection]:
-        return [
-            Detection(
-                text=m.group(),
-                label="IBAN",
-                position=Span(m.start(), m.end()),
-                confidence=1.0,
-            )
-            for m in self._PATTERN.finditer(text)
-        ]
-
-
-# Les deux satisfont AnyDetector par sous-typage structurel, branchez-les directement.
-detectors: list[AnyDetector] = [RemoteNERDetector(...), IbanDetector()]
+# Satisfait AnyDetector par sous-typage structurel, à brancher directement.
+detector: AnyDetector = RemoteNERDetector(url="...", api_key="...")
 ```
 
-Combinez plusieurs détecteurs avec `CompositeDetector` et laissez `ConfidenceSpanConflictResolver` choisir un gagnant si leurs spans se chevauchent. Voir [docs/fr/extending.md](docs/fr/extending.md) pour des exemples complets (spaCy, transformers, LLM-as-detector).
+Combinez plusieurs détecteurs avec `CompositeDetector` et laissez `ConfidenceSpanConflictResolver` choisir un gagnant si leurs spans se chevauchent. Voir [docs/fr/extending.md](docs/fr/extending.md) pour le catalogue complet (spaCy, transformers, LLM-as-detector, regex avec validators pour IBAN / NIR / Luhn).
 
 ## Cas d'usage
 
@@ -315,41 +291,11 @@ flowchart LR
     P_ANONYMIZE -. "implémente" .-> ANONYMIZE
 ```
 
-### Glossaire : detection, span, entity
-
-Ces trois termes structurent le pipeline. Ils se ressemblent mais désignent des choses différentes :
-
-- **Span** : un offset `(début, fin)` en caractères dans le texte. `Patrick lives in Paris.` contient le span `(0, 7)` pour `Patrick` et `(17, 22)` pour `Paris`.
-- **Detection** : un seul résultat d'un détecteur. C'est un span plus un `label` (`"PERSON"`) et une `confidence`. Un détecteur lancé sur `Patrick lives in Paris. Patrick loves Paris.` produit **quatre** détections (deux pour `Patrick`, deux pour `Paris`).
-- **Entity** : un groupe de détections qui désignent la même chose réelle. Le linker d'entités regroupe les quatre détections ci-dessus en **deux** entités (`Patrick` et `Paris`), pour qu'elles reçoivent le même placeholder à chaque occurrence.
-
-Pourquoi c'est important. Un détecteur qui retourne des spans qui se chevauchent (par exemple `New York` et `York` tous les deux signalés) ne pose pas problème, le résolveur de spans en choisit un. Un détecteur qui rate une occurrence ne pose pas problème non plus, le linker d'entités rebalaye le texte et regroupe par correspondance exacte de mot. Les deux comportements sont configurables via les protocoles.
+> Trois termes structurent le pipeline. Un **span** est un offset `(début, fin)`, une **detection** est un span + un label + une confiance émis par un détecteur, une **entity** est un groupe de détections qui désignent la même PII (et reçoivent donc le même placeholder). Définitions complètes dans le [glossaire](docs/fr/glossary.md).
 
 ### Intégration du middleware
 
-```mermaid
----
-title: "PIIAnonymizationMiddleware in an agent loop"
----
-sequenceDiagram
-    participant U as Utilisateur
-    participant M as Middleware
-    participant L as LLM
-    participant T as Outil
-
-    U->>M: "Envoie un email à Patrick à Paris"
-    M->>M: abefore_model()<br/>détection NER + anonymisation
-    M->>L: "Envoie un email à <<PERSON:1>> à <<LOCATION:1>>"
-    L->>M: tool_call(send_email, to=<<PERSON:1>>)
-    M->>M: awrap_tool_call()<br/>désanonymise les arguments
-    M->>T: send_email(to="Patrick")
-    T->>M: "Email envoyé à Patrick"
-    M->>M: awrap_tool_call()<br/>réanonymise le résultat
-    M->>L: "Email envoyé à <<PERSON:1>>"
-    L->>M: "C'est fait ! Email envoyé à <<PERSON:1>>."
-    M->>M: aafter_model()<br/>désanonymise pour l'utilisateur
-    M->>U: "C'est fait ! Email envoyé à Patrick."
-```
+Le middleware se branche sur `abefore_model`, `awrap_tool_call` et `aafter_model` de LangChain pour anonymiser, désanonymiser pour les outils, puis réanonymiser les résultats d'outil. Voir [docs/fr/architecture.md](docs/fr/architecture.md) pour la séquence complète.
 
 ## Installation
 
@@ -394,17 +340,7 @@ uv run pytest
 
 ## Composants du pipeline
 
-Le pipeline s'exécute en 5 étapes. Seuls `detector` et `anonymizer` sont obligatoires, les autres ont des valeurs par défaut raisonnables :
-
-| Étape                | Défaut                           | Rôle                                                                                | Sans cette étape                                                                       |
-|----------------------|----------------------------------|-------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| **Detect**           | *(obligatoire)*                  | Trouve les spans PII via NER                                                        | -                                                                                      |
-| **Resolve Spans**    | `ConfidenceSpanConflictResolver` | Déduplique les détections chevauchantes (garde la plus haute confiance)             | Les spans chevauchants de plusieurs détecteurs provoquent des remplacements incorrects |
-| **Link Entities**    | `ExactEntityLinker`              | Trouve toutes les occurrences de chaque entité via une regex aux frontières de mots | Seules les mentions détectées par NER sont anonymisées, les autres fuient              |
-| **Resolve Entities** | `MergeEntityConflictResolver`    | Fusionne les groupes d'entités partageant une mention (union-find)                  | La même entité pourrait recevoir deux espaces réservés différents                      |
-| **Anonymize**        | *(obligatoire)*                  | Remplace les entités par des espaces réservés (`<<PERSON:1>>`)                      | -                                                                                      |
-
-Chaque étape est un **protocole**, remplacez n'importe quelle valeur par défaut par votre propre implémentation.
+Seuls `detector` et `anonymizer` sont obligatoires, les trois étapes intermédiaires (résolveur de spans, linker d'entités, résolveur d'entités) ont des valeurs par défaut que vous pouvez remplacer. Tableau complet des défauts, rôles et risques dans [docs/fr/architecture.md](docs/fr/architecture.md).
 
 ## FAQ
 
