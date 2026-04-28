@@ -79,7 +79,7 @@ Anonymisez et désanonymisez sans télécharger de modèle. `ExactMatchDetector`
 
 ```python
 import asyncio
-from pprint import pp
+import json
 
 from piighost import Anonymizer, ExactMatchDetector
 from piighost.pipeline import AnonymizationPipeline
@@ -93,17 +93,31 @@ async def main() -> None:
     print(anonymized)
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
-    pp([entity.to_dict() for entity in entities], sort_dicts=False)
-    # [{'detections': [{'text': 'Patrick',
-    #                   'label': 'PERSON',
-    #                   'start_pos': 0,
-    #                   'end_pos': 7,
-    #                   'confidence': 1.0}]},
-    #  {'detections': [{'text': 'Paris',
-    #                   'label': 'LOCATION',
-    #                   'start_pos': 17,
-    #                   'end_pos': 22,
-    #                   'confidence': 1.0}]}]
+    print(json.dumps([entity.to_dict() for entity in entities], indent=2))
+    # [
+    #   {
+    #     "detections": [
+    #       {
+    #         "text": "Patrick",
+    #         "label": "PERSON",
+    #         "start_pos": 0,
+    #         "end_pos": 7,
+    #         "confidence": 1.0
+    #       }
+    #     ]
+    #   },
+    #   {
+    #     "detections": [
+    #       {
+    #         "text": "Paris",
+    #         "label": "LOCATION",
+    #         "start_pos": 17,
+    #         "end_pos": 22,
+    #         "confidence": 1.0
+    #       }
+    #     ]
+    #   }
+    # ]
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
