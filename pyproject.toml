@@ -1,7 +1,7 @@
 [project]
 name = "piighost"
 version = "0.9.1"
-description = "PII anonymization middleware for AI agent conversations using LangChain integration."
+description = "Composable PII anonymization pipeline for LLM agents, with a LangChain middleware and pluggable detectors (NER, regex, LLM, custom)."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
