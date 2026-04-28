@@ -113,15 +113,35 @@ async def main() -> None:
     #     )),
     # ]
 
-    original, _ = await pipeline.deanonymize(anonymized)
+    original, restored = await pipeline.deanonymize(anonymized)
     print(original)
     # Patrick lives in Paris.
+
+    pp(restored)
+    # [
+    #     Entity(detections=(
+    #         Detection(
+    #             text='Patrick',
+    #             label='PERSON',
+    #             position=Span(start_pos=0, end_pos=7),
+    #             confidence=1.0,
+    #         ),
+    #     )),
+    #     Entity(detections=(
+    #         Detection(
+    #             text='Paris',
+    #             label='LOCATION',
+    #             position=Span(start_pos=17, end_pos=22),
+    #             confidence=1.0,
+    #         ),
+    #     )),
+    # ]
 
 
 asyncio.run(main())
 ```
 
-> Each `Entity` wraps a tuple of `Detection`s (text, label, position, confidence). The `text` field is rendered verbatim by the standard dataclass `repr`, scrub it yourself if you forward these objects to logs (see [docs/en/security.md](docs/en/security.md)).
+> Both `anonymize` and `deanonymize` return `(text, list[Entity])`: the entities are the same tuples cached at anonymization time, so you can audit what was restored without re-running the detector. The `text` field of `Detection` is rendered verbatim by the standard dataclass `repr`, scrub it yourself if you forward these objects to logs (see [docs/en/security.md](docs/en/security.md)).
 
 > **How does `deanonymize` know the original?** It does not re-run the detector. The pipeline keeps an in-memory cache (`aiocache.SimpleMemoryCache` by default) that maps `sha256(anonymized_text) → (original_text, entities)`. Calling `deanonymize` is just a lookup. For multi-instance deployments, swap in a Redis or Memcached backend, see [docs/en/deployment.md](docs/en/deployment.md).
 
