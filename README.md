@@ -94,14 +94,24 @@ async def main() -> None:
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
     pp(entities)
-    # [Entity(detections=(Detection(text='Patrick',
-    #                               label='PERSON',
-    #                               position=Span(start_pos=0, end_pos=7),
-    #                               confidence=1.0),)),
-    #  Entity(detections=(Detection(text='Paris',
-    #                               label='LOCATION',
-    #                               position=Span(start_pos=17, end_pos=22),
-    #                               confidence=1.0),))]
+    # [
+    #     Entity(detections=(
+    #         Detection(
+    #             text='Patrick',
+    #             label='PERSON',
+    #             position=Span(start_pos=0, end_pos=7),
+    #             confidence=1.0,
+    #         ),
+    #     )),
+    #     Entity(detections=(
+    #         Detection(
+    #             text='Paris',
+    #             label='LOCATION',
+    #             position=Span(start_pos=17, end_pos=22),
+    #             confidence=1.0,
+    #         ),
+    #     )),
+    # ]
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
