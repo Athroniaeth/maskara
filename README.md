@@ -37,6 +37,7 @@ sequenceDiagram
 ## Table of contents
 
 - [Why piighost?](#why-piighost)
+- [What makes this hard](#what-makes-this-hard)
 - [Quick start](#quick-start)
 - [Bring your own detector](#bring-your-own-detector)
 - [Use cases](#use-cases)
@@ -53,6 +54,14 @@ sequenceDiagram
 
 ## Why piighost?
 
+When you ship an LLM feature, you usually pick one of three families of providers, and each one forces a trade-off:
+
+- **Hosted non-EU clouds** (OpenAI, Anthropic, Google): the best models, but every byte of context, including raw user PII, leaves your jurisdiction.
+- **EU-sovereign clouds** (Mistral AI, OVHcloud, Scaleway): legal guarantees on residency, but you give up some of the state of the art.
+- **Self-hosted open weights**: total control, but you carry the infra cost and you stay further from the SOTA.
+
+The only clean way to decouple the LLM from the sensitivity of the content is to **anonymize upstream**. Once PII never reaches the model, the choice of provider stops being a privacy decision and goes back to being a quality / cost / latency one. That's the slot `piighost` fills.
+
 |                                           | **piighost**                                | LangChain                            | Microsoft Presidio | Regex              |
 |-------------------------------------------|---------------------------------------------|--------------------------------------|--------------------|--------------------|
 | Pluggable detectors (NER, regex, LLM, …)  | ✅ via `AnyDetector` protocol               | ⚠️ regex / Presidio only             | ⚠️ tied to spaCy/recognizers | ❌                |
@@ -66,6 +75,17 @@ sequenceDiagram
 | Bring-your-own placeholder format         | ✅ `AnyPlaceholderFactory`                  | ⚠️ template-only                     | ⚠️ template-only   | depends           |
 
 LangChain's built-in [`PIIMiddleware`](https://docs.langchain.com/oss/python/langchain/middleware#pii-middleware) is the closest neighbour: it wires anonymization into the agent loop, but it is one-shot (block / redact / mask / hash) and can't deanonymize for end users or pass real values to tools. `piighost` keeps the same hook point and adds the round trip, the cross-message memory, and the swappable detection stack, so the LLM sees placeholders while the rest of the system keeps working with real data.
+
+## What makes this hard
+
+On paper, "replace names with tokens before the LLM call" is a one-liner. In practice, four problems show up immediately, and they are what shape the pipeline:
+
+- **Placeholder consistency.** If `Patrick` is `<<PERSON:1>>` at line 1, every later mention of `Patrick` must stay `<<PERSON:1>>`. Restart the counter and the LLM thinks it's three different people.
+- **Detector misses.** A NER model finds the full mention `Patrick Dupont` but skips a standalone `Patrick` two paragraphs later. The bare regex you'd add to compensate misses the variants. You need a layer that re-scans for known entities, not just raw NER output.
+- **Span overlaps.** Run two detectors and they will sometimes claim the same offset with different labels (`PERSON` at confidence 0.95, `ORG` at 0.60). Without arbitration, span replacement walks over itself and you get garbled text.
+- **Multi-message state.** Anonymize each message in isolation and you hit a silent collision: `Patrick` becomes `<<PERSON:1>>` in message 1, `Bob` becomes `<<PERSON:1>>` in message 2, both decode to the same person. Conversation memory is non-optional.
+
+Each pipeline stage in `piighost` exists to fix one of those four. The 5-step architecture isn't theoretical, it's the smallest set that makes anonymization work end-to-end on real conversations.
 
 ## Quick start
 

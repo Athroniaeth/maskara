@@ -37,6 +37,7 @@ sequenceDiagram
 ## Table des matières
 
 - [Pourquoi piighost ?](#pourquoi-piighost-)
+- [Pourquoi c'est dur](#pourquoi-cest-dur)
 - [Démarrage rapide](#démarrage-rapide)
 - [Apportez votre propre détecteur](#apportez-votre-propre-détecteur)
 - [Cas d'usage](#cas-dusage)
@@ -53,6 +54,14 @@ sequenceDiagram
 
 ## Pourquoi piighost ?
 
+Quand vous mettez en production une feature LLM, vous choisissez en général parmi trois familles de fournisseurs, et chacune impose un compromis :
+
+- **Cloud hébergé hors UE** (OpenAI, Anthropic, Google) : les meilleurs modèles, mais chaque octet de contexte, y compris les PII brutes des utilisateurs, quitte votre juridiction.
+- **Cloud souverain UE** (Mistral AI, OVHcloud, Scaleway) : garanties juridiques sur la résidence des données, mais vous renoncez à une partie de l'état de l'art.
+- **Auto-hébergement open weights** : contrôle total, mais infrastructure à porter et un cran de plus en arrière du SOTA.
+
+La seule façon propre de découpler le LLM de la sensibilité du contenu, c'est d'**anonymiser en amont**. Quand les PII n'atteignent jamais le modèle, le choix du fournisseur cesse d'être une décision de confidentialité et redevient une question de qualité / coût / latence. C'est exactement la place que prend `piighost`.
+
 |                                                  | **piighost**                                | LangChain                             | Microsoft Presidio | Regex              |
 |--------------------------------------------------|---------------------------------------------|--------------------------------------|--------------------|--------------------|
 | Détecteurs interchangeables (NER, regex, LLM…)   | ✅ via le protocole `AnyDetector`           | ⚠️ regex / Presidio uniquement        | ⚠️ lié à spaCy / recognizers | ❌                |
@@ -66,6 +75,17 @@ sequenceDiagram
 | Format de placeholder personnalisable            | ✅ `AnyPlaceholderFactory`                  | ⚠️ template seulement                 | ⚠️ template seulement | dépend          |
 
 Le voisin le plus proche, c'est le [`PIIMiddleware`](https://docs.langchain.com/oss/python/langchain/middleware#pii-middleware) intégré à LangChain : il branche l'anonymisation dans la boucle d'agent, mais il fonctionne en sens unique (block / redact / mask / hash) et ne sait ni désanonymiser pour l'utilisateur final, ni passer les vraies valeurs aux outils. `piighost` reprend le même point d'accroche et y ajoute le voyage retour, la mémoire inter-messages et la pile de détection interchangeable, le LLM voit des placeholders pendant que le reste du système continue à travailler avec les vraies données.
+
+## Pourquoi c'est dur
+
+Sur le papier, « remplacer les noms par des tokens avant l'appel LLM » tient en une ligne. En pratique, quatre problèmes apparaissent presque immédiatement, et ce sont eux qui dictent la forme du pipeline :
+
+- **Cohérence des placeholders.** Si `Patrick` est `<<PERSON:1>>` à la ligne 1, toute mention ultérieure de `Patrick` doit rester `<<PERSON:1>>`. Réinitialisez le compteur entre deux messages et le LLM croira voir trois personnes différentes.
+- **Détecteur qui rate des occurrences.** Un modèle NER capte la mention complète `Patrick Dupont` mais saute un `Patrick` seul deux paragraphes plus loin. La regex ajoutée à la rescousse rate les variantes. Il faut une couche qui rebalaye le texte pour les entités déjà connues, pas seulement la sortie brute du NER.
+- **Chevauchement des spans.** Lancez deux détecteurs et ils vous renverront parfois le même offset avec des labels différents (`PERSON` à 0.95, `ORG` à 0.60). Sans arbitrage, le remplacement marche sur lui-même et le texte sort corrompu.
+- **État inter-messages.** Anonymiser chaque message isolément et c'est la collision silencieuse : `Patrick` devient `<<PERSON:1>>` au message 1, puis `Bob` devient `<<PERSON:1>>` au message 2, les deux décodent sur la même personne. Une mémoire de conversation n'est pas optionnelle.
+
+Chaque étape du pipeline de `piighost` existe pour résoudre l'un de ces quatre problèmes. L'architecture en 5 étapes n'est pas un choix théorique, c'est le minimum qui rend l'anonymisation correcte de bout en bout sur de vraies conversations.
 
 ## Démarrage rapide
 
