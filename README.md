@@ -79,7 +79,7 @@ Anonymize and deanonymize without downloading any model. The `ExactMatchDetector
 
 ```python
 import asyncio
-import json
+from pprint import pp
 
 from piighost import Anonymizer, ExactMatchDetector
 from piighost.pipeline import AnonymizationPipeline
@@ -93,31 +93,15 @@ async def main() -> None:
     print(anonymized)
     # <<PERSON:1>> lives in <<LOCATION:1>>.
 
-    print(json.dumps([entity.to_dict() for entity in entities], indent=2))
-    # [
-    #   {
-    #     "detections": [
-    #       {
-    #         "text": "Patrick",
-    #         "label": "PERSON",
-    #         "start_pos": 0,
-    #         "end_pos": 7,
-    #         "confidence": 1.0
-    #       }
-    #     ]
-    #   },
-    #   {
-    #     "detections": [
-    #       {
-    #         "text": "Paris",
-    #         "label": "LOCATION",
-    #         "start_pos": 17,
-    #         "end_pos": 22,
-    #         "confidence": 1.0
-    #       }
-    #     ]
-    #   }
-    # ]
+    pp(entities)
+    # [Entity(detections=(Detection(text='Patrick',
+    #                               label='PERSON',
+    #                               position=Span(start_pos=0, end_pos=7),
+    #                               confidence=1.0),)),
+    #  Entity(detections=(Detection(text='Paris',
+    #                               label='LOCATION',
+    #                               position=Span(start_pos=17, end_pos=22),
+    #                               confidence=1.0),))]
 
     original, _ = await pipeline.deanonymize(anonymized)
     print(original)
@@ -127,7 +111,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-> Each `Entity` wraps a tuple of `Detection`s (text, label, position, confidence). `to_dict()` exposes the raw values; `repr(detection)` deliberately masks the `text` field to prevent accidental leaks through logs.
+> Each `Entity` wraps a tuple of `Detection`s (text, label, position, confidence). The `text` field is rendered verbatim by the standard dataclass `repr`, scrub it yourself if you forward these objects to logs (see [docs/en/security.md](docs/en/security.md)).
 
 > **How does `deanonymize` know the original?** It does not re-run the detector. The pipeline keeps an in-memory cache (`aiocache.SimpleMemoryCache` by default) that maps `sha256(anonymized_text) → (original_text, entities)`. Calling `deanonymize` is just a lookup. For multi-instance deployments, swap in a Redis or Memcached backend, see [docs/en/deployment.md](docs/en/deployment.md).
 

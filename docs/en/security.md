@@ -32,29 +32,29 @@ root with a threat model: what `piighost` protects against, and what it does not
     - **Upstream access to logs**: `piighost` does not log raw PII, but your app might. Audit your own logging,
       tracing, and error reporting before claiming compliance.
 
-## Masked `repr()` on PII-bearing dataclasses
+## Logging discipline for PII-bearing dataclasses
 
 The `Detection` dataclass holds the raw PII surface form in its `text`
-field. To prevent accidental leakage through `print(detection)`,
-`logger.info("got %s", detection)`, or an uncaught traceback, its
-`__repr__` masks that field:
+field. The dataclass-generated `__repr__` renders that value verbatim,
+which keeps the API predictable for inspection, debugging, and tests:
 
 ```python
 >>> from piighost.models import Detection, Span
 >>> d = Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9)
 >>> repr(d)
-"Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
+"Detection(text='Patrick', label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
 ```
 
-`Entity.__repr__` inherits this masking for free because it renders its
-nested `Detection` objects via `repr()`. `Span` is not masked (positions
-are metadata, not content).
+The library deliberately does not auto-mask the field. If you forward
+`Detection` or `Entity` instances to logs, traces, or error reporters,
+scrub them yourself. Two simple recipes:
 
-This is a best-effort safeguard, not a substitute for discipline. The
-raw value remains accessible via `detection.text`; any caller that
-explicitly prints or logs that attribute bypasses the mask. Pydantic's
-`SecretStr` is not used because `piighost` keeps its core dependency
-surface minimal.
+- Filter `to_dict()` before serialization (drop the `text` key).
+- Wrap your structured logger with a redactor that recognises
+  `Detection` and replaces `text` with a length marker.
+
+`piighost` itself never writes PII to any logger; the discipline above
+is needed in your own code.
 
 ## Design decisions that back the threat model
 

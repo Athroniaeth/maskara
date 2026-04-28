@@ -36,29 +36,31 @@ dépôt avec un modèle de menaces : ce contre quoi `piighost` protège, et ce c
     - **Accès amont aux journaux** : `piighost` ne journalise pas les PII brutes, mais votre application peut le
       faire. Auditez vos propres journaux, traces et rapports d'erreurs avant de revendiquer une conformité.
 
-## `repr()` masqué sur les dataclasses porteuses de PII
+## Discipline de journalisation pour les dataclasses porteuses de PII
 
 La dataclass `Detection` porte la forme brute de la PII dans son champ
-`text`. Pour éviter les fuites accidentelles via `print(detection)`,
-`logger.info("got %s", detection)` ou une traceback non rattrapée,
-`__repr__` masque ce champ :
+`text`. Le `__repr__` généré par dataclass affiche cette valeur en
+clair, ce qui rend l'API prévisible pour l'inspection, le debug et les
+tests :
 
 ```python
 >>> from piighost.models import Detection, Span
 >>> d = Detection(text="Patrick", label="PERSON", position=Span(0, 7), confidence=0.9)
 >>> repr(d)
-"Detection(text=<redacted:7>, label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
+"Detection(text='Patrick', label='PERSON', position=Span(start_pos=0, end_pos=7), confidence=0.9)"
 ```
 
-`Entity.__repr__` hérite gratuitement du masquage puisqu'il rend ses
-`Detection` via `repr()`. `Span` n'est pas masqué : les positions sont
-des métadonnées, pas du contenu.
+La bibliothèque ne masque délibérément pas ce champ. Si vous
+transférez des instances `Detection` ou `Entity` vers des logs, des
+traces ou un reporter d'erreurs, faites le scrub vous-même. Deux
+recettes simples :
 
-Il s'agit d'une protection de type « garde-fou », pas d'un substitut à
-la discipline. La valeur brute reste accessible via `detection.text` ;
-tout code qui imprime ou journalise explicitement cet attribut
-contourne le masquage. `SecretStr` de Pydantic n'est pas utilisé pour
-garder minimale la surface de dépendances principales de `piighost`.
+- Filtrer `to_dict()` avant sérialisation (retirer la clé `text`).
+- Encapsuler votre logger structuré dans un redactor qui reconnaît les
+  `Detection` et remplace `text` par un marqueur de longueur.
+
+`piighost` lui-même n'écrit jamais de PII dans aucun logger ; la
+discipline ci-dessus est nécessaire dans votre propre code.
 
 ## Décisions de conception qui soutiennent le modèle de menaces
 
