@@ -141,7 +141,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-> `anonymize` et `deanonymize` retournent toutes les deux `(text, list[Entity])` : les entités sont les mêmes tuples mis en cache à l'anonymisation, vous pouvez donc auditer ce qui a été restauré sans relancer le détecteur. Le champ `text` de `Detection` est rendu en clair par le `repr` standard de dataclass : faites le scrub vous-même si vous transférez ces objets vers des logs (voir [docs/fr/security.md](docs/fr/security.md)).
+> `anonymize` et `deanonymize` retournent toutes les deux `(text, list[Entity])` : les entités viennent directement du cache, pas de re-détection. À noter qu'une `Entity` ne porte **pas** son placeholder : celui-ci est régénéré à la volée par la `PlaceholderFactory` à partir de la liste ordonnée d'entités. C'est ce qui permet aux factories à compteur comme `LabelCounterPlaceholderFactory` de produire des numéros stables `<<PERSON:1>>`, `<<PERSON:2>>`... entre `anonymize` et `deanonymize` (l'ordre fait foi). Le champ `text` de `Detection` est rendu en clair par le `repr` standard de dataclass : faites le scrub vous-même si vous transférez ces objets vers des logs (voir [docs/fr/security.md](docs/fr/security.md)).
 
 > **Comment `deanonymize` retrouve-t-il le texte original ?** Il ne relance pas le détecteur. Le pipeline garde un cache en mémoire (`aiocache.SimpleMemoryCache` par défaut) qui mappe `sha256(texte_anonymisé) → (texte_original, entités)`. Appeler `deanonymize` est juste un lookup. Pour les déploiements multi-instances, branchez un backend Redis ou Memcached, voir [docs/fr/deployment.md](docs/fr/deployment.md).
 
