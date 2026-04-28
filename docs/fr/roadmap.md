@@ -72,13 +72,14 @@ configuré, une entité ratée par le NER, un placeholder qui n'a pas
 matché peuvent laisser fuiter des données. Les protocoles ci-dessous
 ajoutent un filet de sécurité optionnel en fin de pipeline.
 
-- [ ] **Protocole `AnyGuardRail` et implémentations.** Étage final
+- [x] **Protocole `AnyGuardRail` et implémentations.** Étage final
   binaire qui rejoue une détection (regex stricte, LLM, ou n'importe
   quel `AnyDetector`) sur le texte anonymisé et lève une
   `PIIRemainingError` si quelque chose est encore identifié. API
   minimale, pas de seuil à régler. Implémentations prévues :
     - [x] `DetectorGuardRail` (réutilise un `AnyDetector` quelconque)
-    - [ ] `LLMGuardRail` (petit LLM local)
+    - [x] `LLMGuardRail` (LangChain chat model + prompt audit qui
+      ignore les placeholders `<<LABEL:N>>`)
     - [x] `DisabledGuardRail` par défaut pour rester cohérent avec
       les autres étages du pipeline
 
