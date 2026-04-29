@@ -11,7 +11,7 @@ if importlib.util.find_spec("aiocache") is None:
 
 from aiocache import BaseCache, SimpleMemoryCache
 
-from piighost.anonymizer import AnyAnonymizer
+from piighost.anonymizer import Anonymizer, AnyAnonymizer
 from piighost.detector import AnyDetector
 from piighost.exceptions import CacheMissError, PIIRemainingError
 from piighost.guard import AnyGuardRail, DisabledGuardRail
@@ -22,7 +22,7 @@ from piighost.observation.base import (
     AbstractSpan,
     NoOpObservationService,
 )
-from piighost.placeholder import AnyPlaceholderFactory
+from piighost.placeholder import AnyPlaceholderFactory, RedactPlaceholderFactory
 from piighost.placeholder_tags import PlaceholderPreservation
 from piighost.resolver.entity import (
     AnyEntityConflictResolver,
@@ -47,27 +47,30 @@ CACHE_KEY_DETECTION = "detect"
 CACHE_KEY_ANONYMIZATION = "anon:anonymized"
 """Prefix for anonymized-text → (original, entities) cache entries."""
 
-REDACTED_PLACEHOLDER = "[REDACT]"
-"""Sentinel substituted for raw user text/PII spans in observation payloads
-when ``observe_raw_text=False`` (the default). Protects user input from being
-exposed in the observation backend if the anonymization pipeline fails."""
 
+def _detection_to_dict(d: Detection, *, token: str | None = None) -> dict[str, Any]:
+    """Serialize a Detection to a JSON-friendly dict for observation output.
 
-def _detection_to_dict(d: Detection, *, redact: bool = False) -> dict[str, Any]:
-    """Serialize a Detection to a JSON-friendly dict for observation output."""
+    When *token* is provided, the detection's surface text is replaced
+    with the token. Used to keep raw PII out of observation payloads.
+    """
     return {
         "label": d.label,
         "position": [d.position.start_pos, d.position.end_pos],
         "confidence": d.confidence,
-        "text": REDACTED_PLACEHOLDER if redact else d.text,
+        "text": token if token is not None else d.text,
     }
 
 
-def _entity_to_dict(e: Entity, *, redact: bool = False) -> dict[str, Any]:
-    """Serialize an Entity to a JSON-friendly dict for observation output."""
+def _entity_to_dict(e: Entity, *, token: str | None = None) -> dict[str, Any]:
+    """Serialize an Entity to a JSON-friendly dict for observation output.
+
+    When *token* is provided, every detection's surface text is replaced
+    with the same token (the obs-side placeholder for the entity).
+    """
     return {
         "label": e.label,
-        "detections": [_detection_to_dict(d, redact=redact) for d in e.detections],
+        "detections": [_detection_to_dict(d, token=token) for d in e.detections],
     }
 
 
@@ -101,6 +104,17 @@ class AnonymizationPipeline(Generic[PreservationT]):
             the backend evicts them, which is fine for in-memory caches
             but can leak unbounded state when sharing a Redis backend
             across threads.
+        observation: Observation backend used to emit the per-stage
+            trace tree.  Defaults to ``NoOpObservationService`` (silent,
+            zero-overhead).
+        observation_ph_factory: Placeholder factory used to render PII
+            in observation payloads.  The default
+            ``RedactPlaceholderFactory()`` collapses every entity to
+            ``<<REDACT>>`` so raw PII never reaches the observation
+            backend even on partial failures.  Pass any other
+            ``AnyPlaceholderFactory`` (for example
+            ``LabelCounterPlaceholderFactory``) to surface more
+            structure on the trace.
     """
 
     _detector: AnyDetector
@@ -112,6 +126,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
     _cache: BaseCache
     _cache_ttl: int | None
     _observation: AbstractObservationService
+    _obs_ph_factory: AnyPlaceholderFactory
+    _obs_anonymizer: Anonymizer
 
     def __init__(
         self,
@@ -124,12 +140,13 @@ class AnonymizationPipeline(Generic[PreservationT]):
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
         observation: AbstractObservationService | None = None,
-        observe_raw_text: bool = False,
+        observation_ph_factory: AnyPlaceholderFactory | None = None,
     ) -> None:
         span_resolver = span_resolver or ConfidenceSpanConflictResolver()
         entity_linker = entity_linker or ExactEntityLinker()
         entity_resolver = entity_resolver or MergeEntityConflictResolver()
         guard_rail = guard_rail or DisabledGuardRail()
+        obs_ph_factory = observation_ph_factory or RedactPlaceholderFactory()
 
         self._detector = detector
         self._span_resolver = span_resolver
@@ -140,12 +157,26 @@ class AnonymizationPipeline(Generic[PreservationT]):
         self._cache = cache or SimpleMemoryCache()
         self._cache_ttl = cache_ttl
         self._observation = observation or NoOpObservationService()
-        self._observe_raw_text = observe_raw_text
+        self._obs_ph_factory = obs_ph_factory
+        self._obs_anonymizer = Anonymizer(ph_factory=obs_ph_factory)
 
     @property
     def ph_factory(self) -> AnyPlaceholderFactory[PreservationT]:
         """The placeholder factory used by the anonymizer."""
         return self._anonymizer.ph_factory
+
+    def _obs_tokens_for_detections(
+        self, detections: list[Detection]
+    ) -> dict[Detection, str]:
+        """Render one observation token per detection.
+
+        Each detection is wrapped in a one-detection ``Entity`` so the
+        observation factory can produce a token, then the result is
+        flipped back to a ``Detection -> token`` mapping.
+        """
+        fake_entities = [Entity(detections=(d,)) for d in detections]
+        ent_tokens = self._obs_ph_factory.create(fake_entities)
+        return {ent.detections[0]: token for ent, token in ent_tokens.items()}
 
     async def detect_entities(self, text: str) -> list[Entity]:
         """Run the detection pipeline: detect → resolve → link → resolve.
@@ -187,9 +218,12 @@ class AnonymizationPipeline(Generic[PreservationT]):
         if root_span is not None:
             return await self._anonymize_with_span(text, root_span, metadata=metadata)
 
+        # The root span's input is filled in retroactively from inside
+        # ``_anonymize_with_span`` once detections are available, so the
+        # observation factory can render the obs-redacted form rather
+        # than swallowing the whole text under one sentinel.
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
-            input={"text": text if self._observe_raw_text else REDACTED_PLACEHOLDER},
             metadata=dict(metadata) if metadata else None,
         ) as auto_root:
             return await self._anonymize_with_span(text, auto_root, metadata=metadata)
@@ -202,17 +236,23 @@ class AnonymizationPipeline(Generic[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> Tuple[str, list[Entity]]:
         """Execute all pipeline stages, emitting child observations on *root_span*."""
-        redact = not self._observe_raw_text
-        obs_text = text if self._observe_raw_text else REDACTED_PLACEHOLDER
-
         # Detect
         with root_span.start_as_current_observation(
             name="piighost.detect", as_type="tool",
         ) as span:
             detections = await self._cached_detect(text)
+            det_token_map = self._obs_tokens_for_detections(detections)
+            obs_text_pre_link = self._obs_anonymizer.anonymize(
+                text, [Entity(detections=(d,)) for d in detections]
+            )
+            root_span.update(input={"text": obs_text_pre_link})
             span.update(
-                input={"text": obs_text},
-                output={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
+                input={"text": obs_text_pre_link},
+                output={
+                    "detections": [
+                        _detection_to_dict(d, token=det_token_map[d]) for d in detections
+                    ]
+                },
             )
             detections = self._span_resolver.resolve(detections)
             time.sleep(0.001)
@@ -223,9 +263,16 @@ class AnonymizationPipeline(Generic[PreservationT]):
         ) as span:
             entities = self._entity_linker.link(text, detections)
             entities = self._entity_resolver.resolve(entities)
+            ent_tokens = self._obs_ph_factory.create(entities)
             span.update(
-                input={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
-                output={"entities": [_entity_to_dict(e, redact=redact) for e in entities]},
+                input={
+                    "detections": [
+                        _detection_to_dict(d, token=det_token_map[d]) for d in detections
+                    ]
+                },
+                output={
+                    "entities": [_entity_to_dict(e, token=ent_tokens[e]) for e in entities]
+                },
             )
             time.sleep(0.001)
 
@@ -234,6 +281,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
             name="piighost.placeholder", as_type="tool",
         ) as span:
             anonymized = self._anonymizer.anonymize(text, entities)
+            obs_text = self._obs_anonymizer.anonymize(text, entities)
             span.update(
                 input={"text": obs_text, "entity_count": len(entities)},
                 output={"text": anonymized},

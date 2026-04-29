@@ -30,7 +30,7 @@ AnonymizationPipeline(
     cache: BaseCache | None = None,
     cache_ttl: int | None = None,
     observation: AbstractObservationService | None = None,
-    observe_raw_text: bool = False,
+    observation_ph_factory: AnyPlaceholderFactory | None = None,
 )
 ```
 
@@ -45,7 +45,7 @@ AnonymizationPipeline(
 | `cache` | `BaseCache` | `SimpleMemoryCache()` | aiocache backend for detections and anonymization mappings |
 | `cache_ttl` | `int \| None` | `None` | Time-to-live in seconds applied to every cache entry the pipeline writes. `None` lets the backend decide eviction |
 | `observation` | `AbstractObservationService` | `NoOpObservationService()` | Observation backend (Langfuse, etc.). The default logs nothing |
-| `observe_raw_text` | `bool` | `False` | When `False`, raw user text and PII surface forms are replaced with `[REDACT]` in observation payloads. Set `True` to disable redaction |
+| `observation_ph_factory` | `AnyPlaceholderFactory` | `RedactPlaceholderFactory()` | Factory used to redact PII inside observation payloads. The default collapses every entity to `<<REDACT>>`. Pass another factory (for example `RedactCounterPlaceholderFactory`) to number the redactions |
 
 ### Methods
 
@@ -95,7 +95,7 @@ ThreadAnonymizationPipeline(
     cache_ttl: int | None = None,
     max_threads: int | None = None,
     observation: AbstractObservationService | None = None,
-    observe_raw_text: bool = False,
+    observation_ph_factory: AnyPlaceholderFactory | None = None,
 )
 ```
 
@@ -212,7 +212,7 @@ pipeline = ThreadAnonymizationPipeline(
 
 Any `AbstractObservationService` produces a 4-stage child trace (`detect`, `link`, `placeholder`, `guard`) under a parent `piighost.anonymize_pipeline` span. The default `NoOpObservationService` logs nothing and has zero overhead. The shipped backend is `LangfuseObservationService(client)`.
 
-By default the pipeline redacts every raw user text, every `Detection.text`, and every `Entity` text field in observation payloads, replacing them with `[REDACT]`. Already-anonymized payloads (`placeholder.output`, `guard.input/output`, the root span's `output`) pass through unchanged. Pass `observe_raw_text=True` to disable redaction. See [Security](../security.md) for the full threat-model rationale.
+By default the pipeline runs a dedicated placeholder factory on every PII span before the payload reaches the backend. The default factory, `RedactPlaceholderFactory()`, collapses every entity to `<<REDACT>>` and applies it to the root span's `input`, `detect.input/output`, `link.input/output`, and `placeholder.input`. Already-anonymized payloads (`placeholder.output`, `guard.input/output`, the root span's `output`) pass through unchanged. Pass a different `observation_ph_factory=` to use another factory. See [Security](../security.md) for the full threat-model rationale.
 
 ---
 

@@ -34,11 +34,11 @@ from piighost.observation.base import AbstractObservationService, AbstractSpan
 from piighost.pipeline.base import (
     CACHE_KEY_ANONYMIZATION,
     CACHE_KEY_DETECTION,
-    REDACTED_PLACEHOLDER,
     AnonymizationPipeline,
     _detection_to_dict,
     _entity_to_dict,
 )
+from piighost.placeholder import AnyPlaceholderFactory
 from piighost.placeholder_tags import (
     PlaceholderPreservation,
     PreservesIdentity,
@@ -228,7 +228,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         cache_ttl: int | None = None,
         max_threads: int | None = None,
         observation: AbstractObservationService | None = None,
-        observe_raw_text: bool = False,
+        observation_ph_factory: AnyPlaceholderFactory | None = None,
     ) -> None:
         if max_threads is not None and max_threads <= 0:
             raise ValueError(f"max_threads must be positive or None, got {max_threads}")
@@ -244,7 +244,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             cache=cache,
             cache_ttl=cache_ttl,
             observation=observation,
-            observe_raw_text=observe_raw_text,
+            observation_ph_factory=observation_ph_factory,
         )
 
         self._memories: OrderedDict[str, ConversationMemory] = OrderedDict()
@@ -492,9 +492,12 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                 text, root_span, thread_id=thread_id, metadata=metadata,
             )
 
+        # Root span input is filled in retroactively from
+        # ``_anonymize_with_span`` once detections are available, so the
+        # observation factory can render the obs-redacted form rather
+        # than swallowing the whole text under one sentinel.
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
-            input={"text": text if self._observe_raw_text else REDACTED_PLACEHOLDER},
             session_id=thread_id if thread_id != "default" else None,
             metadata=dict(metadata) if metadata else None,
         ) as auto_root:
@@ -511,9 +514,6 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> tuple[str, list[Entity]]:
         """Execute all conversation-aware pipeline stages, emitting child observations."""
-        redact = not self._observe_raw_text
-        obs_text = text if self._observe_raw_text else REDACTED_PLACEHOLDER
-
         token = _current_thread_id.set(thread_id)
         try:
             memory = self.get_memory(thread_id)
@@ -523,9 +523,19 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                 name="piighost.detect", as_type="tool",
             ) as span:
                 detections = await self._cached_detect(text)
+                det_token_map = self._obs_tokens_for_detections(detections)
+                obs_text_pre_link = self._obs_anonymizer.anonymize(
+                    text, [Entity(detections=(d,)) for d in detections]
+                )
+                root_span.update(input={"text": obs_text_pre_link})
                 span.update(
-                    input={"text": obs_text},
-                    output={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
+                    input={"text": obs_text_pre_link},
+                    output={
+                        "detections": [
+                            _detection_to_dict(d, token=det_token_map[d])
+                            for d in detections
+                        ]
+                    },
                 )
                 detections = self._span_resolver.resolve(detections)
                 time.sleep(0.001)
@@ -540,9 +550,19 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     entities,
                     memory.all_entities,
                 )
+                ent_tokens = self._obs_ph_factory.create(entities)
                 span.update(
-                    input={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
-                    output={"entities": [_entity_to_dict(e, redact=redact) for e in entities]},
+                    input={
+                        "detections": [
+                            _detection_to_dict(d, token=det_token_map[d])
+                            for d in detections
+                        ]
+                    },
+                    output={
+                        "entities": [
+                            _entity_to_dict(e, token=ent_tokens[e]) for e in entities
+                        ]
+                    },
                 )
                 time.sleep(0.001)
 
@@ -553,6 +573,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                 name="piighost.placeholder", as_type="tool",
             ) as span:
                 result = self.anonymize_with_ent(text, thread_id=thread_id)
+                obs_text = self._obs_anonymizer.anonymize(text, entities)
                 span.update(
                     input={"text": obs_text, "entity_count": len(entities)},
                     output={"text": result},

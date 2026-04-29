@@ -66,36 +66,58 @@ discipline ci-dessus est nécessaire dans votre propre code.
 
 Quand le pipeline est configuré avec un `AbstractObservationService`
 (par exemple `LangfuseObservationService`), chaque étape produit une
-observation enfant avec ses propres `input` et `output`. Par défaut le
-pipeline remplace tout texte brut et tout champ `text` de `Detection`
-ou `Entity` par le sentinel `[REDACT]` avant de pousser le payload
-vers le backend. Concrètement :
+observation enfant avec ses propres `input` et `output`. Le pipeline
+applique une placeholder factory dédiée à l'observation pour
+remplacer chaque PII détectée avant de pousser le payload vers le
+backend. Le défaut est `RedactPlaceholderFactory()`, qui collapse
+toute entité sur `<<REDACT>>` :
+
+```text
+texte utilisateur     : "Patrick habite à Paris."
+payload d'observation : "<<REDACT>> habite à <<REDACT>>."
+```
+
+Concrètement :
 
 - l'`input` du span racine, du stage `detect` et du stage
-  `placeholder` reçoit `{"text": "[REDACT]"}` au lieu du texte
-  utilisateur,
+  `placeholder` est rempli avec le texte rédigé par la factory une
+  fois la détection terminée. Tant que la détection n'a pas tourné,
+  le span racine n'a pas d'`input` du tout, donc rien ne fuit avant
+  d'avoir un mapping fiable,
 - les `Detection` et `Entity` sérialisées dans `detect.output` et
-  `link.input/output` ont leur champ `text` remplacé par `[REDACT]`
-  (label, position et confidence restent visibles pour le débogage),
-- les payloads déjà anonymisés (`placeholder.output`, `guard.input/output`,
-  `output` du span racine) restent tels quels puisqu'ils ne contiennent
-  que des placeholders.
+  `link.input/output` portent le token de la factory à la place de
+  leur champ `text`. Le label, la position et la confidence restent
+  visibles pour le débogage,
+- les payloads déjà anonymisés (`placeholder.output`,
+  `guard.input/output`, `output` du span racine) passent inchangés
+  puisqu'ils ne contiennent que des placeholders.
 
 Cette politique protège l'entrée utilisateur même si le pipeline
-échoue avant d'avoir produit le texte anonymisé : un crash au stage
-`detect` ne fait pas fuiter la PII brute vers Langfuse ou tout autre
-backend d'observation. Pour récupérer le comportement verbeux (par
-exemple en environnement de dev local), passer `observe_raw_text=True`
-au constructeur du pipeline :
+échoue avant d'avoir produit le texte anonymisé final. Un crash au
+stage `link` ou `placeholder` ne fait pas fuiter la PII brute vers
+Langfuse, parce que tout ce qui a été poussé jusque-là porte déjà
+des placeholders d'observation.
+
+Pour surfacer plus de structure (par exemple une numérotation
+distincte par PII en environnement de dev), passer une autre factory
+au constructeur :
 
 ```python
+from piighost.placeholder import RedactCounterPlaceholderFactory
+
 pipeline = ThreadAnonymizationPipeline(
     detector=detector,
     anonymizer=anonymizer,
     observation=LangfuseObservationService(client),
-    observe_raw_text=True,  # désactive la redaction, le payload contient le texte brut
+    observation_ph_factory=RedactCounterPlaceholderFactory(),  # <<REDACT:1>>, <<REDACT:2>>, ...
 )
 ```
+
+N'importe quelle implémentation de `AnyPlaceholderFactory` est
+acceptée. La factory d'observation est indépendante de celle qui
+sert à l'anonymisation réelle, donc on peut afficher du
+`<<PERSON:1>>` côté Langfuse tout en gardant un faux nom Faker côté
+LLM.
 
 ## Décisions de conception qui soutiennent le modèle de menaces
 
