@@ -228,6 +228,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         cache_ttl: int | None = None,
         max_threads: int | None = None,
         observation: AbstractObservationService | None = None,
+        observe_raw_text: bool = False,
     ) -> None:
         if max_threads is not None and max_threads <= 0:
             raise ValueError(f"max_threads must be positive or None, got {max_threads}")
@@ -243,6 +244,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             cache=cache,
             cache_ttl=cache_ttl,
             observation=observation,
+            observe_raw_text=observe_raw_text,
         )
 
         self._memories: OrderedDict[str, ConversationMemory] = OrderedDict()
