@@ -30,10 +30,11 @@ from piighost.exceptions import PIIGhostConfigWarning, PIIRemainingError
 from piighost.guard import AnyGuardRail
 from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity
-from piighost.observation.base import AbstractObservationService, AbstractSpan, NoOpObservationService
+from piighost.observation.base import AbstractObservationService, AbstractSpan
 from piighost.pipeline.base import (
     CACHE_KEY_ANONYMIZATION,
     CACHE_KEY_DETECTION,
+    REDACTED_PLACEHOLDER,
     AnonymizationPipeline,
     _detection_to_dict,
     _entity_to_dict,
@@ -491,7 +492,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
 
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
-            input={"text": text},
+            input={"text": text if self._observe_raw_text else REDACTED_PLACEHOLDER},
             session_id=thread_id if thread_id != "default" else None,
             metadata=dict(metadata) if metadata else None,
         ) as auto_root:
@@ -508,10 +509,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> tuple[str, list[Entity]]:
         """Execute all conversation-aware pipeline stages, emitting child observations."""
-        # Demo-only: pad each stage with a 1 s sleep so backend UIs render a
-        # visible duration. Skipped when no observation backend is configured
-        # (NoOp default) so the production fast path stays fast.
-        demo_pad = not isinstance(self._observation, NoOpObservationService)
+        redact = not self._observe_raw_text
+        obs_text = text if self._observe_raw_text else REDACTED_PLACEHOLDER
 
         token = _current_thread_id.set(thread_id)
         try:
@@ -523,12 +522,11 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             ) as span:
                 detections = await self._cached_detect(text)
                 span.update(
-                    input={"text": text},
-                    output={"detections": [_detection_to_dict(d) for d in detections]},
+                    input={"text": obs_text},
+                    output={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
                 )
                 detections = self._span_resolver.resolve(detections)
-                if demo_pad:
-                    time.sleep(1)
+                time.sleep(0.001)
 
             # Link
             with root_span.start_as_current_observation(
@@ -541,11 +539,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     memory.all_entities,
                 )
                 span.update(
-                    input={"detections": [_detection_to_dict(d) for d in detections]},
-                    output={"entities": [_entity_to_dict(e) for e in entities]},
+                    input={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
+                    output={"entities": [_entity_to_dict(e, redact=redact) for e in entities]},
                 )
-                if demo_pad:
-                    time.sleep(1)
+                time.sleep(0.001)
 
             memory.record(hash_sha256(text), entities)
 
@@ -555,11 +552,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             ) as span:
                 result = self.anonymize_with_ent(text, thread_id=thread_id)
                 span.update(
-                    input={"text": text, "entity_count": len(entities)},
+                    input={"text": obs_text, "entity_count": len(entities)},
                     output={"text": result},
                 )
-                if demo_pad:
-                    time.sleep(1)
+                time.sleep(0.001)
 
             # Guard
             with root_span.start_as_current_observation(
@@ -572,8 +568,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     span.update(output={"passed": False})
                     raise
                 span.update(output={"passed": True})
-                if demo_pad:
-                    time.sleep(1)
+                time.sleep(0.001)
 
             root_span.update(
                 output={"text": result, "entity_count": len(entities)},

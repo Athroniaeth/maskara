@@ -47,22 +47,27 @@ CACHE_KEY_DETECTION = "detect"
 CACHE_KEY_ANONYMIZATION = "anon:anonymized"
 """Prefix for anonymized-text → (original, entities) cache entries."""
 
+REDACTED_PLACEHOLDER = "[REDACT]"
+"""Sentinel substituted for raw user text/PII spans in observation payloads
+when ``observe_raw_text=False`` (the default). Protects user input from being
+exposed in the observation backend if the anonymization pipeline fails."""
 
-def _detection_to_dict(d: Detection) -> dict[str, Any]:
+
+def _detection_to_dict(d: Detection, *, redact: bool = False) -> dict[str, Any]:
     """Serialize a Detection to a JSON-friendly dict for observation output."""
     return {
         "label": d.label,
         "position": [d.position.start_pos, d.position.end_pos],
         "confidence": d.confidence,
-        "text": d.text,
+        "text": REDACTED_PLACEHOLDER if redact else d.text,
     }
 
 
-def _entity_to_dict(e: Entity) -> dict[str, Any]:
+def _entity_to_dict(e: Entity, *, redact: bool = False) -> dict[str, Any]:
     """Serialize an Entity to a JSON-friendly dict for observation output."""
     return {
         "label": e.label,
-        "detections": [_detection_to_dict(d) for d in e.detections],
+        "detections": [_detection_to_dict(d, redact=redact) for d in e.detections],
     }
 
 
@@ -119,6 +124,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
         observation: AbstractObservationService | None = None,
+        observe_raw_text: bool = False,
     ) -> None:
         span_resolver = span_resolver or ConfidenceSpanConflictResolver()
         entity_linker = entity_linker or ExactEntityLinker()
@@ -134,6 +140,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
         self._cache = cache or SimpleMemoryCache()
         self._cache_ttl = cache_ttl
         self._observation = observation or NoOpObservationService()
+        self._observe_raw_text = observe_raw_text
 
     @property
     def ph_factory(self) -> AnyPlaceholderFactory[PreservationT]:
@@ -182,7 +189,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
 
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
-            input={"text": text},
+            input={"text": text if self._observe_raw_text else REDACTED_PLACEHOLDER},
             metadata=dict(metadata) if metadata else None,
         ) as auto_root:
             return await self._anonymize_with_span(text, auto_root, metadata=metadata)
@@ -195,10 +202,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> Tuple[str, list[Entity]]:
         """Execute all pipeline stages, emitting child observations on *root_span*."""
-        # Demo-only: pad each stage with a 1 s sleep so backend UIs render a
-        # visible duration. Skipped when no observation backend is configured
-        # (NoOp default) so the production fast path stays fast.
-        demo_pad = not isinstance(self._observation, NoOpObservationService)
+        redact = not self._observe_raw_text
+        obs_text = text if self._observe_raw_text else REDACTED_PLACEHOLDER
 
         # Detect
         with root_span.start_as_current_observation(
@@ -206,12 +211,11 @@ class AnonymizationPipeline(Generic[PreservationT]):
         ) as span:
             detections = await self._cached_detect(text)
             span.update(
-                input={"text": text},
-                output={"detections": [_detection_to_dict(d) for d in detections]},
+                input={"text": obs_text},
+                output={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
             )
             detections = self._span_resolver.resolve(detections)
-            if demo_pad:
-                time.sleep(1)
+            time.sleep(0.001)
 
         # Link
         with root_span.start_as_current_observation(
@@ -220,11 +224,10 @@ class AnonymizationPipeline(Generic[PreservationT]):
             entities = self._entity_linker.link(text, detections)
             entities = self._entity_resolver.resolve(entities)
             span.update(
-                input={"detections": [_detection_to_dict(d) for d in detections]},
-                output={"entities": [_entity_to_dict(e) for e in entities]},
+                input={"detections": [_detection_to_dict(d, redact=redact) for d in detections]},
+                output={"entities": [_entity_to_dict(e, redact=redact) for e in entities]},
             )
-            if demo_pad:
-                time.sleep(1)
+            time.sleep(0.001)
 
         # Placeholder
         with root_span.start_as_current_observation(
@@ -232,11 +235,10 @@ class AnonymizationPipeline(Generic[PreservationT]):
         ) as span:
             anonymized = self._anonymizer.anonymize(text, entities)
             span.update(
-                input={"text": text, "entity_count": len(entities)},
+                input={"text": obs_text, "entity_count": len(entities)},
                 output={"text": anonymized},
             )
-            if demo_pad:
-                time.sleep(1)
+            time.sleep(0.001)
 
         # Guard
         with root_span.start_as_current_observation(
@@ -249,8 +251,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 span.update(output={"passed": False})
                 raise
             span.update(output={"passed": True})
-            if demo_pad:
-                time.sleep(1)
+            time.sleep(0.001)
 
         root_span.update(
             output={"text": anonymized, "entity_count": len(entities)},
