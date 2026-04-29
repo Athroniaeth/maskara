@@ -75,8 +75,11 @@ transformers = [
 llm = [
     "langchain-core>=0.3",
 ]
+sqlalchemy = [
+    "sqlalchemy[asyncio]>=2.0",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,sqlalchemy]",
 ]
 
 [build-system]
@@ -118,6 +121,10 @@ pipeline = [
 ]
 llm = [
     "langchain-core>=0.3",
+]
+sqlalchemy = [
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
 ]
 
 [tool.pytest.ini_options]

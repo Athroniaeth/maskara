@@ -26,7 +26,7 @@ les garanties offertes lorsque le backend lui-même est compromis.
   et un poivre global rendrait la dérivation non rejouable hors du
   processus.
 
-- [ ] **Backend SQLAlchemy (aiosqlite + PostgreSQL).** Le cache par
+- [x] **Backend SQLAlchemy (aiosqlite + PostgreSQL).** Le cache par
   défaut est in-memory et lié au processus. Un backend SQLAlchemy
   apporterait :
     - une persistance simple en dev via `aiosqlite` ;
