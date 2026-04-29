@@ -56,6 +56,41 @@ scrub them yourself. Two simple recipes:
 `piighost` itself never writes PII to any logger; the discipline above
 is needed in your own code.
 
+## Observation payload redaction
+
+When the pipeline is wired to an `AbstractObservationService` (for
+example `LangfuseObservationService`), each stage emits a child
+observation with its own `input` and `output`. By default the
+pipeline substitutes raw user text and any `text` field on a
+`Detection` or `Entity` with the `[REDACT]` sentinel before the
+payload reaches the backend. Concretely:
+
+- the root span's `input`, the `detect` stage's `input`, and the
+  `placeholder` stage's `input` carry `{"text": "[REDACT]"}` instead
+  of the user's text,
+- `Detection` and `Entity` records serialized into `detect.output`
+  and `link.input/output` have their `text` field replaced with
+  `[REDACT]` (label, position, and confidence stay visible for
+  debugging),
+- already-anonymized payloads (`placeholder.output`, `guard.input/output`,
+  the root span's `output`) are passed through unchanged because they
+  contain placeholders only.
+
+This default protects user input even when the pipeline fails before
+producing the anonymized text: a crash at the `detect` stage cannot
+leak raw PII to Langfuse or any other observation backend. To restore
+the verbose behaviour (for example on a local dev workstation), pass
+`observe_raw_text=True` to the pipeline constructor:
+
+```python
+pipeline = ThreadAnonymizationPipeline(
+    detector=detector,
+    anonymizer=anonymizer,
+    observation=LangfuseObservationService(client),
+    observe_raw_text=True,  # disables redaction, payload carries raw text
+)
+```
+
 ## Design decisions that back the threat model
 
 - **Anonymization happens locally**: PII is replaced before the HTTP request hits the LLM provider.
