@@ -5,14 +5,17 @@
 [![PyPI downloads](https://img.shields.io/pypi/dm/piighost.svg)](https://pypi.org/project/piighost/)
 [![Python versions](https://img.shields.io/pypi/pyversions/piighost.svg)](https://pypi.org/project/piighost/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://athroniaeth.github.io/piighost/)
 [![Tested with pytest](https://img.shields.io/badge/tests-pytest-informational.svg)](https://pytest.org/)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-4B32C3.svg)](https://docs.astral.sh/ruff/)
 [![Security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
 
 [README EN](README.md) - [README FR](README.fr.md)
 
-`piighost` est un **pipeline d'anonymisation de PII composable** pour les agents LLM. Chaque étape (détection, liaison, résolution, anonymisation) est un `Protocol` Python que vous pouvez remplacer, vous gardez la main sur vos détecteurs (NER, regex, LLM, votre propre API) pendant que `piighost` s'occupe du reste : liaison d'entités inter-messages, cohérence des placeholders, et un middleware LangChain qui anonymise avant le LLM et désanonymise pour les outils et l'utilisateur final.
+[Documentation EN](https://athroniaeth.github.io/piighost/) - [Documentation FR](https://athroniaeth.github.io/piighost/fr/)
+
+`piighost` est un **pipeline d'anonymisation de PII composable** pour les agents LLM. C'est une surcouche aux regex, NER ou LLM que vous branchez, ce qui vous permet d'utiliser un LLM hébergé (GPT, Claude, Gemini) sans jamais lui envoyer les données brutes de vos utilisateurs. `piighost` repère les PII comme les noms, emails, adresses, tout ce que le modèle n'a pas à voir, les remplace par des placeholders (par exemple `<<PERSON:1>>`, `<<EMAIL:2>>`, `<<LOCATION:1>>`) sur lesquels le LLM peut continuer à raisonner, et restitue les vraies valeurs à vos outils et vos utilisateurs finaux. La même PII garde le même placeholder tout au long d'une conversation, même quand elle s'étale sur plusieurs messages ou appels d'outils, et votre code agent ne change pas.
+
+Au-dessus du pipeline de base, `piighost` embarque des couches supplémentaires pour renforcer chaque étape, comme des détecteurs composables avec arbitrage par confiance pour la **détection**, un linker tolérant aux fautes de frappe et variantes de casse pour la **correction**, et des guardrails de sortie (regex ou LLM) pour la **sécurité** quand le LLM génère accidentellement une PII nouvelle dans sa réponse.
 
 ```mermaid
 sequenceDiagram
@@ -161,9 +164,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-> `anonymize` et `deanonymize` retournent toutes les deux `(text, list[Entity])` : les entités viennent directement du cache, pas de re-détection. À noter qu'une `Entity` ne porte **pas** son placeholder : celui-ci est régénéré à la volée par la `PlaceholderFactory` à partir de la liste ordonnée d'entités. C'est ce qui permet aux factories à compteur comme `LabelCounterPlaceholderFactory` de produire des numéros stables `<<PERSON:1>>`, `<<PERSON:2>>`... entre `anonymize` et `deanonymize` (l'ordre fait foi). Le champ `text` de `Detection` est rendu en clair par le `repr` standard de dataclass : faites le scrub vous-même si vous transférez ces objets vers des logs (voir [docs/fr/security.md](docs/fr/security.md)).
+> `anonymize` et `deanonymize` retournent toutes les deux `(text, list[Entity])` : les entités viennent directement du cache, pas de re-détection. À noter qu'une `Entity` ne porte **pas** son placeholder : celui-ci est régénéré à la volée par la `PlaceholderFactory` à partir de la liste ordonnée d'entités. C'est ce qui permet aux factories à compteur comme `LabelCounterPlaceholderFactory` de produire des numéros stables `<<PERSON:1>>`, `<<PERSON:2>>`... entre `anonymize` et `deanonymize` (l'ordre fait foi). Le champ `text` de `Detection` est rendu en clair par le `repr` standard de dataclass : faites le scrub vous-même si vous transférez ces objets vers des logs (voir [doc sécurité](https://athroniaeth.github.io/piighost/fr/security/)).
 
-> **Comment `deanonymize` retrouve-t-il le texte original ?** Il ne relance pas le détecteur. Le pipeline garde un cache en mémoire (`aiocache.SimpleMemoryCache` par défaut) qui mappe `sha256(texte_anonymisé) → (texte_original, entités)`. Appeler `deanonymize` est juste un lookup. Pour les déploiements multi-instances, branchez un backend Redis ou Memcached, voir [docs/fr/deployment.md](docs/fr/deployment.md).
+> **Comment `deanonymize` retrouve-t-il le texte original ?** Il ne relance pas le détecteur. Le pipeline garde un cache en mémoire (`aiocache.SimpleMemoryCache` par défaut) qui mappe `sha256(texte_anonymisé) → (texte_original, entités)`. Appeler `deanonymize` est juste un lookup. Pour les déploiements multi-instances, branchez un backend Redis ou Memcached, voir [doc déploiement](https://athroniaeth.github.io/piighost/fr/deployment/).
 
 Pour la production, branchez un modèle NER ou votre propre détecteur ci-dessous.
 
@@ -282,7 +285,7 @@ class RemoteNERDetector:
 detector: AnyDetector = RemoteNERDetector(url="...", api_key="...")
 ```
 
-Combinez plusieurs détecteurs avec `CompositeDetector` et laissez `ConfidenceSpanConflictResolver` choisir un gagnant si leurs spans se chevauchent. Voir [docs/fr/extending.md](docs/fr/extending.md) pour le catalogue complet (spaCy, transformers, LLM-as-detector, regex avec validators pour IBAN / NIR / Luhn).
+Combinez plusieurs détecteurs avec `CompositeDetector` et laissez `ConfidenceSpanConflictResolver` choisir un gagnant si leurs spans se chevauchent. Voir [Étendre PIIGhost](https://athroniaeth.github.io/piighost/fr/extending/) pour le catalogue complet (spaCy, transformers, LLM-as-detector, regex avec validators pour IBAN / NIR / Luhn).
 
 ## Cas d'usage
 
@@ -353,11 +356,11 @@ flowchart LR
     P_ANONYMIZE -. "implémente" .-> ANONYMIZE
 ```
 
-> Trois termes structurent le pipeline. Un **span** est un offset `(début, fin)`, une **detection** est un span + un label + une confiance émis par un détecteur, une **entity** est un groupe de détections qui désignent la même PII (et reçoivent donc le même placeholder). Définitions complètes dans le [glossaire](docs/fr/glossary.md).
+> Trois termes structurent le pipeline. Un **span** est un offset `(début, fin)`, une **detection** est un span + un label + une confiance émis par un détecteur, une **entity** est un groupe de détections qui désignent la même PII (et reçoivent donc le même placeholder). Définitions complètes dans le [glossaire](https://athroniaeth.github.io/piighost/fr/glossary/).
 
 ### Intégration du middleware
 
-Le middleware se branche sur `abefore_model`, `awrap_tool_call` et `aafter_model` de LangChain pour anonymiser, désanonymiser pour les outils, puis réanonymiser les résultats d'outil. Voir [docs/fr/architecture.md](docs/fr/architecture.md) pour la séquence complète.
+Le middleware se branche sur `abefore_model`, `awrap_tool_call` et `aafter_model` de LangChain pour anonymiser, désanonymiser pour les outils, puis réanonymiser les résultats d'outil. Voir [Architecture](https://athroniaeth.github.io/piighost/fr/architecture/) pour la séquence complète.
 
 ## Installation
 
@@ -402,7 +405,7 @@ uv run pytest
 
 ## Composants du pipeline
 
-Seuls `detector` et `anonymizer` sont obligatoires, les trois étapes intermédiaires (résolveur de spans, linker d'entités, résolveur d'entités) ont des valeurs par défaut que vous pouvez remplacer. Tableau complet des défauts, rôles et risques dans [docs/fr/architecture.md](docs/fr/architecture.md).
+Seuls `detector` et `anonymizer` sont obligatoires, les trois étapes intermédiaires (résolveur de spans, linker d'entités, résolveur d'entités) ont des valeurs par défaut que vous pouvez remplacer. Tableau complet des défauts, rôles et risques dans [Architecture](https://athroniaeth.github.io/piighost/fr/architecture/).
 
 ## FAQ
 
@@ -423,7 +426,7 @@ Deux lignes de défense.
 1. Le **linker d'entités** balaye tout le texte (et toute la conversation, dans `ThreadAnonymizationPipeline`) à la recherche de correspondances de mots pour chaque entité détectée. Si `Patrick` est détecté une fois, chaque autre `Patrick` reçoit le même placeholder, même si le NER les avait ratés.
 2. Pour les PII déterministes (emails, numéros, IBANs), combinez le détecteur NER avec un `RegexDetector` via `CompositeDetector`. Les faux négatifs NER deviennent des vrais positifs regex.
 
-Pour les PII **générées par le LLM** dans sa réponse (entités jamais vues en entrée), utilisez un `DetectorGuardRail` sur la sortie, voir [docs/fr/extending.md](docs/fr/extending.md).
+Pour les PII **générées par le LLM** dans sa réponse (entités jamais vues en entrée), utilisez un `DetectorGuardRail` sur la sortie, voir [Étendre PIIGhost](https://athroniaeth.github.io/piighost/fr/extending/).
 
 **Q : Utilisable sans LangChain ?**
 Oui. `AnonymizationPipeline` et `ThreadAnonymizationPipeline` sont indépendants de tout framework d'agent. Le middleware LangChain est une intégration parmi d'autres, le pipeline s'appelle depuis n'importe où (handler FastAPI, script batch, boucle d'agent maison).
@@ -441,7 +444,7 @@ Un cache à clé SHA-256 stocke `texte_anonymisé → (texte_original, entités)
 - **Le cache est local** par défaut. Les déploiements multi-instances nécessitent un backend partagé (Redis, Memcached) à configurer explicitement.
 - **La latence dépend du détecteur.** Mesurez sur votre charge avant de dimensionner.
 
-Voir [docs/fr/architecture.md](docs/fr/architecture.md), [docs/fr/extending.md](docs/fr/extending.md) et [docs/fr/limitations.md](docs/fr/limitations.md) pour les stratégies d'atténuation.
+Voir [Architecture](https://athroniaeth.github.io/piighost/fr/architecture/), [Étendre PIIGhost](https://athroniaeth.github.io/piighost/fr/extending/) et [Limites](https://athroniaeth.github.io/piighost/fr/limitations/) pour les stratégies d'atténuation.
 
 ## Développement
 
@@ -475,7 +478,7 @@ Voir [CONTRIBUTING.md](CONTRIBUTING.md) et [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.
 
 ## Roadmap
 
-Une roadmap publique (logo, benchmarks latence / précision sur un corpus de référence, GIF de `piighost-chat`, démo live hébergée) est dans [docs/fr/roadmap.md](docs/fr/roadmap.md). Issues et discussions bienvenues.
+Une roadmap publique (logo, benchmarks latence / précision sur un corpus de référence, GIF de `piighost-chat`, démo live hébergée) est dans [roadmap](https://athroniaeth.github.io/piighost/fr/roadmap/). Issues et discussions bienvenues.
 
 ## Soutenez-nous
 
