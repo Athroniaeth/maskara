@@ -19,7 +19,7 @@ if importlib.util.find_spec("langfuse") is None:
         "please install piighost[langfuse]"
     )
 
-from langfuse import Langfuse
+from langfuse import Langfuse, propagate_attributes
 
 from piighost.observation.base import (
     AbstractObservationService,
@@ -81,17 +81,14 @@ class LangfuseSpan(AbstractSpan):
         metadata: dict[str, Any] | None = None,
         tags: list[str] | None = None,
     ) -> None:
-        kwargs: dict[str, Any] = {}
-        if user_id is not None:
-            kwargs["user_id"] = user_id
-        if session_id is not None:
-            kwargs["session_id"] = session_id
-        if metadata is not None:
-            kwargs["metadata"] = metadata
-        if tags is not None:
-            kwargs["tags"] = tags
-        if kwargs:
-            self._lf_span.update_trace(**kwargs)
+        # Langfuse v4 dropped the per-span ``update_trace`` API. Trace-
+        # level attributes are now set via ``propagate_attributes``
+        # which has to bracket the trace (see
+        # ``LangfuseObservationService.start_as_current_span``). Calling
+        # ``update_trace`` mid-stream is therefore a no-op for the
+        # Langfuse backend; pass these fields when creating the root
+        # span instead.
+        return None
 
 
 class LangfuseObservationService(AbstractObservationService):
@@ -111,14 +108,37 @@ class LangfuseObservationService(AbstractObservationService):
         name: str,
         input: Any = None,
         output: Any = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
     ):
-        kwargs: dict[str, Any] = {"name": name, "as_type": "span"}
+        obs_kwargs: dict[str, Any] = {"name": name, "as_type": "span"}
         if input is not None:
-            kwargs["input"] = input
+            obs_kwargs["input"] = input
         if output is not None:
-            kwargs["output"] = output
-        with self._client.start_as_current_observation(**kwargs) as obs:
-            yield LangfuseSpan(obs)
+            obs_kwargs["output"] = output
+
+        prop_kwargs: dict[str, Any] = {}
+        if session_id is not None:
+            prop_kwargs["session_id"] = session_id
+        if user_id is not None:
+            prop_kwargs["user_id"] = user_id
+        if metadata is not None:
+            # Langfuse propagate_attributes only accepts string values.
+            # Coerce non-string scalars so the call does not raise.
+            prop_kwargs["metadata"] = {
+                k: v if isinstance(v, str) else str(v) for k, v in metadata.items()
+            }
+        if tags is not None:
+            prop_kwargs["tags"] = tags
+
+        with self._client.start_as_current_observation(**obs_kwargs) as obs:
+            if prop_kwargs:
+                with propagate_attributes(**prop_kwargs):
+                    yield LangfuseSpan(obs)
+            else:
+                yield LangfuseSpan(obs)
 
     def flush(self) -> None:
         self._client.flush()

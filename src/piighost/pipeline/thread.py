@@ -491,14 +491,9 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
             input={"text": text},
+            session_id=thread_id if thread_id != "default" else None,
+            metadata=dict(metadata) if metadata else None,
         ) as auto_root:
-            trace_kwargs: dict[str, Any] = {}
-            if thread_id != "default":
-                trace_kwargs["session_id"] = thread_id
-            if metadata:
-                trace_kwargs["metadata"] = dict(metadata)
-            if trace_kwargs:
-                auto_root.update_trace(**trace_kwargs)
             return await self._anonymize_with_span(
                 text, auto_root, thread_id=thread_id, metadata=metadata,
             )

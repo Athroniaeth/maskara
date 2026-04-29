@@ -75,8 +75,20 @@ class AbstractObservationService(ABC):
         name: str,
         input: Any = None,
         output: Any = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
     ) -> AbstractContextManager[AbstractSpan]:
-        """Open a root span and yield its handle."""
+        """Open a root span and yield its handle.
+
+        Trace-level attributes (``session_id``, ``user_id``,
+        ``metadata``, ``tags``) are passed at creation time. Langfuse
+        v4+ removed the per-span ``update_trace`` API; the surviving
+        idiomatic primitive is ``propagate_attributes`` which has to
+        bracket the entire trace, so the natural place to wire it is
+        here.
+        """
         raise NotImplementedError
 
     def flush(self) -> None:
@@ -143,5 +155,9 @@ class NoOpObservationService(AbstractObservationService):
         name: str,
         input: Any = None,
         output: Any = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
     ):
         yield NoOpSpan()

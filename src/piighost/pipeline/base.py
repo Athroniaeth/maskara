@@ -178,9 +178,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
         with self._observation.start_as_current_span(
             name="piighost.anonymize_pipeline",
             input={"text": text},
+            metadata=dict(metadata) if metadata else None,
         ) as auto_root:
-            if metadata:
-                auto_root.update_trace(metadata=dict(metadata))
             return await self._anonymize_with_span(text, auto_root, metadata=metadata)
 
     async def _anonymize_with_span(
