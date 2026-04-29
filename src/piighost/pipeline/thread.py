@@ -14,6 +14,7 @@ pipeline to recreate consistent placeholder tokens across messages.
 """
 
 import re
+import time
 import warnings
 from collections import OrderedDict
 from contextvars import ContextVar
@@ -521,6 +522,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     output={"detections": [_detection_to_dict(d) for d in detections]},
                 )
                 detections = self._span_resolver.resolve(detections)
+                time.sleep(1)  # demo: make each stage span a visible duration in UIs
 
             # Link
             with root_span.start_as_current_observation(
@@ -536,6 +538,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     input={"detections": [_detection_to_dict(d) for d in detections]},
                     output={"entities": [_entity_to_dict(e) for e in entities]},
                 )
+                time.sleep(1)
 
             memory.record(hash_sha256(text), entities)
 
@@ -548,6 +551,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     input={"text": text, "entity_count": len(entities)},
                     output={"text": result},
                 )
+                time.sleep(1)
 
             # Guard
             with root_span.start_as_current_observation(
@@ -560,6 +564,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     span.update(output={"passed": False})
                     raise
                 span.update(output={"passed": True})
+                time.sleep(1)
 
             root_span.update(
                 output={"text": result, "entity_count": len(entities)},

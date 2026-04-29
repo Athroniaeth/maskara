@@ -1,4 +1,5 @@
 import importlib.util
+import time
 from typing import Any, Generic, Mapping, Tuple
 
 from typing_extensions import TypeVar
@@ -200,6 +201,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 output={"detections": [_detection_to_dict(d) for d in detections]},
             )
             detections = self._span_resolver.resolve(detections)
+            time.sleep(1)  # demo: make each stage span a visible duration in UIs
 
         # Link
         with root_span.start_as_current_observation(
@@ -211,6 +213,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 input={"detections": [_detection_to_dict(d) for d in detections]},
                 output={"entities": [_entity_to_dict(e) for e in entities]},
             )
+            time.sleep(1)
 
         # Placeholder
         with root_span.start_as_current_observation(
@@ -221,6 +224,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 input={"text": text, "entity_count": len(entities)},
                 output={"text": anonymized},
             )
+            time.sleep(1)
 
         # Guard
         with root_span.start_as_current_observation(
@@ -233,6 +237,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 span.update(output={"passed": False})
                 raise
             span.update(output={"passed": True})
+            time.sleep(1)
 
         root_span.update(
             output={"text": anonymized, "entity_count": len(entities)},
