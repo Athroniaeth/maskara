@@ -79,8 +79,11 @@ sqlalchemy = [
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.20",
 ]
+langfuse = [
+    "langfuse>=3.0",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,sqlalchemy]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,sqlalchemy,langfuse]",
 ]
 
 [build-system]

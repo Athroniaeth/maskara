@@ -1,5 +1,5 @@
 import importlib.util
-from typing import Generic, Tuple
+from typing import Any, Generic, Mapping, Tuple
 
 from typing_extensions import TypeVar
 
@@ -12,10 +12,11 @@ from aiocache import BaseCache, SimpleMemoryCache
 
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
-from piighost.exceptions import CacheMissError
+from piighost.exceptions import CacheMissError, PIIRemainingError
 from piighost.guard import AnyGuardRail, DisabledGuardRail
 from piighost.linker.entity import AnyEntityLinker, ExactEntityLinker
 from piighost.models import Detection, Entity
+from piighost.observation.base import AbstractObservationService, AbstractSpan, NoOpObservationService
 from piighost.placeholder import AnyPlaceholderFactory
 from piighost.placeholder_tags import PlaceholderPreservation
 from piighost.resolver.entity import (
@@ -40,6 +41,24 @@ CACHE_KEY_DETECTION = "detect"
 
 CACHE_KEY_ANONYMIZATION = "anon:anonymized"
 """Prefix for anonymized-text → (original, entities) cache entries."""
+
+
+def _detection_to_dict(d: Detection) -> dict[str, Any]:
+    """Serialize a Detection to a JSON-friendly dict for observation output."""
+    return {
+        "label": d.label,
+        "position": [d.position.start_pos, d.position.end_pos],
+        "confidence": d.confidence,
+        "text": d.text,
+    }
+
+
+def _entity_to_dict(e: Entity) -> dict[str, Any]:
+    """Serialize an Entity to a JSON-friendly dict for observation output."""
+    return {
+        "label": e.label,
+        "detections": [_detection_to_dict(d) for d in e.detections],
+    }
 
 
 class AnonymizationPipeline(Generic[PreservationT]):
@@ -82,6 +101,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
     _guard_rail: AnyGuardRail
     _cache: BaseCache
     _cache_ttl: int | None
+    _observation: AbstractObservationService
 
     def __init__(
         self,
@@ -93,6 +113,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
         guard_rail: AnyGuardRail | None = None,
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
+        observation: AbstractObservationService | None = None,
     ) -> None:
         span_resolver = span_resolver or ConfidenceSpanConflictResolver()
         entity_linker = entity_linker or ExactEntityLinker()
@@ -107,6 +128,7 @@ class AnonymizationPipeline(Generic[PreservationT]):
         self._guard_rail = guard_rail
         self._cache = cache or SimpleMemoryCache()
         self._cache_ttl = cache_ttl
+        self._observation = observation or NoOpObservationService()
 
     @property
     def ph_factory(self) -> AnyPlaceholderFactory[PreservationT]:
@@ -127,11 +149,21 @@ class AnonymizationPipeline(Generic[PreservationT]):
         entities = self._entity_linker.link(text, detections)
         return self._entity_resolver.resolve(entities)
 
-    async def anonymize(self, text: str) -> Tuple[str, list[Entity]]:
+    async def anonymize(
+        self,
+        text: str,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        root_span: AbstractSpan | None = None,
+    ) -> Tuple[str, list[Entity]]:
         """Run the full pipeline: detect → resolve → link → resolve → anonymize.
 
         Args:
             text: The original text to anonymize.
+            metadata: Optional metadata forwarded to the observation trace.
+            root_span: Caller-supplied root span. When provided the pipeline
+                nests its stage observations under it and does not create a
+                new root span from the configured observation service.
 
         Returns:
             A tuple of (anonymized text, entities used for anonymization).
@@ -140,19 +172,74 @@ class AnonymizationPipeline(Generic[PreservationT]):
             PIIRemainingError: If a non-default guard rail detects
                 residual PII in the anonymized output.
         """
-        entities = await self.detect_entities(text)
+        if root_span is not None:
+            return await self._anonymize_with_span(text, root_span, metadata=metadata)
 
-        # Replace detections with placeholder tokens.
-        anonymized = self._anonymizer.anonymize(text, entities)
+        with self._observation.start_as_current_span(
+            name="piighost.anonymize_pipeline",
+            input={"text": text},
+        ) as auto_root:
+            if metadata:
+                auto_root.update_trace(metadata=dict(metadata))
+            return await self._anonymize_with_span(text, auto_root, metadata=metadata)
 
-        # Final binary check on the anonymized output. The default
-        # DisabledGuardRail is a no-op, so existing pipelines keep
-        # their behaviour untouched.
-        await self._guard_rail.check(anonymized)
+    async def _anonymize_with_span(
+        self,
+        text: str,
+        root_span: AbstractSpan,
+        *,
+        metadata: Mapping[str, Any] | None,
+    ) -> Tuple[str, list[Entity]]:
+        """Execute all pipeline stages, emitting child observations on *root_span*."""
+        # Detect
+        with root_span.start_as_current_observation(
+            name="piighost.detect", as_type="tool",
+        ) as span:
+            detections = await self._cached_detect(text)
+            span.update(
+                input={"text": text},
+                output={"detections": [_detection_to_dict(d) for d in detections]},
+            )
+            detections = self._span_resolver.resolve(detections)
 
-        # Store both directions for deanonymization lookup.
+        # Link
+        with root_span.start_as_current_observation(
+            name="piighost.link", as_type="span",
+        ) as span:
+            entities = self._entity_linker.link(text, detections)
+            entities = self._entity_resolver.resolve(entities)
+            span.update(
+                input={"detections": [_detection_to_dict(d) for d in detections]},
+                output={"entities": [_entity_to_dict(e) for e in entities]},
+            )
+
+        # Placeholder
+        with root_span.start_as_current_observation(
+            name="piighost.placeholder", as_type="tool",
+        ) as span:
+            anonymized = self._anonymizer.anonymize(text, entities)
+            span.update(
+                input={"text": text, "entity_count": len(entities)},
+                output={"text": anonymized},
+            )
+
+        # Guard
+        with root_span.start_as_current_observation(
+            name="piighost.guard", as_type="guardrail",
+        ) as span:
+            span.update(input={"text": anonymized})
+            try:
+                await self._guard_rail.check(anonymized)
+            except PIIRemainingError:
+                span.update(output={"passed": False})
+                raise
+            span.update(output={"passed": True})
+
+        root_span.update(
+            output={"text": anonymized, "entity_count": len(entities)},
+        )
+
         await self._store_mapping(text, anonymized, entities)
-
         return anonymized, entities
 
     async def deanonymize(self, anonymized_text: str) -> Tuple[str, list[Entity]]:

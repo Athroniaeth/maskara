@@ -17,7 +17,7 @@ import re
 import warnings
 from collections import OrderedDict
 from contextvars import ContextVar
-from typing import Protocol
+from typing import Any, Mapping, Protocol
 
 from typing_extensions import TypeVar
 
@@ -25,14 +25,17 @@ from aiocache import BaseCache, SimpleMemoryCache
 
 from piighost.anonymizer import AnyAnonymizer
 from piighost.detector import AnyDetector
-from piighost.exceptions import PIIGhostConfigWarning
+from piighost.exceptions import PIIGhostConfigWarning, PIIRemainingError
 from piighost.guard import AnyGuardRail
 from piighost.linker.entity import AnyEntityLinker
 from piighost.models import Detection, Entity
+from piighost.observation.base import AbstractObservationService, AbstractSpan, NoOpObservationService
 from piighost.pipeline.base import (
     CACHE_KEY_ANONYMIZATION,
     CACHE_KEY_DETECTION,
     AnonymizationPipeline,
+    _detection_to_dict,
+    _entity_to_dict,
 )
 from piighost.placeholder_tags import (
     PlaceholderPreservation,
@@ -222,6 +225,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         cache: BaseCache | None = None,
         cache_ttl: int | None = None,
         max_threads: int | None = None,
+        observation: AbstractObservationService | None = None,
     ) -> None:
         if max_threads is not None and max_threads <= 0:
             raise ValueError(f"max_threads must be positive or None, got {max_threads}")
@@ -236,6 +240,7 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             guard_rail=guard_rail,
             cache=cache,
             cache_ttl=cache_ttl,
+            observation=observation,
         )
 
         self._memories: OrderedDict[str, ConversationMemory] = OrderedDict()
@@ -458,6 +463,9 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         self,
         text: str,
         thread_id: str = "default",
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        root_span: AbstractSpan | None = None,
     ) -> tuple[str, list[Entity]]:
         """Run detection, record entities in memory, then anonymize.
 
@@ -467,23 +475,100 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         Args:
             text: The original text to anonymize.
             thread_id: Thread identifier for memory and cache isolation.
+            metadata: Optional metadata forwarded to the observation trace.
+            root_span: Caller-supplied root span. When provided the pipeline
+                nests its stage observations under it and does not create a
+                new root span from the configured observation service.
 
         Returns:
             A tuple of (anonymized text, entities used for anonymization).
         """
+        if root_span is not None:
+            return await self._anonymize_with_span(
+                text, root_span, thread_id=thread_id, metadata=metadata,
+            )
+
+        with self._observation.start_as_current_span(
+            name="piighost.anonymize_pipeline",
+            input={"text": text},
+        ) as auto_root:
+            trace_kwargs: dict[str, Any] = {}
+            if thread_id != "default":
+                trace_kwargs["session_id"] = thread_id
+            if metadata:
+                trace_kwargs["metadata"] = dict(metadata)
+            if trace_kwargs:
+                auto_root.update_trace(**trace_kwargs)
+            return await self._anonymize_with_span(
+                text, auto_root, thread_id=thread_id, metadata=metadata,
+            )
+
+    async def _anonymize_with_span(
+        self,
+        text: str,
+        root_span: AbstractSpan,
+        *,
+        thread_id: str,
+        metadata: Mapping[str, Any] | None,
+    ) -> tuple[str, list[Entity]]:
+        """Execute all conversation-aware pipeline stages, emitting child observations."""
         token = _current_thread_id.set(thread_id)
         try:
             memory = self.get_memory(thread_id)
 
-            entities = await self.detect_entities(text)
-            entities = self._entity_linker.link_entities(
-                entities,
-                memory.all_entities,
-            )
-            memory.record(hash_sha256(text), entities)
-            result = self.anonymize_with_ent(text, thread_id=thread_id)
+            # Detect
+            with root_span.start_as_current_observation(
+                name="piighost.detect", as_type="tool",
+            ) as span:
+                detections = await self._cached_detect(text)
+                span.update(
+                    input={"text": text},
+                    output={"detections": [_detection_to_dict(d) for d in detections]},
+                )
+                detections = self._span_resolver.resolve(detections)
 
-            await self._guard_rail.check(result)
+            # Link
+            with root_span.start_as_current_observation(
+                name="piighost.link", as_type="span",
+            ) as span:
+                entities = self._entity_linker.link(text, detections)
+                entities = self._entity_resolver.resolve(entities)
+                entities = self._entity_linker.link_entities(
+                    entities,
+                    memory.all_entities,
+                )
+                span.update(
+                    input={"detections": [_detection_to_dict(d) for d in detections]},
+                    output={"entities": [_entity_to_dict(e) for e in entities]},
+                )
+
+            memory.record(hash_sha256(text), entities)
+
+            # Placeholder
+            with root_span.start_as_current_observation(
+                name="piighost.placeholder", as_type="tool",
+            ) as span:
+                result = self.anonymize_with_ent(text, thread_id=thread_id)
+                span.update(
+                    input={"text": text, "entity_count": len(entities)},
+                    output={"text": result},
+                )
+
+            # Guard
+            with root_span.start_as_current_observation(
+                name="piighost.guard", as_type="guardrail",
+            ) as span:
+                span.update(input={"text": result})
+                try:
+                    await self._guard_rail.check(result)
+                except PIIRemainingError:
+                    span.update(output={"passed": False})
+                    raise
+                span.update(output={"passed": True})
+
+            root_span.update(
+                output={"text": result, "entity_count": len(entities)},
+            )
 
             await self._store_mapping(text, result, entities)
             return result, entities
