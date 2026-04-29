@@ -1768,6 +1768,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "aiocache" },
+    { name = "aiosqlite" },
     { name = "faker" },
     { name = "gliner2" },
     { name = "httpx" },
@@ -1806,6 +1807,7 @@ spacy = [
     { name = "spacy" },
 ]
 sqlalchemy = [
+    { name = "aiosqlite" },
     { name = "sqlalchemy", extra = ["asyncio"] },
 ]
 transformers = [
@@ -1855,6 +1857,7 @@ transformers = [
 requires-dist = [
     { name = "aiocache", marker = "extra == 'cache'", specifier = ">=0.12" },
     { name = "aiocache", marker = "extra == 'middleware'", specifier = ">=0.12" },
+    { name = "aiosqlite", marker = "extra == 'sqlalchemy'", specifier = ">=0.20" },
     { name = "faker", marker = "extra == 'faker'", specifier = ">=40.11" },
     { name = "gliner2", marker = "extra == 'gliner2'", specifier = ">=1.2" },
     { name = "httpx", marker = "extra == 'client'", specifier = ">=0.28" },
