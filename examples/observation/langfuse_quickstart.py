@@ -58,17 +58,41 @@ async def main() -> None:
         host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
     )
 
-    pipeline = ThreadAnonymizationPipeline(
-        detector=ExactMatchDetector(
+    detector = ExactMatchDetector(
             [
                 ("Patrick", "PERSON"),
                 ("Marie", "PERSON"),
                 ("Paris", "LOCATION"),
                 ("Lyon", "LOCATION"),
             ],
-        ),
-        anonymizer=Anonymizer(LabelCounterPlaceholderFactory()),
-        observation=LangfuseObservationService(langfuse),
+        )
+    ph_factory =  LabelCounterPlaceholderFactory()
+    anonymizer = Anonymizer(ph_factory=ph_factory)
+
+    # ----- Demo 1: no observation argument → NoOp default ---------------
+    # Nothing reaches Langfuse, no per-stage sleep, the pipeline runs at
+    # its raw speed. This is what every existing piighost user gets out
+    # of the box without changing anything.
+    silent_pipeline = ThreadAnonymizationPipeline(
+        detector=detector,
+        anonymizer=anonymizer,
+        # observation= omitted → NoOpObservationService used internally
+    )
+
+    silent, _ = await silent_pipeline.anonymize(
+        "Patrick lives in Paris.",
+        thread_id="silent-A",
+    )
+    print(f"[no-op default] anonymized: {silent!r} (no Langfuse trace)")
+
+    # ----- Demo 2: LangfuseObservationService → traces in Langfuse ------
+    # Langfuse will log each anonymisation
+    observation = LangfuseObservationService(langfuse)
+
+    pipeline = ThreadAnonymizationPipeline(
+        detector=detector,
+        anonymizer=anonymizer,
+        observation=observation,
     )
 
     a1, _ = await pipeline.anonymize(

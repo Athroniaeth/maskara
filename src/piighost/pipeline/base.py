@@ -17,7 +17,11 @@ from piighost.exceptions import CacheMissError, PIIRemainingError
 from piighost.guard import AnyGuardRail, DisabledGuardRail
 from piighost.linker.entity import AnyEntityLinker, ExactEntityLinker
 from piighost.models import Detection, Entity
-from piighost.observation.base import AbstractObservationService, AbstractSpan, NoOpObservationService
+from piighost.observation.base import (
+    AbstractObservationService,
+    AbstractSpan,
+    NoOpObservationService,
+)
 from piighost.placeholder import AnyPlaceholderFactory
 from piighost.placeholder_tags import PlaceholderPreservation
 from piighost.resolver.entity import (
@@ -191,6 +195,11 @@ class AnonymizationPipeline(Generic[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> Tuple[str, list[Entity]]:
         """Execute all pipeline stages, emitting child observations on *root_span*."""
+        # Demo-only: pad each stage with a 1 s sleep so backend UIs render a
+        # visible duration. Skipped when no observation backend is configured
+        # (NoOp default) so the production fast path stays fast.
+        demo_pad = not isinstance(self._observation, NoOpObservationService)
+
         # Detect
         with root_span.start_as_current_observation(
             name="piighost.detect", as_type="tool",
@@ -201,7 +210,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 output={"detections": [_detection_to_dict(d) for d in detections]},
             )
             detections = self._span_resolver.resolve(detections)
-            time.sleep(1)  # demo: make each stage span a visible duration in UIs
+            if demo_pad:
+                time.sleep(1)
 
         # Link
         with root_span.start_as_current_observation(
@@ -213,7 +223,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 input={"detections": [_detection_to_dict(d) for d in detections]},
                 output={"entities": [_entity_to_dict(e) for e in entities]},
             )
-            time.sleep(1)
+            if demo_pad:
+                time.sleep(1)
 
         # Placeholder
         with root_span.start_as_current_observation(
@@ -224,7 +235,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 input={"text": text, "entity_count": len(entities)},
                 output={"text": anonymized},
             )
-            time.sleep(1)
+            if demo_pad:
+                time.sleep(1)
 
         # Guard
         with root_span.start_as_current_observation(
@@ -237,7 +249,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 span.update(output={"passed": False})
                 raise
             span.update(output={"passed": True})
-            time.sleep(1)
+            if demo_pad:
+                time.sleep(1)
 
         root_span.update(
             output={"text": anonymized, "entity_count": len(entities)},

@@ -508,6 +508,11 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         metadata: Mapping[str, Any] | None,
     ) -> tuple[str, list[Entity]]:
         """Execute all conversation-aware pipeline stages, emitting child observations."""
+        # Demo-only: pad each stage with a 1 s sleep so backend UIs render a
+        # visible duration. Skipped when no observation backend is configured
+        # (NoOp default) so the production fast path stays fast.
+        demo_pad = not isinstance(self._observation, NoOpObservationService)
+
         token = _current_thread_id.set(thread_id)
         try:
             memory = self.get_memory(thread_id)
@@ -522,7 +527,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     output={"detections": [_detection_to_dict(d) for d in detections]},
                 )
                 detections = self._span_resolver.resolve(detections)
-                time.sleep(1)  # demo: make each stage span a visible duration in UIs
+                if demo_pad:
+                    time.sleep(1)
 
             # Link
             with root_span.start_as_current_observation(
@@ -538,7 +544,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     input={"detections": [_detection_to_dict(d) for d in detections]},
                     output={"entities": [_entity_to_dict(e) for e in entities]},
                 )
-                time.sleep(1)
+                if demo_pad:
+                    time.sleep(1)
 
             memory.record(hash_sha256(text), entities)
 
@@ -551,7 +558,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     input={"text": text, "entity_count": len(entities)},
                     output={"text": result},
                 )
-                time.sleep(1)
+                if demo_pad:
+                    time.sleep(1)
 
             # Guard
             with root_span.start_as_current_observation(
@@ -564,7 +572,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
                     span.update(output={"passed": False})
                     raise
                 span.update(output={"passed": True})
-                time.sleep(1)
+                if demo_pad:
+                    time.sleep(1)
 
             root_span.update(
                 output={"text": result, "entity_count": len(entities)},
