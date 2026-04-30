@@ -82,8 +82,11 @@ sqlalchemy = [
 langfuse = [
     "langfuse>=3.0",
 ]
+opik = [
+    "opik>=2.0",
+]
 all = [
-    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,sqlalchemy,langfuse]",
+    "piighost[gliner2,langchain,faker,cache,client,spacy,transformers,llm,sqlalchemy,langfuse,opik]",
 ]
 
 [build-system]
