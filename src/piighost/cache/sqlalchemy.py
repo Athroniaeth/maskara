@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import importlib.util
 import time
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 if importlib.util.find_spec("sqlalchemy") is None:
     raise ImportError(
@@ -128,10 +128,9 @@ class SQLAlchemyCache(BaseCache):
             self._engine = engine
             self._owns_engine = False
         else:
-            assert (
-                url is not None
-            )  # narrowed by the (url is None) == (engine is None) check
-            self._engine = create_async_engine(url, future=True)
+            # ``url`` is non-None here, narrowed by the
+            # ``(url is None) == (engine is None)`` validation above.
+            self._engine = create_async_engine(cast(str, url), future=True)
             self._owns_engine = True
 
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
