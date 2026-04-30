@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.10.0 (2026-04-30)
+
+### BREAKING CHANGE
+
+- observe_raw_text was removed. Configure
+observation_ph_factory= instead; pass any AnyPlaceholderFactory.
+
+### Feat
+
+- **observation**: add Opik backend for the observation service
+- **observation**: redact via placeholder factory instead of [REDACT] sentinel
+- **observation**: redact raw user text in observation payloads by default
+- **observation**: abstract observation service + Langfuse impl
+- **cache**: add SQLAlchemyCache backend for persistent / shared caches
+- **guard**: add LLMGuardRail backed by a LangChain chat model
+- **pipeline**: add guard-rail stage with DetectorGuardRail
+- **placeholder**: add salt and pepper to hash placeholder factories
+- **pipeline**: warn when ThreadAnonymizationPipeline uses unshared cache
+
+### Fix
+
+- **ci**: install sqlalchemy extra and skip tests when missing
+- **observation**: use propagate_attributes for trace fields in Langfuse v4
+- **deps**: include aiosqlite in the sqlalchemy extra
+
+### Refactor
+
+- **models**: drop Detection.__repr__ masking, use standard dataclass repr
+
 ## 0.9.1 (2026-04-26)
 
 ## 0.9.0 (2026-04-25)
