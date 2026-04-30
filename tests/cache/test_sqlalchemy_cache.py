@@ -8,7 +8,10 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from piighost.cache.sqlalchemy import SQLAlchemyCache
+pytest.importorskip("sqlalchemy", reason="install piighost[sqlalchemy] to run these tests")
+pytest.importorskip("aiosqlite", reason="install piighost[sqlalchemy] to run these tests")
+
+from piighost.cache.sqlalchemy import SQLAlchemyCache  # noqa: E402
 
 
 pytestmark = pytest.mark.asyncio

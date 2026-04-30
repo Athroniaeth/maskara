@@ -65,5 +65,5 @@ jobs:
           key: ${{ runner.os }}-uv-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             ${{ runner.os }}-uv-${{ matrix.python-version }}-
-      - run: uv sync --locked --dev --group pipeline --group langchain --group faker --no-progress -q
+      - run: uv sync --locked --dev --group pipeline --group langchain --group faker --group sqlalchemy --no-progress -q
       - run: uv run pytest
