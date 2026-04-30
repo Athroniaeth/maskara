@@ -489,7 +489,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         """
         if root_span is not None:
             return await self._anonymize_with_span(
-                text, root_span, thread_id=thread_id, metadata=metadata,
+                text,
+                root_span,
+                thread_id=thread_id,
+                metadata=metadata,
             )
 
         # Root span input is filled in retroactively from
@@ -502,7 +505,10 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
             metadata=dict(metadata) if metadata else None,
         ) as auto_root:
             return await self._anonymize_with_span(
-                text, auto_root, thread_id=thread_id, metadata=metadata,
+                text,
+                auto_root,
+                thread_id=thread_id,
+                metadata=metadata,
             )
 
     async def _anonymize_with_span(
@@ -510,17 +516,26 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
         text: str,
         root_span: AbstractSpan,
         *,
-        thread_id: str,
         metadata: Mapping[str, Any] | None,
+        thread_id: str = "default",
     ) -> tuple[str, list[Entity]]:
-        """Execute all conversation-aware pipeline stages, emitting child observations."""
+        """Execute all conversation-aware pipeline stages, emitting child observations.
+
+        ``thread_id`` is keyword-only and defaults to ``"default"`` so
+        the override stays compatible with the base
+        ``_anonymize_with_span`` signature.  In practice, the override
+        is always reached through this class' own ``anonymize`` which
+        forwards the explicit thread id, so the default only matters
+        for callers that bypass that path.
+        """
         token = _current_thread_id.set(thread_id)
         try:
             memory = self.get_memory(thread_id)
 
             # Detect
             with root_span.start_as_current_observation(
-                name="piighost.detect", as_type="tool",
+                name="piighost.detect",
+                as_type="tool",
             ) as span:
                 detections = await self._cached_detect(text)
                 det_token_map = self._obs_tokens_for_detections(detections)
@@ -542,7 +557,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
 
             # Link
             with root_span.start_as_current_observation(
-                name="piighost.link", as_type="span",
+                name="piighost.link",
+                as_type="span",
             ) as span:
                 entities = self._entity_linker.link(text, detections)
                 entities = self._entity_resolver.resolve(entities)
@@ -570,7 +586,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
 
             # Placeholder
             with root_span.start_as_current_observation(
-                name="piighost.placeholder", as_type="tool",
+                name="piighost.placeholder",
+                as_type="tool",
             ) as span:
                 result = self.anonymize_with_ent(text, thread_id=thread_id)
                 obs_text = self._obs_anonymizer.anonymize(text, entities)
@@ -582,7 +599,8 @@ class ThreadAnonymizationPipeline(AnonymizationPipeline[PreservationT]):
 
             # Guard
             with root_span.start_as_current_observation(
-                name="piighost.guard", as_type="guardrail",
+                name="piighost.guard",
+                as_type="guardrail",
             ) as span:
                 span.update(input={"text": result})
                 try:

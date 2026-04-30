@@ -59,14 +59,14 @@ async def main() -> None:
     )
 
     detector = ExactMatchDetector(
-            [
-                ("Patrick", "PERSON"),
-                ("Marie", "PERSON"),
-                ("Paris", "LOCATION"),
-                ("Lyon", "LOCATION"),
-            ],
-        )
-    ph_factory =  LabelCounterPlaceholderFactory()
+        [
+            ("Patrick", "PERSON"),
+            ("Marie", "PERSON"),
+            ("Paris", "LOCATION"),
+            ("Lyon", "LOCATION"),
+        ],
+    )
+    ph_factory = LabelCounterPlaceholderFactory()
     anonymizer = Anonymizer(ph_factory=ph_factory)
 
     # ----- Demo 1: no observation argument → NoOp default ---------------

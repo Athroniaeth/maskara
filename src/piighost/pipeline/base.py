@@ -238,7 +238,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
         """Execute all pipeline stages, emitting child observations on *root_span*."""
         # Detect
         with root_span.start_as_current_observation(
-            name="piighost.detect", as_type="tool",
+            name="piighost.detect",
+            as_type="tool",
         ) as span:
             detections = await self._cached_detect(text)
             det_token_map = self._obs_tokens_for_detections(detections)
@@ -250,7 +251,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
                 input={"text": obs_text_pre_link},
                 output={
                     "detections": [
-                        _detection_to_dict(d, token=det_token_map[d]) for d in detections
+                        _detection_to_dict(d, token=det_token_map[d])
+                        for d in detections
                     ]
                 },
             )
@@ -259,7 +261,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
 
         # Link
         with root_span.start_as_current_observation(
-            name="piighost.link", as_type="span",
+            name="piighost.link",
+            as_type="span",
         ) as span:
             entities = self._entity_linker.link(text, detections)
             entities = self._entity_resolver.resolve(entities)
@@ -267,18 +270,22 @@ class AnonymizationPipeline(Generic[PreservationT]):
             span.update(
                 input={
                     "detections": [
-                        _detection_to_dict(d, token=det_token_map[d]) for d in detections
+                        _detection_to_dict(d, token=det_token_map[d])
+                        for d in detections
                     ]
                 },
                 output={
-                    "entities": [_entity_to_dict(e, token=ent_tokens[e]) for e in entities]
+                    "entities": [
+                        _entity_to_dict(e, token=ent_tokens[e]) for e in entities
+                    ]
                 },
             )
             time.sleep(0.001)
 
         # Placeholder
         with root_span.start_as_current_observation(
-            name="piighost.placeholder", as_type="tool",
+            name="piighost.placeholder",
+            as_type="tool",
         ) as span:
             anonymized = self._anonymizer.anonymize(text, entities)
             obs_text = self._obs_anonymizer.anonymize(text, entities)
@@ -290,7 +297,8 @@ class AnonymizationPipeline(Generic[PreservationT]):
 
         # Guard
         with root_span.start_as_current_observation(
-            name="piighost.guard", as_type="guardrail",
+            name="piighost.guard",
+            as_type="guardrail",
         ) as span:
             span.update(input={"text": anonymized})
             try:
